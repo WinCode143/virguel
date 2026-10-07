@@ -9,6 +9,8 @@
 | Docker / Docker Compose | — | Levantar PostgreSQL aislado (`docker compose up -d`). |
 | uv | — | Crear el entorno virtual e instalar dependencias rápido. |
 | git | — | Control de versiones. |
+| gunicorn | 23 | Servidor de aplicación Python en producción. |
+| Caddy | 2 | Proxy web en producción con certificado HTTPS automático (Let's Encrypt). |
 | openpyxl | 3.1 | Leer archivos Excel (.xlsx) en la importación masiva. |
 | Chart.js | 4.4.7 (servido localmente en `static/vendor/`) | Gráficos de los tableros. |
 | PWA (Web App Manifest + Service Worker) | estándar web | App de campo instalable en el celular sin pasar por tiendas de apps. |

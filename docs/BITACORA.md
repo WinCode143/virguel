@@ -86,7 +86,7 @@ services vencidos, siniestros y demanda comercial con un pico de campaña.
 1. Validar con el cliente los supuestos de `docs/REQUERIMIENTOS.md` (sección "Puntos ambiguos").
 2. Envío automático (sin clics) del link de encuesta: hoy es con un clic vía `wa.me`; automatizarlo requiere WhatsApp Business API o SMS.
 3. ~~Carga masiva inicial~~ (hecho: importación Excel/CSV).
-4. Instalación en servidor con HTTPS (ver `docs/ARQUITECTURA.md`).
+4. Instalación en servidor: ya está empaquetado (ver `docs/ARQUITECTURA.md`); falta el servidor y el dominio del cliente.
 5. Calibrar umbrales del diagnóstico con 2–3 meses de datos reales.
 6. ~~Modo sin señal en la app~~ (hecho, ver más abajo).
 
@@ -111,3 +111,10 @@ services vencidos, siniestros y demanda comercial con un pico de campaña.
   **Probado de punta a punta** en Chromium headless: sin red → queda 1 pendiente y aviso
   visible → vuelve la red → se envía y el servidor registra la orden completada.
 - Tests: 26, todos pasan.
+- **Seguridad**: revisión propia del código. Corregido un *open redirect* en "Resolver alerta".
+  Verificado que un técnico no puede cerrar órdenes ajenas y un supervisor no ve otros equipos.
+  Configuración segura automática con `DEBUG=0` (HTTPS, cookies seguras, HSTS, sesión de 12 h).
+- **Producción**: `Dockerfile` + `deploy/docker-compose.prod.yml` (PostgreSQL, gunicorn, tarea
+  diaria a las 21:00 y Caddy con HTTPS automático) + `deploy/backup.sh`. Imagen construida y
+  probada con `DEBUG=0`.
+- Tests: 28, todos pasan.

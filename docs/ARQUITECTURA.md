@@ -83,15 +83,32 @@ cada ejecución recalcula las condiciones; abre, actualiza o cierra alertas sin 
 
 ## Instalación en servidor (producción)
 
-1. Servidor Linux con Docker (o PostgreSQL 16 instalado) y Python 3.12+.
-2. `.env` con `DJANGO_DEBUG=0`, `DJANGO_SECRET_KEY` larga y aleatoria, `DJANGO_ALLOWED_HOSTS=<dominio>`,
-   credenciales de PostgreSQL y `POWERBI_TOKEN`.
-3. `pip install -r requirements.txt gunicorn`, `manage.py migrate`, `manage.py collectstatic`,
-   `manage.py createsuperuser`.
-4. Servir con **gunicorn** detrás de **nginx** con HTTPS (obligatorio: la cámara y el GPS
-   del celular y la instalación de la PWA sólo funcionan en HTTPS). nginx sirve `/static/` y `/media/`.
-5. Programar la tarea diaria, por ejemplo con cron a las 21:00:
-   ```
-   0 21 * * * cd /opt/virguel && .venv/bin/python manage.py tareas_diarias >> /var/log/virguel.log 2>&1
-   ```
-6. Backup diario de PostgreSQL (`pg_dump`) y de la carpeta `media/` (fotos de informes).
+Requisitos: un servidor Linux con Docker, un dominio apuntando a su IP y los puertos 80/443 abiertos.
+
+```bash
+git clone <repositorio> /opt/virguel && cd /opt/virguel
+cp .env.example .env
+# Editar .env: DJANGO_DEBUG=0, DJANGO_SECRET_KEY (larga y aleatoria),
+#              POSTGRES_PASSWORD, POWERBI_TOKEN
+DOMINIO=erp.virguel.com.ar docker compose -f deploy/docker-compose.prod.yml up -d --build
+docker compose -f deploy/docker-compose.prod.yml exec web python manage.py createsuperuser
+```
+
+Qué levanta (`deploy/docker-compose.prod.yml`):
+| Servicio | Función |
+|---|---|
+| `db` | PostgreSQL 16 con volumen persistente. |
+| `web` | Django con **gunicorn** (aplica migraciones al arrancar). |
+| `tareas` | Ejecuta `tareas_diarias` todos los días a las 21:00. |
+| `caddy` | Proxy con **HTTPS automático** (Let's Encrypt), sirve estáticos y fotos. HTTPS es obligatorio: sin él no funcionan la cámara, el GPS ni la instalación de la app en el celular. |
+
+Backups: `deploy/backup.sh /ruta/backups` (base + fotos, conserva 30 días). Programarlo en el cron del servidor:
+```
+30 2 * * * /opt/virguel/deploy/backup.sh /opt/backups
+```
+
+Power BI: abrir el puerto de PostgreSQL sólo hacia la IP de la oficina (o usar el gateway de Power BI) y
+crear el usuario de lectura con `docker compose ... exec web python manage.py crear_lector_powerbi --password ...`.
+
+Verificado: la imagen se construye y corre con `DEBUG=0` (gunicorn, cabeceras de seguridad, login obligatorio).
+`manage.py check --deploy` sólo deja dos avisos opcionales de HSTS (subdominios / preload) que dependen del dominio del cliente.

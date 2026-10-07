@@ -327,3 +327,25 @@ class SinSenalTests(TestCase):
         self.client.post(f"/app/orden/{ot2.id}/", {"resultado": "completada", "_fecha_cliente": "2020-01-01"})
         ot2.refresh_from_db()
         self.assertEqual(ot2.fecha_ejecucion, HOY)
+
+
+class SeguridadTests(TestCase):
+    def test_resolver_alerta_no_redirige_a_sitios_externos(self):
+        u = User.objects.create_user("ger", password="x")
+        u.groups.add(Group.objects.create(name="Gerencia"))
+        self.client.login(username="ger", password="x")
+        a = Alerta.objects.create(modulo="stock", clave="x", titulo="X")
+        r = self.client.post(f"/tablero/alertas/{a.id}/resolver/", {"next": "https://sitio-falso.com/"})
+        self.assertEqual(r["Location"], "/tablero/alertas/")
+        a2 = Alerta.objects.create(modulo="stock", clave="y", titulo="Y")
+        r = self.client.post(f"/tablero/alertas/{a2.id}/resolver/", {"next": "/tablero/alertas/?modulo=stock"})
+        self.assertEqual(r["Location"], "/tablero/alertas/?modulo=stock")
+
+    def test_tecnico_no_puede_cerrar_orden_ajena(self):
+        a = persona("T1", usuario=User.objects.create_user("a", password="x"))
+        b = persona("T2")
+        tipo = TipoTarea.objects.create(codigo="R", nombre="Rep")
+        ot = OrdenTrabajo.objects.create(numero="1", tipo=tipo, tecnico=b, estado="asignada")
+        self.client.login(username="a", password="x")
+        self.assertEqual(self.client.post(f"/app/orden/{ot.id}/", {"resultado": "completada"}).status_code, 404)
+        self.assertNotEqual(a.id, b.id)

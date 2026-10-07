@@ -9,6 +9,7 @@ from django.db.models.functions import TruncMonth, TruncWeek
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from capacitacion.evaluacion import Diagnostico, evaluar_tecnicos
@@ -524,4 +525,8 @@ def resolver_alerta(request, pk):
     a.resuelta = True
     a.save()
     messages.success(request, "Alerta marcada como resuelta. Si la condición persiste, volverá a abrirse.")
-    return redirect(request.POST.get("next") or "tablero:alertas")
+    destino = request.POST.get("next", "")
+    if not url_has_allowed_host_and_scheme(destino, allowed_hosts={request.get_host()},
+                                           require_https=request.is_secure()):
+        destino = reverse("tablero:alertas")
+    return redirect(destino)

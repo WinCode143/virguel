@@ -1,0 +1,68 @@
+# Producción: base de datos + aplicación + proxy con HTTPS automático (Caddy).
+#   cp .env.example .env   (completar: DJANGO_DEBUG=0, claves, dominio)
+#   DOMINIO=erp.virguel.com.ar docker compose -f deploy/docker-compose.prod.yml up -d --build
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      TZ: America/Argentina/Buenos_Aires
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 10
+
+  web:
+    build: ..
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      DJANGO_ALLOWED_HOSTS: ${DOMINIO}
+      DJANGO_CSRF_TRUSTED_ORIGINS: https://${DOMINIO}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - media:/app/media
+      - static:/app/staticfiles
+
+  # Tarea diaria (encuestas + alertas) todos los días a las 21:00
+  tareas:
+    build: ..
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      DJANGO_ALLOWED_HOSTS: ${DOMINIO}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c 'while true; do
+        sleep $$(( ($$(date -d "21:00" +%s) - $$(date +%s) + 86400) % 86400 ));
+        python manage.py tareas_diarias; sleep 60; done'
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMINIO: ${DOMINIO}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - static:/srv/static:ro
+      - media:/srv/media:ro
+      - caddy_data:/data
+    depends_on: [web]
+
+volumes:
+  pgdata:
+  media:
+  static:
+  caddy_data:

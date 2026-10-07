@@ -114,3 +114,27 @@ LOGIN_REDIRECT_URL = "raiz"
 LOGOUT_REDIRECT_URL = "login"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Límite de subida (fotos de informes, archivos de importación)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 15 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
+
+# ---- Producción (DJANGO_DEBUG=0): HTTPS obligatorio y cookies seguras ----
+if not DEBUG:
+    if SECRET_KEY.startswith("solo-desarrollo"):
+        raise RuntimeError("Definir DJANGO_SECRET_KEY en producción.")
+    CSRF_TRUSTED_ORIGINS = [o for o in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if o]
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SSL_REDIRECT", "1") == "1"
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SESSION_COOKIE_AGE = 60 * 60 * 12  # la sesión dura una jornada
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"consola": {"class": "logging.StreamHandler"}},
+    "root": {"handlers": ["consola"], "level": os.environ.get("DJANGO_LOG_LEVEL", "INFO")},
+}
