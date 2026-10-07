@@ -17,6 +17,7 @@ Restricciones del cliente:
 |---|---|
 | Medir la productividad diaria del personal en calle | `operaciones.Jornada` (quién salió a la calle cada día) + `OrdenTrabajo` (qué hizo). Tablero **1 · Operación diaria**: OT por día y resultado, técnicos en calle, hectáreas, ranking por técnico. |
 | Capacidad real de trabajo | Capacidad = técnicos en calle → cuadrillas × hectáreas/día × densidad de clientes, con tope de visitas por técnico (`tablero/planificacion.py`). Se compara contra lo realmente completado (gráfico del Resumen). |
+| (agregado) Asignar el trabajo según la capacidad real | Asignación automática de órdenes por zona y capacidad individual (`tablero/asignacion.py`). |
 | Control del rendimiento según tareas asignadas | Minutos reales vs. estándar por tipo de tarea; efectividad (completadas / ejecutadas); retrabajos. |
 
 ## 2. Supervisión y calidad

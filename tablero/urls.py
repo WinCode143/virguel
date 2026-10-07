@@ -1,11 +1,12 @@
 from django.urls import path
 
-from . import exportar, importar, views
+from . import asignacion, exportar, importar, views
 
 app_name = "tablero"
 urlpatterns = [
     path("", views.inicio, name="inicio"),
     path("operacion/", views.operacion, name="operacion"),
+    path("asignacion/", asignacion.vista, name="asignacion"),
     path("tecnicos/", views.tecnicos, name="tecnicos"),
     path("tecnicos/<int:pk>/", views.tecnico_detalle, name="tecnico"),
     path("capacitacion/", views.capacitacion, name="capacitacion"),

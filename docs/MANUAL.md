@@ -48,6 +48,7 @@ En la PC (`/tablero/`): los mismos tableros que gerencia pero **sólo con su equ
 |---|---|
 | **Resumen** | Foto del día: técnicos en calle, capacidad, stock parado, probabilidad de decodificador, técnicos en riesgo, siniestros, egresos, alertas. |
 | **Alertas** | Todo lo que requiere atención, generado cada noche. Se cierran solas cuando se corrige la causa. |
+| **1 · Asignar órdenes** | Propuesta automática de reparto de órdenes pendientes según la capacidad real de cada técnico; se revisa y confirma. |
 | **1 · Operación diaria** | Órdenes por día y resultado, personal en calle, hectáreas, productividad por técnico y por tipo de tarea. |
 | **5 · Técnicos y riesgo** | Diagnóstico de cada técnico (capacitar / riesgo alto / observación / adecuado), puntajes y motivos. Clic en un nombre → ficha con su curva de 6 meses, sanciones, siniestros, capacitaciones y EPP. |
 | **5 · Capacitación** | A quién capacitar y si las capacitaciones dadas mejoraron la productividad. |

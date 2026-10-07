@@ -128,3 +128,8 @@ services vencidos, siniestros y demanda comercial con un pico de campaña.
   plantel activo (`mediana_plantel`). Test agregado.
 - El usuario de Power BI recibe permisos por defecto sobre vistas futuras del esquema.
 - Tests: 29, todos pasan.
+- **Asignación automática de órdenes** (`/tablero/asignacion/`, `tablero/asignacion.py`):
+  reparte las órdenes pendientes entre los técnicos según su **capacidad real** (promedio
+  de 30 días, mín. 2, tope 6), primero en su zona y después en otras, priorizando retrabajos
+  y atrasadas. Excluye ausentes. Gerencia o el supervisor (sólo su equipo) revisan y confirman.
+  Las que no entran quedan listadas: indica falta de capacidad. Test agregado (30 tests).

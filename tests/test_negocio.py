@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from capacitacion.evaluacion import Diagnostico, evaluar_tecnicos
 from capacitacion.models import Capacitacion, Curso, Participacion
-from core.models import Alerta, Parametros, Persona
+from core.models import Alerta, Parametros, Persona, Zona
 from core.services import SincronizadorAlertas
 from finanzas.models import Egreso
 from flota.models import ServiceRealizado, TipoService, Vehiculo, proximos_services
@@ -355,3 +355,29 @@ class SeguridadTests(TestCase):
         self.client.login(username="a", password="x")
         self.assertEqual(self.client.post(f"/app/orden/{ot.id}/", {"resultado": "completada"}).status_code, 404)
         self.assertNotEqual(a.id, b.id)
+
+
+class AsignacionTests(TestCase):
+    def test_reparte_por_capacidad_real_y_zona(self):
+        from tablero.asignacion import proponer
+        norte, sur = Zona.objects.create(nombre="N"), Zona.objects.create(nombre="S")
+        rapido = persona("R", zona=norte)
+        lento = persona("L", zona=norte)
+        otro = persona("O", zona=sur)
+        tipo = TipoTarea.objects.create(codigo="I", nombre="Inst")
+        n = 0
+        for d in range(1, 11):
+            f = HOY - timedelta(days=d)
+            for t, cant in ((rapido, 6), (lento, 2), (otro, 4)):
+                Jornada.objects.create(fecha=f, tecnico=t)
+                for _ in range(cant):
+                    n += 1
+                    OrdenTrabajo.objects.create(numero=f"h{n}", tipo=tipo, tecnico=t, estado="completada",
+                                                fecha_programada=f, fecha_ejecucion=f)
+        for i in range(12):  # 12 pendientes en el norte: capacidad norte = 6 + 2 = 8
+            OrdenTrabajo.objects.create(numero=f"p{i}", tipo=tipo, zona=norte, fecha_programada=HOY)
+        prop = proponer(HOY, Persona.objects.filter(rol="tecnico"))
+        nuevas = {c.tecnico.legajo: len(c.nuevas) for c in prop["cupos"]}
+        self.assertEqual(nuevas, {"R": 6, "L": 2, "O": 4})  # los 4 que sobran van al sur
+        self.assertEqual(len(prop["otra_zona"]), 4)
+        self.assertEqual(prop["sin_asignar"], [])

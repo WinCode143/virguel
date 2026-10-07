@@ -1,0 +1,22 @@
+{% extends "escritorio.html" %}
+{% block titulo %}Asignar órdenes · Virguel{% endblock %}
+{% block encabezado %}<h1>1 · Asignación automática de órdenes</h1><p class="sub">Reparte las órdenes pendientes según lo que rinde realmente cada técnico (promedio de 30 días), por zona, priorizando retrabajos y atrasadas.{% if es_supervisor %} Sólo tu equipo.{% endif %}</p>{% endblock %}
+{% block contenido %}
+<form class="filtros" method="get"><label>Fecha a planificar<input type="date" name="fecha" value="{{ fecha|date:'Y-m-d' }}" onchange="this.form.submit()"></label></form>
+<div class="grid g4">
+  <div class="card kpi"><div class="etq">Órdenes pendientes sin técnico</div><div class="valor">{{ pendientes }}</div><div class="det">programadas hasta el {{ fecha|date:"d/m" }}</div></div>
+  <div class="card kpi"><div class="etq">Se asignarían</div><div class="valor">{{ total_nuevas }}</div><div class="det">{{ otra_zona|length }} a técnicos de otra zona</div></div>
+  <div class="card kpi"><div class="etq">Quedan sin lugar</div><div class="valor">{{ sin_asignar|length }}</div><div class="det">{% if sin_asignar %}falta capacidad: ver Planificación{% else %}se cubre todo{% endif %}</div></div>
+  <div class="card kpi"><div class="etq">Técnicos disponibles</div><div class="valor">{{ cupos|length }}</div><div class="det">{{ ausentes }} con ausencia cargada</div></div>
+</div>
+{% if total_nuevas %}<form method="post" class="card" style="display:flex;gap:1rem;align-items:center;justify-content:space-between;flex-wrap:wrap">{% csrf_token %}
+  <input type="hidden" name="fecha" value="{{ fecha|date:'Y-m-d' }}">
+  <span>Revisá la propuesta y confirmá. Las órdenes aparecerán en la app de cada técnico.</span>
+  <button class="btn">Confirmar asignación de {{ total_nuevas }} órdenes</button></form>{% endif %}
+<div class="card"><div class="tabla-scroll"><table>
+<thead><tr><th>Técnico</th><th>Zona</th><th class="num">Capacidad</th><th class="num">Ya tenía</th><th class="num">Nuevas</th><th class="num">Libre</th><th>Órdenes propuestas</th></tr></thead>
+<tbody>{% for c in cupos %}<tr><td>{{ c.tecnico.apellido }}, {{ c.tecnico.nombre }}</td><td>{{ c.tecnico.zona|default:"—" }}</td>
+<td class="num">{{ c.capacidad }}</td><td class="num">{{ c.ya_asignadas }}</td><td class="num"><b>{{ c.nuevas|length }}</b></td><td class="num">{{ c.libre }}</td>
+<td style="font-size:.82rem">{% for o in c.nuevas %}{{ o.numero }} <span class="muted">{{ o.tipo.codigo }}{% if o.es_retrabajo %} · retrabajo{% endif %}{% if o.id in otra_zona %} · otra zona{% endif %}</span>{% if not forloop.last %}, {% endif %}{% endfor %}</td></tr>{% endfor %}</tbody></table></div></div>
+{% if sin_asignar %}<div class="card"><h2>Sin lugar ({{ sin_asignar|length }})</h2><p style="font-size:.85rem">{% for o in sin_asignar %}{{ o.numero }} <span class="muted">({{ o.zona|default:"sin zona" }}, {{ o.fecha_programada|date:"d/m" }})</span>{% if not forloop.last %}, {% endif %}{% endfor %}</p></div>{% endif %}
+{% endblock %}

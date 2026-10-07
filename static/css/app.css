@@ -68,6 +68,7 @@ h3 { font-size: .95rem; margin: 0 0 .5rem; color: var(--ink-2); }
 .contenido { padding: 1.5rem 2rem 3rem; min-width: 0; }
 .topbar { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;
   margin-bottom: 1rem; }
+.topbar > div:first-child { flex: 1 1 400px; min-width: 0; }
 .usuario { color: var(--ink-2); font-size: .9rem; display: flex; gap: .75rem; align-items: center; }
 .menu-toggle { display: none; }
 

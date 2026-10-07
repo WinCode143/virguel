@@ -392,6 +392,15 @@ class Command(BaseCommand):
                 ordenes.append(OrdenTrabajo(numero=f"OT{n_ot:07d}", tipo=self.tipos[cod], cliente=r.choice(self.clientes),
                                             zona=t.zona, tecnico=t, fecha_programada=self.hoy + timedelta(days=r.randint(1, 3)),
                                             estado="asignada"))
+        # órdenes que entraron sin técnico asignado, para mañana (las reparte la asignación automática)
+        manana = self.hoy + timedelta(days=1 if self.hoy.weekday() != 5 else 2)
+        for k in range(150):
+            n_ot += 1
+            cod = r.choices(tipos_cod, pesos)[0]
+            cli = r.choice(self.clientes)
+            ordenes.append(OrdenTrabajo(numero=f"OT{n_ot:07d}", tipo=self.tipos[cod], cliente=cli, zona=cli.zona,
+                                        fecha_programada=manana - timedelta(days=r.choice([0, 0, 0, 1, 2])),
+                                        estado="pendiente"))
         Jornada.objects.bulk_create(jornadas, batch_size=2000)
         OrdenTrabajo.objects.bulk_create(ordenes, batch_size=2000)
         for v in self.vehiculos:

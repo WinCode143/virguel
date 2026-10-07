@@ -9,6 +9,7 @@
       <a href="{% url 'tablero:alertas' %}" class="{% if u == 'alertas' %}activo{% endif %}">Alertas {% if alertas_criticas %}<span class="badge">{{ alertas_criticas }}</span>{% endif %}</a>
       <div class="grupo">Operación</div>
       <a href="{% url 'tablero:operacion' %}" class="{% if u == 'operacion' %}activo{% endif %}">1 · Operación diaria</a>
+      <a href="{% url 'tablero:asignacion' %}" class="{% if u == 'asignacion' %}activo{% endif %}">1 · Asignar órdenes</a>
       <a href="{% url 'tablero:tecnicos' %}" class="{% if u == 'tecnicos' or u == 'tecnico' %}activo{% endif %}">5 · Técnicos y riesgo</a>
       <a href="{% url 'tablero:capacitacion' %}" class="{% if u == 'capacitacion' %}activo{% endif %}">5 · Capacitación</a>
       <a href="{% url 'tablero:encuestas' %}" class="{% if u == 'encuestas' %}activo{% endif %}">2 · Encuestas del día</a>
