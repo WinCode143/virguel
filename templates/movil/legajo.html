@@ -1,0 +1,12 @@
+{% extends "movil/base_movil.html" %}{% load formato %}
+{% block titulo_movil %}Mi legajo{% endblock %}
+{% block contenido %}
+<div class="card"><h2>Controles de mi supervisor</h2><ul class="lista-ot">{% for i in controles %}
+<li><div>{{ i.get_tipo_display }}<br><span class="muted" style="font-size:.85rem">{{ i.fecha|date:"d/m/Y" }} · {{ i.supervisor.apellido }}{% if i.descripcion %}<br>{{ i.descripcion|truncatechars:140 }}{% endif %}</span></div>
+<span class="estado {% if i.desvio_detectado %}aviso{% else %}ok{% endif %}">{{ i.puntaje }}/5</span></li>{% empty %}<li class="muted">Sin controles.</li>{% endfor %}</ul></div>
+<div class="card"><h2>Acciones y sanciones</h2><ul class="lista-ot">{% for a in acciones %}
+<li><div>{{ a.get_tipo_display }}<br><span class="muted" style="font-size:.85rem">{{ a.fecha|date:"d/m/Y" }}{% if a.aplicada_por %} · {{ a.aplicada_por.apellido }}{% endif %}{% if a.descripcion %}<br>{{ a.descripcion|truncatechars:140 }}{% endif %}</span></div>
+{% if a.monto %}<span class="num">{{ a.monto|pesos }}</span>{% endif %}</li>{% empty %}<li class="muted">Ninguna. ✓</li>{% endfor %}</ul></div>
+<div class="card"><h2>Incidentes en los que participé</h2><ul class="lista-ot">{% for s in siniestros %}<li><div>{{ s.get_tipo_display }}<br><span class="muted" style="font-size:.85rem">{{ s.fecha|date:"d/m/Y" }} · {{ s.get_estado_display }}</span></div><span>{{ s.get_gravedad_display }}</span></li>{% empty %}<li class="muted">Ninguno.</li>{% endfor %}</ul></div>
+<p class="muted" style="font-size:.82rem">Si no estás de acuerdo con algo, hablalo con tu supervisor o con administración.</p>
+{% endblock %}

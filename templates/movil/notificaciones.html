@@ -1,0 +1,27 @@
+{% extends "movil/base_movil.html" %}
+{% block titulo_movil %}Notificaciones{% endblock %}
+{% block contenido %}
+{% if push %}<div class="card" id="push-card" style="display:none"><p style="margin:0 0 .6rem">Recibí los avisos en el celular aunque la app esté cerrada.</p><button class="btn" id="push-btn" style="width:100%">Activar notificaciones</button></div>
+<script>
+(async function () {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+  const reg = await navigator.serviceWorker.ready;
+  if (await reg.pushManager.getSubscription()) return;
+  const card = document.getElementById("push-card"); card.style.display = "";
+  const clave = "{{ clave }}";
+  const bytes = (b64) => { const p = "=".repeat((4 - b64.length % 4) % 4); const r = atob((b64 + p).replace(/-/g, "+").replace(/_/g, "/"));
+    return Uint8Array.from([...r].map((c) => c.charCodeAt(0))); };
+  document.getElementById("push-btn").onclick = async () => {
+    try {
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: bytes(clave) });
+      await fetch("{% url 'movil:push_suscribir' %}", { method: "POST", body: JSON.stringify(sub),
+        headers: { "Content-Type": "application/json", "X-CSRFToken": "{{ csrf_token }}" } });
+      card.innerHTML = '<span class="estado ok">Notificaciones activadas</span>';
+    } catch (e) { card.innerHTML = '<span class="estado aviso">No se pudo activar (revisá los permisos del navegador)</span>'; }
+  };
+})();
+</script>{% endif %}
+<div class="card"><ul class="lista-ot">{% for n in lista %}
+<li><a href="{{ n.url|default:'#' }}" style="color:inherit;flex:1">{% if not n.leida %}<b>{{ n.titulo }}</b>{% else %}{{ n.titulo }}{% endif %}<br><span class="muted" style="font-size:.85rem">{{ n.creada|date:"d/m H:i" }}{% if n.texto %} · {{ n.texto }}{% endif %}</span></a></li>
+{% empty %}<li class="muted">No tenés notificaciones.</li>{% endfor %}</ul></div>
+{% endblock %}

@@ -1,8 +1,8 @@
 {% load static %}// Service worker de la app de campo.
 // - Archivos estáticos y pantallas de /app/: red primero; sin señal, lo último guardado.
 // - Al cerrar sesión se borran las pantallas guardadas (privacidad en celulares compartidos).
-const ESTATICO = "virguel-estatico-v2";
-const PAGINAS = "virguel-paginas-v2";
+const ESTATICO = "virguel-estatico-v3";
+const PAGINAS = "virguel-paginas-v3";
 const PREFIJO_STATIC = "{% get_static_prefix %}";
 const INICIALES = ["{% static 'css/app.css' %}", "{% static 'img/icono.svg' %}", "{% static 'js/offline.js' %}"];
 
@@ -33,4 +33,16 @@ self.addEventListener("fetch", (e) => {
     }
     return r;
   }).catch(() => caches.match(e.request).then((r) => r || caches.match("/app/"))));
+});
+
+// Notificaciones push (avisos del sistema al celular)
+self.addEventListener("push", (e) => {
+  let d = {};
+  try { d = e.data.json(); } catch (_) { d = { titulo: "Virguel", texto: e.data ? e.data.text() : "" }; }
+  e.waitUntil(self.registration.showNotification(d.titulo || "Virguel", {
+    body: d.texto || "", icon: "{% static 'img/icono.svg' %}", data: { url: d.url || "/app/" } }));
+});
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  e.waitUntil(self.clients.openWindow(e.notification.data.url));
 });

@@ -1,0 +1,14 @@
+{% extends "movil/base_movil.html" %}{% load formato %}
+{% block titulo_movil %}Pedidos de partes del equipo{% endblock %}
+{% block contenido %}
+<div class="card"><h2>Para aprobar ({{ pendientes|length }})</h2>
+{% for p in pendientes %}<div style="border-bottom:1px solid var(--grid);padding:.6rem 0">
+<b>{{ p.tecnico.nombre_completo }}</b> <span class="muted" style="font-size:.85rem">{{ p.creado|date:"d/m H:i" }}</span><br>
+{% for i in p.items.all %}{{ i.material.nombre }} × {{ i.cantidad|cant }} {{ i.material.unidad }}<br>{% endfor %}
+{% if p.motivo %}<span class="muted" style="font-size:.85rem">“{{ p.motivo }}”</span>{% endif %}
+<form method="post" class="form-movil" style="margin-top:.4rem">{% csrf_token %}<input type="hidden" name="pedido" value="{{ p.id }}">
+<input name="respuesta" placeholder="Comentario (opcional)">
+<div style="display:flex;gap:.5rem"><button class="btn" name="accion" value="aprobar">Aprobar</button><button class="btn sec" name="accion" value="rechazar">Rechazar</button></div></form>
+</div>{% empty %}<p class="muted">No hay pedidos pendientes.</p>{% endfor %}</div>
+<div class="card"><h2>Recientes</h2><ul class="lista-ot">{% for p in recientes %}<li><div>{{ p.tecnico.nombre_completo }}<br><span class="muted" style="font-size:.85rem">{{ p.creado|date:"d/m" }}</span></div><span class="estado {% if p.estado == 'rechazado' %}critico{% else %}ok{% endif %}">{{ p.get_estado_display|truncatechars:14 }}</span></li>{% empty %}<li class="muted">—</li>{% endfor %}</ul></div>
+{% endblock %}

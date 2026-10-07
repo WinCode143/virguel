@@ -10,6 +10,7 @@
   <div class="card kpi" style="margin:0"><div class="etq">En calle</div><div class="valor">{{ en_calle }}/{{ equipo }}</div></div>
   <div class="card kpi" style="margin:0"><div class="etq">Informes hoy</div><div class="valor">{{ informes_hoy }}</div><div class="det">objetivo: 4</div></div>
 </div>
+{% if pedidos_pendientes %}<a class="card" style="display:block;border-color:var(--aviso)" href="{% url 'movil:pedidos' %}"><b>{{ pedidos_pendientes }} pedido{{ pedidos_pendientes|pluralize }} de partes para aprobar →</b></a>{% endif %}
 <div class="acciones">
   <a class="accion" href="{% url 'movil:informe' %}"><span class="ico">✓</span>Nuevo control<small>con foto y ubicación</small></a>
   <a class="accion" href="{% url 'movil:accion' %}"><span class="ico">✎</span>Acción correctiva<small>recapacitación, multa…</small></a>

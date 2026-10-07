@@ -9,7 +9,10 @@
   <header>
     <div><div class="hola">{% block titulo_movil %}Hola, {{ request.user.persona.nombre|default:request.user.username }}{% endblock %}</div>
     <div class="rol">{% if es_supervisor %}Supervisor{% else %}Técnico{% endif %} · {% now "l d/m" %}</div></div>
-    <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="btn sec" style="padding:.4rem .7rem">Salir</button></form>
+    <div style="display:flex;gap:.5rem;align-items:center">
+      <a href="{% url 'movil:notificaciones' %}" class="btn sec" style="padding:.4rem .6rem;position:relative" aria-label="Notificaciones">🔔{% if notificaciones_sin_leer %}<span class="badge" style="position:absolute;top:-6px;right:-8px">{{ notificaciones_sin_leer }}</span>{% endif %}</a>
+      <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="btn sec" style="padding:.4rem .7rem">Salir</button></form>
+    </div>
   </header>
   {% if messages %}<ul class="mensajes">{% for m in messages %}<li class="{{ m.tags }}">{{ m }}</li>{% endfor %}</ul>{% endif %}
   {% block contenido %}{% endblock %}
@@ -23,8 +26,8 @@
   <a href="{% url 'movil:indicadores' %}" class="{% if tab == 'yo' %}activo{% endif %}"><span class="ico">★</span>Indicadores</a>
   {% else %}
   <a href="{% url 'movil:asistencia' %}" class="{% if tab == 'asistencia' %}activo{% endif %}"><span class="ico">◷</span>Asistencia</a>
-  <a href="{% url 'movil:epp' %}" class="{% if tab == 'epp' %}activo{% endif %}"><span class="ico">⛑</span>Mi EPP</a>
-  <a href="{% url 'movil:desempeno' %}" class="{% if tab == 'yo' %}activo{% endif %}"><span class="ico">★</span>Desempeño</a>
+  <a href="{% url 'movil:stock' %}" class="{% if tab == 'stock' %}activo{% endif %}"><span class="ico">▣</span>Mis partes</a>
+  <a href="{% url 'movil:yo' %}" class="{% if tab == 'yo' or tab == 'epp' %}activo{% endif %}"><span class="ico">★</span>Yo</a>
   {% endif %}
   <a href="{% url 'movil:incidente' %}"><span class="ico">⚠</span>Incidente</a>
 </nav>

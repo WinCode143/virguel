@@ -1,0 +1,20 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Partes en técnicos · Virguel{% endblock %}
+{% block encabezado %}<h1>8 · Partes en manos de técnicos</h1><p class="sub">Lo que cada técnico tiene a su cargo (camioneta). Se descuenta solo al cerrar órdenes. Saldo negativo = usó partes que no figuraban a su cargo.</p>{% endblock %}
+{% block contenido %}
+<div class="grid g3">
+  <div class="card kpi"><div class="etq">Valor en manos de técnicos</div><div class="valor">{{ valor_total|pesos }}</div></div>
+  <div class="card kpi"><div class="etq">Parado hace más de 60 días</div><div class="valor">{{ valor_parado|pesos }}</div><div class="det">{{ paradas|length }} parte{{ paradas|pluralize }} sin usar</div></div>
+  <div class="card kpi"><div class="etq">Técnicos con partes</div><div class="valor">{{ por_tecnico|length }}</div></div>
+</div>
+{% if es_gerencia %}<form method="post" class="card filtros">{% csrf_token %}
+<label>Técnico<select name="tecnico" required>{% for t in tecnicos %}<option value="{{ t.id }}">{{ t.apellido }}, {{ t.nombre }}</option>{% endfor %}</select></label>
+<label>Parte<select name="material" required>{% for m in materiales %}<option value="{{ m.id }}">{{ m.nombre }}</option>{% endfor %}</select></label>
+<label>Cantidad<input name="cantidad" type="number" step="0.01" min="0" required style="width:7rem"></label>
+<button class="btn" name="accion" value="entregar">Entregar</button><button class="btn sec" name="accion" value="devolver">Registrar devolución</button></form>{% endif %}
+{% if paradas %}<div class="card"><h2>Partes paradas en técnicos</h2><table><thead><tr><th>Técnico</th><th>Parte</th><th class="num">Cantidad</th><th class="num">Días</th><th class="num">Valor</th></tr></thead><tbody>
+{% for f in paradas %}<tr><td>{{ f.tecnico.apellido }}, {{ f.tecnico.nombre }}</td><td>{{ f.material.nombre }}</td><td class="num">{{ f.cantidad|cant }}</td><td class="num"><span class="estado {% if f.dias >= 90 %}critico{% else %}aviso{% endif %}">{{ f.dias }}</span></td><td class="num">{{ f.valor|pesos }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+<div class="grid g2">{% for tid, d in por_tecnico %}<div class="card"><h2 style="display:flex;justify-content:space-between"><a href="{% url 'personal:legajo' tid %}">{{ d.nombre }}</a><span class="muted" style="font-weight:400">{{ d.valor|pesos }}</span></h2>
+<table><tbody>{% for f in d.items %}<tr><td>{{ f.material__nombre }}</td><td class="num">{% if f.saldo < 0 %}<span class="estado critico">{{ f.saldo|cant }}</span>{% else %}{{ f.saldo|cant }}{% endif %} {{ f.material__unidad }}</td></tr>{% endfor %}</tbody></table></div>
+{% empty %}<div class="card muted">Ningún técnico tiene partes a cargo.</div>{% endfor %}</div>
+{% endblock %}

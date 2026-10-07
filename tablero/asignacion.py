@@ -21,6 +21,7 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 
 from core.models import Parametros, Persona
+from core.notificaciones import notificar
 from core.roles import GERENCIA, SUPERVISOR, persona_de, requiere_rol, rol_de
 from operaciones.models import Jornada, OrdenTrabajo
 
@@ -118,8 +119,12 @@ def vista(request):
             for c in propuesta["cupos"]:
                 for o in c.nuevas:
                     o.tecnico, o.estado, o.fecha_programada = c.tecnico, OrdenTrabajo.Estado.ASIGNADA, fecha
+                    o._sin_notificar = True
                     o.save(update_fields=["tecnico", "estado", "fecha_programada"])
                     n += 1
+                if c.nuevas:
+                    notificar(c.tecnico, f"Tenés {len(c.nuevas)} orden{'es' if len(c.nuevas) > 1 else ''} nueva"
+                              f"{'s' if len(c.nuevas) > 1 else ''} para el {fecha:%d/%m}", "", "/app/")
         messages.success(request, f"{n} órdenes asignadas para el {fecha:%d/%m/%Y}.")
         return redirect(f"{request.path}?fecha={fecha.isoformat()}")
     total_nuevas = sum(len(c.nuevas) for c in propuesta["cupos"])

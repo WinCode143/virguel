@@ -1,14 +1,96 @@
-{% extends "movil/base_movil.html" %}
+{% extends "movil/base_movil.html" %}{% load formato %}
 {% block titulo_movil %}{{ ot.numero }}{% endblock %}
 {% block contenido %}
-<div class="card"><b>{{ ot.tipo }}</b><br><span class="muted">{% if ot.cliente %}{{ ot.cliente.nombre }} · {{ ot.cliente.direccion }}{% endif %}</span>
-{% if ot.observaciones %}<p style="margin:.5rem 0 0;font-size:.9rem">{{ ot.observaciones }}</p>{% endif %}</div>
-<form method="post" class="card form-movil" data-offline="/app/">{% csrf_token %}
+<div class="card">
+  <h2 style="margin-bottom:.3rem">{{ ot.tipo }}</h2>
+  {% if ot.es_retrabajo %}<span class="estado aviso">Retrabajo: corregir visita anterior</span>{% endif %}
+  {% if ot.cliente %}<p style="margin:.4rem 0 0"><b>{{ ot.cliente.nombre }}</b> · cliente {{ ot.cliente.numero }}<br>
+  {{ ot.cliente.direccion }}{% if ot.zona %} · {{ ot.zona }}{% endif %}<br>
+  <span class="muted">{{ ot.cliente.get_tipo_display }} · {{ ot.cliente.cantidad_televisores }} TV</span></p>{% endif %}
+  <div class="acciones" style="margin:.8rem 0 0">
+    {% if ot.cliente.telefono %}<a class="accion" href="tel:{{ ot.cliente.telefono }}"><span class="ico">✆</span>Llamar<small>{{ ot.cliente.telefono }}</small></a>{% endif %}
+    {% if mapa %}<a class="accion" href="{{ mapa }}" target="_blank" rel="noopener"><span class="ico">⌖</span>Cómo llegar<small>Google Maps</small></a>{% endif %}
+  </div>
+  {% if ot.observaciones %}<p style="margin:.6rem 0 0;font-size:.9rem"><b>Indicaciones:</b> {{ ot.observaciones }}</p>{% endif %}
+</div>
+{% if previas %}<div class="card"><h2>Visitas anteriores a este cliente</h2><ul class="lista-ot">{% for o in previas %}
+<li><div>{{ o.tipo }}<br><span class="muted" style="font-size:.85rem">{{ o.fecha_ejecucion|date:"d/m/Y" }} · {{ o.tecnico.apellido|default:"" }} · {{ o.get_estado_display }}{% if o.motivo_no_resuelto %} ({{ o.get_motivo_no_resuelto_display }}){% endif %}</span></div></li>{% endfor %}</ul></div>{% endif %}
+
+{% if not abierta %}
+<div class="card"><h2>Cerrada: {{ ot.get_estado_display }}</h2>
+<table><tbody>
+<tr><td>Fecha</td><td class="num">{{ ot.fecha_ejecucion|date:"d/m/Y" }}</td></tr>
+{% if ot.minutos_reales %}<tr><td>Duración</td><td class="num">{{ ot.minutos_reales }} min</td></tr>{% endif %}
+{% if ot.motivo_no_resuelto %}<tr><td>Motivo</td><td class="num">{{ ot.get_motivo_no_resuelto_display }}</td></tr>{% endif %}
+{% if ot.series_instaladas %}<tr><td>Series instaladas</td><td class="num">{{ ot.series_instaladas }}</td></tr>{% endif %}
+{% if ot.series_retiradas %}<tr><td>Series retiradas</td><td class="num">{{ ot.series_retiradas }}</td></tr>{% endif %}
+{% if ot.conforme_nombre %}<tr><td>Conformidad</td><td class="num">{{ ot.conforme_nombre }} {{ ot.conforme_dni }}</td></tr>{% endif %}
+{% for c in consumos %}<tr><td>{{ c.material.nombre }}</td><td class="num">{{ c.cantidad|cant }} {{ c.material.unidad }}</td></tr>{% endfor %}
+</tbody></table>
+{% if ot.foto_trabajo %}<p><a href="{{ ot.foto_trabajo.url }}" target="_blank">Ver foto del trabajo</a></p>{% endif %}
+</div>
+{% else %}
+{% if not ot.inicio_trabajo %}
+<form method="post" class="card" data-offline="/app/orden/{{ ot.id }}/">{% csrf_token %}<input type="hidden" name="accion" value="empezar">
+  <p class="muted" style="margin:0 0 .6rem">Tocá al llegar: el tiempo de trabajo se mide solo.</p>
+  <button class="btn" style="width:100%;padding:.9rem">▶ Empezar trabajo</button></form>
+{% else %}
+<div class="card"><span class="estado ok">Trabajando desde las {{ ot.inicio_trabajo|time:"H:i" }}</span></div>
+{% endif %}
+
+<form method="post" class="card form-movil" enctype="multipart/form-data" data-offline="/app/" data-gps id="cierre">{% csrf_token %}
+  <h2>Cerrar la orden</h2>
   {{ form.non_field_errors }}
-  {% for f in form %}
-    {% if f.field.widget.input_type == 'checkbox' %}<div class="check">{{ f }} {{ f.label_tag }}</div>
-    {% else %}{{ f.label_tag }}{{ f }}{% endif %}{{ f.errors }}
-  {% endfor %}
-  <button class="btn">Guardar</button>
+  {{ form.resultado.label_tag }}{{ form.resultado }}{{ form.resultado.errors }}
+  <div id="bloque-motivo">{{ form.motivo_no_resuelto.label_tag }}{{ form.motivo_no_resuelto }}{{ form.motivo_no_resuelto.errors }}</div>
+  {% if not ot.inicio_trabajo %}{{ form.minutos_reales.label_tag }}{{ form.minutos_reales }}{% endif %}
+
+  <h3 style="margin-top:1.2rem">Materiales usados (de tus partes)</h3>
+  <p class="muted" style="font-size:.82rem;margin:0">Vienen cargados con lo habitual para este trabajo: corregí las cantidades.</p>
+  {% for i in "123456" %}{% with m="material_"|add:i c="cantidad_"|add:i %}
+  <div style="display:grid;grid-template-columns:1fr 76px;gap:.5rem;align-items:end">
+    <div>{% for f in form %}{% if f.name == m %}{{ f }}{% endif %}{% endfor %}</div>
+    <div>{% for f in form %}{% if f.name == c %}{{ f }}{% endif %}{% endfor %}</div>
+  </div>{% endwith %}{% endfor %}
+
+  <h3 style="margin-top:1.2rem">Equipos</h3>
+  {% if form.decodificador_solicitado %}<div class="check">{{ form.decodificador_solicitado }} {{ form.decodificador_solicitado.label_tag }}</div>
+  {{ form.decodificadores_instalados.label_tag }}{{ form.decodificadores_instalados }}{% endif %}
+  {{ form.series_instaladas.label_tag }}{{ form.series_instaladas }}
+  {{ form.series_retiradas.label_tag }}{{ form.series_retiradas }}
+
+  <h3 style="margin-top:1.2rem">Constancia</h3>
+  {{ form.foto_trabajo.label_tag }}{{ form.foto_trabajo }}
+  {{ form.conforme_nombre.label_tag }}{{ form.conforme_nombre }}
+  {{ form.conforme_dni.label_tag }}{{ form.conforme_dni }}
+  <label>Firma del cliente</label>
+  <canvas id="firma" style="width:100%;height:160px;border:1px solid var(--axis);border-radius:8px;background:#fff;touch-action:none"></canvas>
+  <button type="button" class="btn sec" style="margin-top:.4rem;width:auto;padding:.4rem .8rem" onclick="limpiarFirma()">Borrar firma</button>
+  {{ form.firma }}{{ form.lat }}{{ form.lng }}
+  {{ form.observaciones.label_tag }}{{ form.observaciones }}
+  <p class="muted gps-estado" style="font-size:.82rem;margin:.6rem 0 0">Obteniendo ubicación…</p>
+  <button class="btn">Guardar y cerrar</button>
 </form>
+<script>
+(function () {
+  const sel = document.getElementById("id_resultado"), bloque = document.getElementById("bloque-motivo");
+  const ver = () => { bloque.style.display = sel.value === "completada" ? "none" : ""; };
+  sel.addEventListener("change", ver); ver();
+  // Firma con el dedo
+  const c = document.getElementById("firma"), ctx = c.getContext("2d");
+  let dibujando = false, hay = false;
+  function ajustar() { const r = c.getBoundingClientRect(); c.width = r.width * 2; c.height = r.height * 2;
+    ctx.scale(2, 2); ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.strokeStyle = "#0b0b0b"; }
+  ajustar();
+  const pos = (e) => { const r = c.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  c.addEventListener("pointerdown", (e) => { dibujando = true; hay = true; ctx.beginPath(); ctx.moveTo(...pos(e)); });
+  c.addEventListener("pointermove", (e) => { if (!dibujando) return; ctx.lineTo(...pos(e)); ctx.stroke(); });
+  ["pointerup", "pointerleave"].forEach((ev) => c.addEventListener(ev, () => { dibujando = false; }));
+  window.limpiarFirma = () => { ctx.clearRect(0, 0, c.width, c.height); hay = false; };
+  document.getElementById("cierre").addEventListener("submit", () => {
+    document.getElementById("id_firma").value = hay ? c.toDataURL("image/png") : "";
+  }, true);
+})();
+</script>
+{% endif %}
 {% endblock %}

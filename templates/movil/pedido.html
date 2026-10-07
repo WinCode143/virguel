@@ -1,0 +1,14 @@
+{% extends "movil/base_movil.html" %}
+{% block titulo_movil %}Pedir partes{% endblock %}
+{% block contenido %}
+<p class="muted">Lo aprueba tu supervisor y lo prepara el depósito. Te avisamos en cada paso.</p>
+<form method="post" class="card form-movil" data-offline="/app/stock/">{% csrf_token %}
+{{ form.non_field_errors }}
+{% for i in "123456" %}{% with m="material_"|add:i c="cantidad_"|add:i %}
+<div style="display:grid;grid-template-columns:1fr 76px;gap:.5rem;align-items:end">
+  <div>{% for f in form %}{% if f.name == m %}{{ f }}{% endif %}{% endfor %}</div>
+  <div>{% for f in form %}{% if f.name == c %}{{ f }}{% endif %}{% endfor %}</div>
+</div>{% endwith %}{% endfor %}
+{{ form.motivo.label_tag }}{{ form.motivo }}
+<button class="btn">Enviar pedido</button></form>
+{% endblock %}

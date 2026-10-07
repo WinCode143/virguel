@@ -61,32 +61,92 @@ class NovedadForm(forms.ModelForm):
         return d
 
 
+FILAS_MATERIAL = 6
+
+
 class CerrarOrdenForm(forms.Form):
     resultado = forms.ChoiceField(choices=[("completada", "Completada"), ("fallida", "No se pudo resolver"),
                                            ("reprogramada", "Reprogramar")])
-    minutos_reales = forms.IntegerField(min_value=1, max_value=1440, required=False, label="Minutos que llevó")
+    motivo_no_resuelto = forms.ChoiceField(required=False, label="¿Por qué no se pudo?",
+                                           choices=[("", "—")] + OrdenTrabajo._meta.get_field("motivo_no_resuelto").choices)
+    minutos_reales = forms.IntegerField(min_value=1, max_value=1440, required=False,
+                                        label="Minutos que llevó (si no tocaste 'Empezar trabajo')")
     decodificador_solicitado = forms.BooleanField(required=False, label="El cliente pidió decodificador para TV")
     decodificadores_instalados = forms.IntegerField(min_value=0, max_value=10, initial=0, required=False,
                                                     label="Decodificadores instalados")
-    observaciones = forms.CharField(widget=forms.Textarea, required=False)
+    series_instaladas = forms.CharField(required=False, max_length=300, label="N° de serie de equipos instalados",
+                                        widget=forms.TextInput(attrs={"placeholder": "Separados por coma"}))
+    series_retiradas = forms.CharField(required=False, max_length=300, label="N° de serie de equipos retirados",
+                                       widget=forms.TextInput(attrs={"placeholder": "Separados por coma"}))
+    foto_trabajo = forms.FileField(required=False, label="Foto del trabajo terminado",
+                                   widget=forms.ClearableFileInput(attrs={"accept": "image/*", "capture": "environment"}))
+    conforme_nombre = forms.CharField(required=False, max_length=120, label="Nombre de quien recibe el trabajo")
+    conforme_dni = forms.CharField(required=False, max_length=15, label="DNI")
+    firma = forms.CharField(required=False, widget=forms.HiddenInput)
+    lat = forms.DecimalField(required=False, widget=forms.HiddenInput, max_digits=9, decimal_places=6)
+    lng = forms.DecimalField(required=False, widget=forms.HiddenInput, max_digits=9, decimal_places=6)
+    observaciones = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), required=False)
 
-    def __init__(self, *args, orden=None, **kwargs):
+    def __init__(self, *args, orden=None, stock=None, **kwargs):
         super().__init__(*args, **kwargs)
+        stock = stock or {}
         materiales = Material.objects.filter(activo=True)
-        for i in range(1, 4):
-            self.fields[f"material_{i}"] = forms.ModelChoiceField(materiales, required=False,
-                                                                  label=f"Material usado {i}")
+        # primero lo que el técnico tiene, con su saldo a la vista
+        opciones = [("", "—")] + [(m.id, f"{m.nombre} · tenés {stock[m].normalize():f}")
+                                  for m in sorted(stock, key=lambda m: m.nombre) if stock[m] > 0]
+        otros = [(m.id, f"{m.nombre} · no lo tenés") for m in materiales if stock.get(m, 0) <= 0]
+        if otros:
+            opciones.append(("Otros", otros))
+        for i in range(1, FILAS_MATERIAL + 1):
+            self.fields[f"material_{i}"] = forms.TypedChoiceField(choices=opciones, required=False, coerce=int,
+                                                                  empty_value=None, label=f"Material {i}")
             self.fields[f"cantidad_{i}"] = forms.DecimalField(min_value=0, required=False, label="Cantidad",
                                                               max_digits=10, decimal_places=2)
         if orden and not orden.tipo.puede_requerir_decodificador:
             del self.fields["decodificador_solicitado"]
             del self.fields["decodificadores_instalados"]
 
+    def clean(self):
+        d = super().clean()
+        if d.get("resultado") in ("fallida", "reprogramada") and not d.get("motivo_no_resuelto"):
+            self.add_error("motivo_no_resuelto", "Indicá el motivo.")
+        return d
+
     def materiales(self):
-        for i in range(1, 4):
+        ids = {}
+        for i in range(1, FILAS_MATERIAL + 1):
             m, c = self.cleaned_data.get(f"material_{i}"), self.cleaned_data.get(f"cantidad_{i}")
             if m and c:
-                yield m, c
+                ids[m] = ids.get(m, 0) + c
+        mats = Material.objects.in_bulk(list(ids))
+        return [(mats[k], v) for k, v in ids.items()]
+
+
+class PedidoForm(forms.Form):
+    motivo = forms.CharField(required=False, max_length=200, label="Para qué / comentario")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        opciones = [("", "—")] + [(m.id, f"{m.nombre} ({m.unidad})") for m in Material.objects.filter(activo=True)]
+        for i in range(1, FILAS_MATERIAL + 1):
+            self.fields[f"material_{i}"] = forms.TypedChoiceField(choices=opciones, required=False, coerce=int,
+                                                                  empty_value=None, label=f"Parte {i}")
+            self.fields[f"cantidad_{i}"] = forms.DecimalField(min_value=0, required=False, label="Cantidad",
+                                                              max_digits=10, decimal_places=2)
+
+    def items(self):
+        filas = []
+        for i in range(1, FILAS_MATERIAL + 1):
+            m, c = self.cleaned_data.get(f"material_{i}"), self.cleaned_data.get(f"cantidad_{i}")
+            if m and c:
+                filas.append((m, c))
+        return filas
+
+    def clean(self):
+        d = super().clean()
+        if not self.items():
+            raise forms.ValidationError("Cargá al menos una parte con su cantidad.")
+        return d
 
 
 class SiniestroMovilForm(forms.ModelForm):
@@ -111,6 +171,21 @@ class EncuestaForm(forms.ModelForm):
         model = EncuestaSupervisor
         fields = ["trato", "claridad", "apoyo", "presencia", "comentario"]
         labels = {"comentario": "Comentario (opcional)"}
+
+
+class EncuestaSemanalForm(forms.ModelForm):
+    class Meta:
+        from supervision.models import EncuestaSemanal
+        model = EncuestaSemanal
+        fields = ["general", "trato", "organizacion", "apoyo", "ensenanza", "justicia", "lo_mejor", "a_mejorar"]
+        widgets = {"lo_mejor": forms.Textarea(attrs={"rows": 2}), "a_mejorar": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for nombre in ("general", "trato", "organizacion", "apoyo", "ensenanza", "justicia"):
+            campo = self.fields[nombre]
+            self.fields[nombre] = forms.TypedChoiceField(choices=ESTRELLAS, coerce=int, widget=forms.RadioSelect,
+                                                         label=campo.label)
 
 
 class InformeForm(forms.ModelForm):

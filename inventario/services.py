@@ -94,9 +94,13 @@ def stock_diario(fecha: date | None = None):
         en_calle = tecnicos_en_calle(ultima.fecha) if ultima else 0
     stock_por_material = dict(
         LoteIngreso.objects.values_list("material").annotate(t=Sum("cantidad_disponible")))
+    from .stock_tecnico import total_en_tecnicos
+    en_tecnicos = total_en_tecnicos()
     filas = []
     for m in Material.objects.filter(activo=True):
-        stock = stock_por_material.get(m.id) or Decimal("0")
+        deposito = stock_por_material.get(m.id) or Decimal("0")
+        tecnicos = max(Decimal("0"), en_tecnicos.get(m.id) or Decimal("0"))
+        stock = deposito + tecnicos
         cons_tec = consumo_promedio_por_tecnico_dia(m, fecha)
         consumo_dia = cons_tec * en_calle
         dias_cobertura = (stock / consumo_dia) if consumo_dia else None
@@ -109,7 +113,7 @@ def stock_diario(fecha: date | None = None):
         else:
             estado = "ok"
         filas.append({
-            "material": m, "stock": stock,
+            "material": m, "stock": stock, "deposito": deposito, "en_tecnicos": tecnicos,
             "por_tecnico": (stock / en_calle) if en_calle else None,
             "consumo_tecnico_dia": cons_tec, "consumo_dia": consumo_dia,
             "dias_cobertura": dias_cobertura, "estado": estado,

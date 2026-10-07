@@ -1,0 +1,14 @@
+{% extends "movil/base_movil.html" %}
+{% block titulo_movil %}Evaluá a tu supervisor{% endblock %}
+{% block contenido %}
+<p class="muted">Semana del {{ semana|date:"d/m" }} · <b>{{ sup.nombre_completo }}</b>. Es <b>confidencial</b>: tu supervisor sólo ve el promedio de todo el equipo.</p>
+{% if hecha %}<div class="card"><span class="estado ok">Ya evaluaste esta semana</span><p class="muted" style="margin:.4rem 0 0">Calificación general: {{ hecha.general }}/5. La próxima evaluación se habilita el lunes.</p></div>
+{% else %}
+<form method="post" class="card form-movil" data-offline="/app/mi-supervisor/">{% csrf_token %}
+{% for f in form %}{% if f.name == 'lo_mejor' or f.name == 'a_mejorar' %}{{ f.label_tag }}{{ f }}{% else %}
+<label>{{ f.label }}</label>
+<div class="estrellas">{% for r in f %}<input type="radio" name="{{ f.html_name }}" value="{{ r.data.value }}" id="{{ r.id_for_label }}" {% if r.data.selected %}checked{% endif %} required><label for="{{ r.id_for_label }}">★</label>{% endfor %}</div>
+{% endif %}{{ f.errors }}{% endfor %}
+<button class="btn">Enviar evaluación</button></form>{% endif %}
+{% if anteriores %}<div class="card"><h2>Mis evaluaciones anteriores</h2><table><tbody>{% for e in anteriores %}<tr><td>Semana {{ e.semana|date:"d/m" }}</td><td>{{ e.supervisor.apellido }}</td><td class="num">{{ e.general }}/5</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+{% endblock %}

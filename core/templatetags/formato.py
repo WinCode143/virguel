@@ -64,3 +64,12 @@ def idx(lista, i):
         return lista[int(i)]
     except (IndexError, TypeError, ValueError):
         return None
+
+
+@register.filter
+def cant(v):
+    """Cantidad sin decimales innecesarios: 2,0 → 2 ; 1,25 → 1,25."""
+    if v in (None, ""):
+        return "—"
+    f = float(v)
+    return _miles(f, 0) if f == int(f) else _miles(f, 2).rstrip("0").rstrip(",")

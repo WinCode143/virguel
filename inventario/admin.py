@@ -1,6 +1,7 @@
 from django.contrib import admin, messages
 
-from .models import DemandaComercial, LoteIngreso, Material, RecetaMaterial, Salida
+from .models import (DemandaComercial, LoteIngreso, Material, MovimientoStockTecnico, PedidoItem, PedidoMaterial,
+                     RecetaMaterial, Salida)
 from .services import StockInsuficiente, registrar_salida
 
 
@@ -59,3 +60,29 @@ class DemandaAdmin(admin.ModelAdmin):
     list_display = ["fecha", "zona", "tipo_tarea", "cantidad_clientes", "observaciones"]
     list_filter = ["zona", "tipo_tarea"]
     date_hierarchy = "fecha"
+
+
+@admin.register(MovimientoStockTecnico)
+class MovimientoTecnicoAdmin(admin.ModelAdmin):
+    list_display = ["fecha", "tecnico", "material", "tipo", "cantidad", "orden", "pedido"]
+    list_filter = ["tipo", "material"]
+    search_fields = ["tecnico__apellido", "tecnico__legajo", "material__nombre"]
+    date_hierarchy = "fecha"
+
+    def has_change_permission(self, request, obj=None):
+        return False  # se registran desde la app y el depósito; se corrigen con un ajuste
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser  # ajustes de inventario
+
+
+class PedidoItemInline(admin.TabularInline):
+    model = PedidoItem
+    extra = 0
+
+
+@admin.register(PedidoMaterial)
+class PedidoAdmin(admin.ModelAdmin):
+    list_display = ["id", "tecnico", "creado", "estado", "aprobado_por", "entregado"]
+    list_filter = ["estado"]
+    inlines = [PedidoItemInline]

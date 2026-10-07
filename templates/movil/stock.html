@@ -1,0 +1,20 @@
+{% extends "movil/base_movil.html" %}{% load formato %}
+{% block titulo_movil %}Mis partes{% endblock %}
+{% block contenido %}
+<div class="acciones">
+  <a class="accion" href="{% url 'movil:pedir' %}"><span class="ico">＋</span>Pedir partes<small>al depósito</small></a>
+  {% if falta_algo %}<a class="accion" href="{% url 'movil:pedir' %}?faltante=1" style="border-color:var(--aviso)"><span class="ico">⚡</span>Pedir lo que me falta<small>para mis {{ n_ordenes }} órdenes</small></a>{% endif %}
+</div>
+<div class="card"><h2>Lo que tengo a mi cargo</h2><table><tbody>{% for m, c in saldos %}
+<tr><td>{{ m.nombre }}</td><td class="num">{% if c < 0 %}<span class="estado critico">{{ c|cant }}</span>{% else %}{{ c|cant }}{% endif %} {{ m.unidad }}</td></tr>
+{% empty %}<tr><td class="muted">No tenés partes a tu cargo.</td></tr>{% endfor %}</tbody></table>
+<p class="muted" style="font-size:.8rem;margin-bottom:0">Se descuentan solas al cerrar cada orden. Un número en rojo significa que usaste más de lo que figuraba a tu cargo.</p></div>
+{% if faltante %}<div class="card"><h2>Para mis órdenes asignadas ({{ n_ordenes }})</h2><table><thead><tr><th>Parte</th><th class="num">Necesito</th><th class="num">Tengo</th><th class="num">Falta</th></tr></thead><tbody>
+{% for f in faltante %}<tr><td>{{ f.material.nombre }}</td><td class="num">{{ f.necesito|cant }}</td><td class="num">{{ f.tengo|cant }}</td><td class="num">{% if f.falta %}<span class="estado aviso">{{ f.falta|cant }}</span>{% else %}—{% endif %}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+{% if paradas %}<div class="card" style="border-color:var(--aviso)"><h2>Partes sin usar hace mucho</h2><table><tbody>{% for f in paradas %}<tr><td>{{ f.material.nombre }}</td><td class="num">{{ f.cantidad|cant }}</td><td class="num"><span class="estado aviso">{{ f.dias }} días</span></td></tr>{% endfor %}</tbody></table>
+<p class="muted" style="font-size:.8rem;margin-bottom:0">Si no las vas a usar, devolvelas al depósito.</p></div>{% endif %}
+<div class="card"><h2>Mis pedidos</h2><ul class="lista-ot">{% for p in pedidos %}
+<li><div>{{ p.creado|date:"d/m H:i" }}<br><span class="muted" style="font-size:.85rem">{% for i in p.items.all %}{{ i.material.nombre }} ×{{ i.cantidad|cant }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if p.respuesta %}<br>“{{ p.respuesta }}”{% endif %}</span></div>
+<span class="estado {% if p.estado == 'entregado' %}ok{% elif p.estado == 'rechazado' %}critico{% elif p.estado == 'aprobado' %}info{% else %}aviso{% endif %}">{{ p.get_estado_display|truncatechars:14 }}</span></li>
+{% empty %}<li class="muted">Sin pedidos.</li>{% endfor %}</ul></div>
+{% endblock %}

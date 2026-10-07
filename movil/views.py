@@ -1,4 +1,5 @@
 """App móvil (PWA) para técnicos y supervisores en calle."""
+import os
 from datetime import date, timedelta
 
 from django.contrib import messages
@@ -11,17 +12,16 @@ from django.urls import reverse
 from django.utils import timezone
 
 from capacitacion.evaluacion import evaluar_tecnicos
+from core.models import Parametros
 from core.roles import SUPERVISOR, TECNICO, persona_de, requiere_rol, rol_de
 from herramientas.models import Asignacion
 from incidentes.models import Siniestro
-from inventario.models import Salida
-from inventario.services import StockInsuficiente, registrar_salida
 from operaciones.models import Jornada, OrdenTrabajo
 from supervision.evaluacion import evaluar_supervisores
 from supervision.models import EncuestaSupervisor, InformeControl, TareaSupervisor
 
-from .forms import (AccionForm, CerrarOrdenForm, EncuestaForm, FinJornadaForm, InformeForm, InicioJornadaForm,
-                    NovedadForm, SiniestroMovilForm)
+from .forms import (AccionForm, CerrarOrdenForm, EncuestaForm, EncuestaSemanalForm, FinJornadaForm, InformeForm,
+                    InicioJornadaForm, NovedadForm, PedidoForm, SiniestroMovilForm)
 
 MOVIL = (TECNICO, SUPERVISOR)
 
@@ -59,6 +59,8 @@ def inicio(request):
     encuesta = EncuestaSupervisor.objects.filter(tecnico=p, respondida__isnull=True,
                                                  fecha__gte=hoy - timedelta(days=1)).first()
     epp_vencido = Asignacion.objects.filter(persona=p, estado="en_uso", fecha_vencimiento__lt=hoy).count()
+    if not Parametros.actual().encuesta_diaria:
+        encuesta = None
     epp_sin_firmar = Asignacion.objects.filter(persona=p, estado="en_uso", conformidad_firmada=False).count()
     return render(request, "movil/inicio_tecnico.html", {
         "p": p, "jornada": jornada, "asistencia": asistencia, "ots": ots, "hechas": hechas, "encuesta": encuesta,
@@ -67,6 +69,7 @@ def inicio(request):
 
 
 def _inicio_supervisor(request, p):
+    from inventario.models import PedidoMaterial
     from personal.indicadores import estado_del_dia
     from personal.models import Asistencia, Novedad
     hoy = timezone.localdate()
@@ -87,6 +90,7 @@ def _inicio_supervisor(request, p):
         "asistencia": Asistencia.objects.filter(persona=p, fecha=hoy).first(), "faltan": faltan,
         "tarde": [e for e in estado_equipo if e.situacion[0] == "aviso"],
         "novedades_pendientes": Novedad.objects.filter(persona__supervisor=p, estado="pendiente").count(),
+        "pedidos_pendientes": PedidoMaterial.objects.filter(tecnico__supervisor=p, estado="pendiente").count(),
         "inicio_form": InicioJornadaForm(), "fin_form": FinJornadaForm()})
 
 
@@ -99,6 +103,10 @@ def momento_operacion(request):
     try:
         m = datetime.fromisoformat(request.POST.get("_momento_cliente", "").replace("Z", "+00:00"))
     except ValueError:
+        # sólo vino la fecha (versión anterior de la app): esa fecha con la hora actual
+        f = fecha_operacion(request)
+        if f != timezone.localdate():
+            return timezone.make_aware(datetime.combine(f, timezone.localtime(ahora).time()))
         return ahora
     if timezone.is_naive(m):
         return ahora
@@ -210,37 +218,229 @@ def novedades_equipo(request):
 
 @requiere_rol(TECNICO)
 def orden(request, pk):
+    """Ficha completa de la orden + empezar trabajo + cierre con todos los datos de calle."""
+    import base64
+
+    from django.core.files.base import ContentFile
+
+    from inventario.models import RecetaMaterial
+    from inventario.stock_tecnico import consumir, saldos
     p = _persona(request)
-    ot = get_object_or_404(OrdenTrabajo.objects.select_related("tipo", "cliente"), pk=pk, tecnico=p)
-    if request.method == "POST":
-        f = CerrarOrdenForm(request.POST, orden=ot)
+    ot = get_object_or_404(OrdenTrabajo.objects.select_related("tipo", "cliente", "zona"), pk=pk, tecnico=p)
+    abierta = ot.estado in ("pendiente", "asignada")
+    stock = saldos(p)
+    if request.method == "POST" and request.POST.get("accion") == "empezar" and abierta:
+        if not ot.inicio_trabajo:
+            ot.inicio_trabajo = momento_operacion(request)
+            ot.save(update_fields=["inicio_trabajo"])
+        return redirect("movil:orden", pk=ot.pk)
+    if request.method == "POST" and abierta:
+        f = CerrarOrdenForm(request.POST, request.FILES, orden=ot, stock=stock)
         if f.is_valid():
-            hoy = fecha_operacion(request)
+            d = f.cleaned_data
+            fin = momento_operacion(request)
+            hoy = timezone.localtime(fin).date()
+            avisos = []
             with transaction.atomic():
-                ot.estado = f.cleaned_data["resultado"]
+                ot.estado = d["resultado"]
                 ot.fecha_ejecucion = hoy
-                ot.minutos_reales = f.cleaned_data.get("minutos_reales")
-                ot.decodificador_solicitado = bool(f.cleaned_data.get("decodificador_solicitado"))
-                ot.decodificadores_instalados = f.cleaned_data.get("decodificadores_instalados") or 0
-                ot.observaciones = f.cleaned_data["observaciones"]
+                ot.fin_trabajo = fin
+                if ot.inicio_trabajo:
+                    ot.minutos_reales = max(1, int((fin - ot.inicio_trabajo).total_seconds() // 60))
+                else:
+                    ot.minutos_reales = d.get("minutos_reales")
+                ot.motivo_no_resuelto = "" if ot.estado == "completada" else (d.get("motivo_no_resuelto") or "")
+                ot.decodificador_solicitado = bool(d.get("decodificador_solicitado"))
+                ot.decodificadores_instalados = d.get("decodificadores_instalados") or 0
+                ot.series_instaladas, ot.series_retiradas = d["series_instaladas"], d["series_retiradas"]
+                ot.conforme_nombre, ot.conforme_dni = d["conforme_nombre"], d["conforme_dni"]
+                ot.lat_cierre, ot.lng_cierre = d.get("lat"), d.get("lng")
+                ot.observaciones = d["observaciones"] or ot.observaciones
+                if d.get("foto_trabajo"):
+                    ot.foto_trabajo = d["foto_trabajo"]
+                if d.get("firma", "").startswith("data:image/png;base64,"):
+                    ot.firma.save(f"firma_{ot.numero}.png",
+                                  ContentFile(base64.b64decode(d["firma"].split(",", 1)[1])), save=False)
                 if ot.estado == "reprogramada":
                     ot.fecha_programada = hoy + timedelta(days=1)
+                    ot.inicio_trabajo = None
+                ot._sin_notificar = True
                 ot.save()
-                avisos = []
                 for material, cantidad in f.materiales():
-                    s = Salida(material=material, cantidad=cantidad, tecnico=p, orden=ot, fecha=hoy)
-                    try:
-                        registrar_salida(s)
-                    except StockInsuficiente as e:
-                        registrar_salida(s, permitir_negativo=True)
-                        avisos.append(str(e))
+                    if not consumir(p, ot, material, cantidad, hoy):
+                        avisos.append(f"{material.nombre}: usaste más de lo que figuraba a tu cargo. Avisale a tu supervisor.")
             for a in avisos:
                 messages.warning(request, a)
             messages.success(request, f"Orden {ot.numero} registrada.")
             return redirect("movil:inicio")
     else:
-        f = CerrarOrdenForm(orden=ot)
-    return render(request, "movil/orden.html", {"ot": ot, "form": f, "tab": "inicio"})
+        # materiales precargados con lo que normalmente lleva este tipo de trabajo
+        inicial = {}
+        for k, r in enumerate(RecetaMaterial.objects.filter(tipo_tarea=ot.tipo).select_related("material"), 1):
+            if k > 6:
+                break
+            inicial[f"material_{k}"] = r.material_id
+            inicial[f"cantidad_{k}"] = r.cantidad.normalize()
+        f = CerrarOrdenForm(orden=ot, stock=stock, initial=inicial)
+    previas = []
+    if ot.cliente_id:
+        previas = (OrdenTrabajo.objects.filter(cliente_id=ot.cliente_id).exclude(pk=ot.pk)
+                   .exclude(fecha_ejecucion__isnull=True).select_related("tipo", "tecnico").order_by("-fecha_ejecucion")[:5])
+    destino = ""
+    if ot.cliente and ot.cliente.latitud:
+        destino = f"{ot.cliente.latitud},{ot.cliente.longitud}"
+    elif ot.cliente and ot.cliente.direccion:
+        destino = f"{ot.cliente.direccion}, {ot.zona or ''}"
+    from urllib.parse import quote
+    return render(request, "movil/orden.html", {
+        "ot": ot, "form": f, "abierta": abierta, "previas": previas, "tab": "inicio",
+        "mapa": f"https://www.google.com/maps/dir/?api=1&destination={quote(destino)}" if destino else "",
+        "consumos": ot.consumos.select_related("material") if not abierta else []})
+
+
+@requiere_rol(TECNICO)
+def historial(request):
+    p = _persona(request)
+    estado = request.GET.get("estado", "")
+    qs = (OrdenTrabajo.objects.filter(tecnico=p, fecha_ejecucion__isnull=False)
+          .select_related("tipo", "cliente").order_by("-fecha_ejecucion", "-id"))
+    if estado:
+        qs = qs.filter(estado=estado)
+    return render(request, "movil/historial.html", {"ordenes": qs[:80], "estado": estado, "tab": "inicio"})
+
+
+@requiere_rol(TECNICO)
+def mi_stock(request):
+    from inventario.models import PedidoMaterial
+    from inventario.stock_tecnico import faltante_para_ordenes, partes_paradas, saldos
+    p = _persona(request)
+    faltante, n_ordenes = faltante_para_ordenes(p)
+    return render(request, "movil/stock.html", {
+        "saldos": sorted(saldos(p).items(), key=lambda kv: kv[0].nombre), "paradas": partes_paradas([p]),
+        "faltante": faltante, "falta_algo": any(f["falta"] for f in faltante), "n_ordenes": n_ordenes,
+        "pedidos": PedidoMaterial.objects.filter(tecnico=p).prefetch_related("items__material")[:10], "tab": "stock"})
+
+
+@requiere_rol(TECNICO)
+def pedir_partes(request):
+    from core.notificaciones import notificar
+    from inventario.models import PedidoItem, PedidoMaterial
+    from inventario.stock_tecnico import faltante_para_ordenes
+    p = _persona(request)
+    if request.method == "POST":
+        f = PedidoForm(request.POST)
+        if f.is_valid():
+            with transaction.atomic():
+                ped = PedidoMaterial.objects.create(tecnico=p, motivo=f.cleaned_data["motivo"])
+                for m, c in f.items():
+                    PedidoItem.objects.create(pedido=ped, material_id=m, cantidad=c)
+            notificar(p.supervisor, f"Pedido de partes de {p.nombre_completo}",
+                      f"{len(f.items())} ítem(s) para aprobar", "/app/pedidos/")
+            messages.success(request, "Pedido enviado. Te avisamos cuando lo aprueben.")
+            return redirect("movil:stock")
+    else:
+        inicial = {}
+        if request.GET.get("faltante"):
+            faltante, _ = faltante_para_ordenes(p)
+            for k, fila in enumerate([x for x in faltante if x["falta"]][:6], 1):
+                inicial[f"material_{k}"] = fila["material"].id
+                inicial[f"cantidad_{k}"] = fila["falta"].normalize()
+            inicial["motivo"] = "Para mis órdenes asignadas"
+        f = PedidoForm(initial=inicial)
+    return render(request, "movil/pedido.html", {"form": f, "tab": "stock"})
+
+
+@requiere_rol(SUPERVISOR)
+def pedidos_equipo(request):
+    from core.notificaciones import notificar
+    from inventario.models import PedidoMaterial
+    p = _persona(request)
+    if request.method == "POST":
+        ped = get_object_or_404(PedidoMaterial, pk=request.POST.get("pedido"), tecnico__supervisor=p, estado="pendiente")
+        aprobar = request.POST.get("accion") == "aprobar"
+        ped.estado = PedidoMaterial.Estado.APROBADO if aprobar else PedidoMaterial.Estado.RECHAZADO
+        ped.aprobado_por, ped.respuesta = p, request.POST.get("respuesta", "")[:200]
+        ped.save()
+        notificar(ped.tecnico, f"Tu pedido de partes fue {'aprobado' if aprobar else 'rechazado'}",
+                  ped.respuesta or ("El depósito lo prepara." if aprobar else ""), "/app/stock/")
+        messages.success(request, "Pedido " + ("aprobado." if aprobar else "rechazado."))
+        return redirect("movil:pedidos")
+    return render(request, "movil/pedidos_equipo.html", {
+        "pendientes": PedidoMaterial.objects.filter(tecnico__supervisor=p, estado="pendiente")
+        .select_related("tecnico").prefetch_related("items__material"),
+        "recientes": PedidoMaterial.objects.filter(tecnico__supervisor=p).exclude(estado="pendiente")
+        .select_related("tecnico")[:10], "tab": "asistencia"})
+
+
+@requiere_rol(TECNICO)
+def yo(request):
+    return render(request, "movil/yo.html", {"tab": "yo"})
+
+
+@requiere_rol(TECNICO)
+def mi_legajo(request):
+    p = _persona(request)
+    return render(request, "movil/legajo.html", {
+        "acciones": p.acciones_correctivas.select_related("aplicada_por")[:30],
+        "controles": p.informes_recibidos.select_related("supervisor")[:30],
+        "siniestros": p.siniestros.all()[:10], "tab": "yo"})
+
+
+def lunes(d):
+    return d - timedelta(days=d.weekday())
+
+
+@requiere_rol(TECNICO)
+def mi_supervisor(request):
+    """Evaluación semanal del supervisor (una por semana)."""
+    from supervision.models import EncuestaSemanal
+    p = _persona(request)
+    semana = lunes(timezone.localdate())
+    hecha = EncuestaSemanal.objects.filter(tecnico=p, semana=semana).first()
+    if p.supervisor_id is None:
+        return render(request, "movil/mensaje.html", {"titulo": "Sin supervisor", "texto": "No tenés supervisor asignado."})
+    if request.method == "POST" and not hecha:
+        f = EncuestaSemanalForm(request.POST)
+        if f.is_valid():
+            e = f.save(commit=False)
+            e.tecnico, e.supervisor, e.semana = p, p.supervisor, semana
+            e.save()
+            messages.success(request, "¡Gracias! Tu evaluación es confidencial.")
+            return redirect("movil:mi_supervisor")
+    else:
+        f = EncuestaSemanalForm()
+    anteriores = EncuestaSemanal.objects.filter(tecnico=p).exclude(semana=semana)[:8]
+    return render(request, "movil/mi_supervisor.html", {
+        "form": f, "hecha": hecha, "semana": semana, "sup": p.supervisor, "anteriores": anteriores, "tab": "yo"})
+
+
+@requiere_rol(*MOVIL)
+def notificaciones(request):
+    p = _persona(request)
+    lista = list(p.notificaciones.all()[:50])
+    p.notificaciones.filter(leida=False).update(leida=True)
+    from core.notificaciones import push_configurado
+    return render(request, "movil/notificaciones.html", {
+        "lista": lista, "push": push_configurado(), "clave": os.environ.get("VAPID_PUBLIC_KEY", ""), "tab": ""})
+
+
+@requiere_rol(*MOVIL)
+def push_suscribir(request):
+    """Guarda el permiso de notificaciones del navegador del celular."""
+    import json
+
+    from django.http import JsonResponse
+
+    from core.models import SuscripcionPush
+    if request.method != "POST":
+        return JsonResponse({"ok": False}, status=405)
+    try:
+        d = json.loads(request.body)
+        SuscripcionPush.objects.update_or_create(endpoint=d["endpoint"], defaults={
+            "persona": _persona(request), "p256dh": d["keys"]["p256dh"], "auth": d["keys"]["auth"]})
+    except (KeyError, ValueError):
+        return JsonResponse({"ok": False}, status=400)
+    return JsonResponse({"ok": True})
 
 
 @requiere_rol(TECNICO)
@@ -257,9 +457,57 @@ def mi_epp(request):
 
 @requiere_rol(TECNICO)
 def mi_desempeno(request):
+    """Métricas propias del técnico: hoy, últimos 30 días vs. el equipo, y evolución semanal."""
+    from collections import Counter
+
+    from django.db.models import Avg, F
+
+    from personal.indicadores import resumen
+    from tablero.asignacion import capacidad_tecnicos
     p = _persona(request)
+    hoy = timezone.localdate()
+    desde = hoy - timedelta(days=29)
     ev = evaluar_tecnicos(tecnicos=[p])[0]
-    return render(request, "movil/desempeno.html", {"ev": ev, "tab": "yo"})
+    meta = capacidad_tecnicos([p], hoy)[p.id]
+    mias = OrdenTrabajo.objects.filter(tecnico=p, fecha_ejecucion__range=(desde, hoy))
+    comp = mias.filter(estado="completada")
+    ejecutadas = mias.count()
+    dias = Jornada.objects.filter(tecnico=p, en_calle=True, fecha__range=(desde, hoy)).count()
+    eq_dias = Jornada.objects.filter(en_calle=True, fecha__range=(desde, hoy)).count()
+    eq_comp = OrdenTrabajo.objects.filter(estado="completada", fecha_ejecucion__range=(desde, hoy)).count()
+    eq_ejec = OrdenTrabajo.objects.filter(fecha_ejecucion__range=(desde, hoy), tecnico__isnull=False).count()
+    tiempo = comp.filter(minutos_reales__isnull=False).aggregate(
+        real=Avg("minutos_reales"), est=Avg(F("tipo__minutos_estandar")))
+    motivos = Counter(mias.exclude(motivo_no_resuelto="").values_list("motivo_no_resuelto", flat=True))
+    nombres = dict(OrdenTrabajo._meta.get_field("motivo_no_resuelto").choices)
+    asis = resumen(desde, hoy, [p])[0]
+    # evolución semanal: OT por día en calle, propia y del equipo (8 semanas)
+    semanas = []
+    for n in range(7, -1, -1):
+        ini = lunes(hoy) - timedelta(weeks=n)
+        fin = ini + timedelta(days=6)
+        d = Jornada.objects.filter(tecnico=p, en_calle=True, fecha__range=(ini, fin)).count()
+        o = OrdenTrabajo.objects.filter(tecnico=p, estado="completada", fecha_ejecucion__range=(ini, fin)).count()
+        ed = Jornada.objects.filter(en_calle=True, fecha__range=(ini, fin)).count()
+        eo = OrdenTrabajo.objects.filter(estado="completada", fecha_ejecucion__range=(ini, fin)).count()
+        semanas.append({"ini": ini, "yo": o / d if d else None, "equipo": eo / ed if ed else None})
+    tope = max([x["yo"] or 0 for x in semanas] + [x["equipo"] or 0 for x in semanas] + [1])
+    for x in semanas:
+        x["ancho_yo"] = f"{(x['yo'] or 0) / tope * 100:.0f}"
+        x["ancho_eq"] = f"{(x['equipo'] or 0) / tope * 100:.0f}"
+    return render(request, "movil/desempeno.html", {
+        "ev": ev, "tab": "yo", "meta": meta,
+        "hoy_hechas": OrdenTrabajo.objects.filter(tecnico=p, estado="completada", fecha_ejecucion=hoy).count(),
+        "completadas": comp.count(), "ejecutadas": ejecutadas, "dias": dias,
+        "por_dia": comp.count() / dias if dias else None, "eq_por_dia": eq_comp / eq_dias if eq_dias else None,
+        "efectividad": comp.count() / ejecutadas if ejecutadas else None,
+        "eq_efectividad": eq_comp / eq_ejec if eq_ejec else None,
+        "min_real": tiempo["real"], "min_est": tiempo["est"],
+        "retrabajos": OrdenTrabajo.objects.filter(es_retrabajo=True, orden_original__tecnico=p,
+                                                  fecha_programada__range=(desde, hoy)).count(),
+        "controles": p.informes_recibidos.filter(fecha__range=(desde, hoy)).aggregate(n=Count("id"), prom=Avg("puntaje")),
+        "motivos": [(nombres.get(k, k), n) for k, n in motivos.most_common()],
+        "asis": asis, "semanas": semanas})
 
 
 # ---------------------------------------------------------------- ambos

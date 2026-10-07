@@ -1,14 +1,15 @@
 {% extends "movil/base_movil.html" %}
 {% block contenido %}
 {% if encuesta %}<a class="card" style="display:block;border-color:var(--accent)" href="{% url 'encuesta' encuesta.token %}"><b>Encuesta del día pendiente</b><br><span class="muted">¿Cómo te trató tu supervisor? Lleva 20 segundos y es confidencial.</span></a>{% endif %}
+{% if encuesta_semanal_pendiente %}<a class="card" style="display:block" href="{% url 'movil:mi_supervisor' %}"><b>Evaluá a tu supervisor esta semana</b><br><span class="muted">6 preguntas, confidencial.</span></a>{% endif %}
 {% if epp_vencido %}<div class="card"><span class="estado critico">Tenés {{ epp_vencido }} elemento{{ epp_vencido|pluralize }} de seguridad vencido{{ epp_vencido|pluralize }}</span> · <a href="{% url 'movil:epp' %}">ver</a></div>{% endif %}
 
 {% include "movil/_fichada.html" %}
 
-<div class="card"><h2>Mis órdenes pendientes ({{ ots|length }})</h2>
+<div class="card"><h2 style="display:flex;justify-content:space-between">Mis órdenes pendientes ({{ ots|length }}) <a href="{% url 'movil:historial' %}" style="font-size:.85rem;font-weight:400">historial →</a></h2>
 <ul class="lista-ot">{% for ot in ots %}
   <li><div><b>{{ ot.tipo }}</b><br><span class="muted" style="font-size:.85rem">{{ ot.numero }}{% if ot.cliente %} · {{ ot.cliente.direccion|default:ot.cliente.nombre }}{% endif %}</span></div>
-  <a class="btn" href="{% url 'movil:orden' ot.id %}">Cerrar</a></li>
+  <a class="btn" href="{% url 'movil:orden' ot.id %}">{% if ot.inicio_trabajo %}Seguir{% else %}Abrir{% endif %}</a></li>
 {% empty %}<li class="muted">No tenés órdenes pendientes.</li>{% endfor %}</ul></div>
 {% if epp_sin_firmar %}<div class="card"><a href="{% url 'movil:epp' %}">Confirmá la recepción de {{ epp_sin_firmar }} elemento{{ epp_sin_firmar|pluralize }} entregado{{ epp_sin_firmar|pluralize }} →</a></div>{% endif %}
 {% endblock %}

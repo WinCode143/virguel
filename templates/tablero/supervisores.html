@@ -4,13 +4,14 @@
 {% block contenido %}
 {% include "tablero/_grafico.html" with id="g-sup" datos=g titulo="Puntaje por eje (0–100)" alto=True %}
 <div class="card"><div class="tabla-scroll"><table>
-<thead><tr><th>Supervisor</th><th class="num">Total</th><th class="num">Técnicos</th><th class="num">Nota encuesta</th><th class="num">Respuesta</th>
+<thead><tr><th>Supervisor</th><th class="num">Total</th><th class="num">Técnicos</th><th class="num">Encuesta diaria</th><th class="num">Eval. semanal</th><th class="num">Respuesta</th>
 <th class="num">Informes/día</th><th class="num">Calidad doc.</th><th class="num">Desvíos con acción</th><th class="num">Días respuesta</th><th class="num">Objetivos</th><th class="num">Siniestros equipo</th></tr></thead>
 <tbody>{% for e in evs %}<tr>
   <td>{{ e.supervisor.apellido }}, {{ e.supervisor.nombre }}</td>
   <td class="num"><span class="estado {{ e.color }}">{{ e.score_total|num }}</span></td>
   <td class="num">{{ e.tecnicos_a_cargo }}</td>
   <td class="num">{{ e.nota_encuesta|num:2 }} / 5</td>
+  <td class="num">{% if e.nota_semanal %}{{ e.nota_semanal|num:2 }} / 5 <span class="muted">({{ e.semanales }})</span>{% else %}—{% endif %}</td>
   <td class="num">{{ e.tasa_respuesta|pct }}</td>
   <td class="num">{{ e.informes_por_dia|num:1 }}</td>
   <td class="num">{{ e.calidad_documentacion|num }}/100</td>

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import AccionCorrectiva, EncuestaSupervisor, InformeControl, TareaSupervisor
+from .models import AccionCorrectiva, EncuestaSemanal, EncuestaSupervisor, InformeControl, TareaSupervisor
 
 
 class AccionInline(admin.TabularInline):
@@ -50,3 +50,15 @@ class EncuestaAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False  # las genera el sistema automáticamente
+
+
+@admin.register(EncuestaSemanal)
+class EncuestaSemanalAdmin(admin.ModelAdmin):
+    list_display = ["semana", "supervisor", "tecnico", "general", "trato", "organizacion", "apoyo", "ensenanza", "justicia"]
+    list_filter = ["supervisor", "semana"]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

@@ -73,6 +73,22 @@ class OrdenTrabajo(models.Model):
                                        related_name="retrabajos")
     observaciones = models.TextField(blank=True)
 
+    # ---- Datos del cierre en calle (los carga el técnico desde la app)
+    motivo_no_resuelto = models.CharField(max_length=20, blank=True, choices=[
+        ("cliente_ausente", "Cliente ausente"), ("falta_material", "Faltó material"),
+        ("problema_red", "Problema de red / externo"), ("direccion", "Dirección errónea"),
+        ("clima", "Clima"), ("rechazo", "Cliente rechazó el trabajo"), ("otro", "Otro")])
+    inicio_trabajo = models.DateTimeField(null=True, blank=True)
+    fin_trabajo = models.DateTimeField(null=True, blank=True)
+    series_instaladas = models.CharField("N° de serie instalados", max_length=300, blank=True)
+    series_retiradas = models.CharField("N° de serie retirados", max_length=300, blank=True)
+    foto_trabajo = models.FileField(upload_to="ordenes/%Y/%m/", blank=True)
+    conforme_nombre = models.CharField("Conformidad: nombre", max_length=120, blank=True)
+    conforme_dni = models.CharField("Conformidad: DNI", max_length=15, blank=True)
+    firma = models.FileField(upload_to="firmas/%Y/%m/", blank=True)
+    lat_cierre = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    lng_cierre = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+
     class Meta:
         ordering = ["-fecha_programada", "numero"]
         verbose_name = "Orden de trabajo"

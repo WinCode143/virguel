@@ -26,6 +26,8 @@
       <a href="{% url 'tablero:herramientas' %}" class="{% if u == 'herramientas' %}activo{% endif %}">4 · Herramientas y EPP</a>
       <a href="{% url 'tablero:flota' %}" class="{% if u == 'flota' %}activo{% endif %}">6 · Flota</a>
       <a href="{% url 'tablero:stock' %}" class="{% if u == 'stock' %}activo{% endif %}">8 · Stock y demanda</a>
+      <a href="{% url 'tablero:stock_tecnicos' %}" class="{% if u == 'stock_tecnicos' %}activo{% endif %}">8 · Partes en manos de técnicos</a>
+      {% if es_gerencia %}<a href="{% url 'tablero:pedidos' %}" class="{% if u == 'pedidos' %}activo{% endif %}">8 · Pedidos de partes</a>{% endif %}
       {% if es_gerencia %}<a href="{% url 'tablero:finanzas' %}" class="{% if u == 'finanzas' %}activo{% endif %}">7 · Finanzas</a>{% endif %}
       <div class="grupo">Gerencial</div>
       <a href="{% url 'tablero:planificacion' %}" class="{% if u == 'planificacion' %}activo{% endif %}">9 · Planificación y capacidad</a>

@@ -17,7 +17,7 @@ from core.models import Persona
 from incidentes.models import Siniestro
 from operaciones.models import Jornada
 
-from .models import EncuestaSupervisor, InformeControl, TareaSupervisor
+from .models import EncuestaSemanal, EncuestaSupervisor, InformeControl, TareaSupervisor
 
 INFORMES_OBJETIVO_DIA = 4  # controles por día hábil esperados de un supervisor
 
@@ -40,6 +40,8 @@ class EvaluacionSupervisor:
     nota_apoyo: float | None = None
     nota_presencia: float | None = None
     cumplimiento_tareas: float | None = None
+    nota_semanal: float | None = None      # promedio de la evaluación semanal (1-5)
+    semanales: int = 0
     siniestros_equipo: int = 0
     score_imagen: float = 0.0
     score_control: float = 0.0
@@ -101,6 +103,13 @@ def evaluar_supervisores(hasta: date | None = None, dias: int = 30):
         e.nota_trato, e.nota_claridad, e.nota_apoyo, e.nota_presencia = (
             float(r[k]) if r[k] is not None else None for k in "tcap")
 
+    semanal = defaultdict(list)
+    for e in EncuestaSemanal.objects.filter(supervisor_id__in=ids, semana__range=(desde - timedelta(days=6), hasta)):
+        semanal[e.supervisor_id].append(e.promedio)
+    for sid, notas in semanal.items():
+        evs[sid].nota_semanal = sum(notas) / len(notas)
+        evs[sid].semanales = len(notas)
+
     tareas = defaultdict(list)
     for t in TareaSupervisor.objects.filter(supervisor_id__in=ids, fecha__range=(desde, hasta)).exclude(
             estado=TareaSupervisor.Estado.PENDIENTE):
@@ -119,7 +128,9 @@ def evaluar_supervisores(hasta: date | None = None, dias: int = 30):
         if tareas[sid]:
             e.cumplimiento_tareas = sum(tareas[sid]) / len(tareas[sid])
 
-        e.score_imagen = (e.nota_encuesta - 1) / 4 * 100 if e.nota_encuesta else 0.0
+        # Imagen: promedio de la encuesta diaria y de la evaluación semanal (las que haya)
+        notas_img = [n for n in (e.nota_encuesta, e.nota_semanal) if n]
+        e.score_imagen = (sum(notas_img) / len(notas_img) - 1) / 4 * 100 if notas_img else 0.0
         cantidad = min(1.0, e.informes_por_dia / INFORMES_OBJETIVO_DIA) * 100
         e.score_control = 0.6 * cantidad + 0.4 * e.calidad_documentacion
         if e.desvios:

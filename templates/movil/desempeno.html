@@ -1,13 +1,32 @@
 {% extends "movil/base_movil.html" %}{% load formato %}
-{% block titulo_movil %}Mi desempeño{% endblock %}
+{% block titulo_movil %}Mi rendimiento{% endblock %}
 {% block contenido %}
-<div class="card"><div class="kpi"><div class="etq">Órdenes por día en calle (90 días)</div><div class="valor">{{ ev.productividad|num:2 }}</div>
-<div class="det">{% if ev.tendencia > 0 %}Subiendo {{ ev.tendencia|num }}% 📈{% elif ev.tendencia < 0 %}Bajando {{ ev.tendencia|num }}%{% else %}Estable{% endif %} · {{ ev.indice_productividad|pct }} del promedio del equipo</div></div></div>
+<div class="card"><div class="kpi"><div class="etq">Hoy</div><div class="valor">{{ hoy_hechas }} de {{ meta }}</div>
+<div class="barra" style="margin:.4rem 0"><span style="width:{{ hoy_hechas|ancho:meta }}%"></span></div>
+<div class="det">Tu meta diaria sale de tu propio promedio del último mes.</div></div></div>
+
+<div class="card"><h2>Últimos 30 días</h2><table><thead><tr><th></th><th class="num">Yo</th><th class="num">Equipo</th></tr></thead><tbody>
+<tr><td>Órdenes por día</td><td class="num"><b>{{ por_dia|num:2 }}</b></td><td class="num">{{ eq_por_dia|num:2 }}</td></tr>
+<tr><td>Efectividad (resueltas)</td><td class="num"><b>{{ efectividad|pct }}</b></td><td class="num">{{ eq_efectividad|pct }}</td></tr>
+<tr><td>Órdenes completadas</td><td class="num">{{ completadas }}</td><td></td></tr>
+<tr><td>Minutos por orden</td><td class="num">{{ min_real|num }}</td><td class="num muted">estándar {{ min_est|num }}</td></tr>
+<tr><td>Retrabajos (volver a corregir)</td><td class="num">{% if retrabajos %}<span class="estado aviso">{{ retrabajos }}</span>{% else %}0{% endif %}</td><td></td></tr>
+<tr><td>Controles del supervisor</td><td class="num">{{ controles.prom|num:1 }}/5</td><td class="num muted">{{ controles.n }} controles</td></tr>
+<tr><td>Presentismo</td><td class="num">{{ asis.presentismo|pct }}</td><td class="num muted">{{ asis.tardanzas }} llegada{{ asis.tardanzas|pluralize }} tarde</td></tr>
+</tbody></table></div>
+
+{% if motivos %}<div class="card"><h2>Por qué no se pudieron resolver</h2><table><tbody>{% for m, n in motivos %}<tr><td>{{ m }}</td><td class="num">{{ n }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+
+<div class="card"><h2>Órdenes por día, semana a semana</h2>
+{% for s in semanas %}<div style="margin:.45rem 0"><div style="display:flex;justify-content:space-between;font-size:.82rem"><span>Semana {{ s.ini|date:"d/m" }}</span><span><b>{{ s.yo|num:1 }}</b> <span class="muted">· equipo {{ s.equipo|num:1 }}</span></span></div>
+<div class="barra"><span style="width:{{ s.ancho_yo }}%"></span></div>
+<div class="barra" style="height:4px;margin-top:2px"><span style="width:{{ s.ancho_eq }}%;background:var(--s2)"></span></div></div>{% endfor %}
+<div class="leyenda"><span><i style="background:var(--s1)"></i>Yo</span><span><i style="background:var(--s2)"></i>Promedio del equipo</span></div></div>
+
 <div class="card"><table><tbody>
 <tr><td>Productividad</td><td style="width:45%"><div class="barra"><span style="width:{{ ev.score_productividad|ancho }}%"></span></div></td><td class="num">{{ ev.score_productividad|num }}</td></tr>
 <tr><td>Calidad</td><td><div class="barra"><span style="width:{{ ev.score_calidad|ancho }}%"></span></div></td><td class="num">{{ ev.score_calidad|num }}</td></tr>
 <tr><td>Disciplina</td><td><div class="barra"><span style="width:{{ ev.score_disciplina|ancho }}%"></span></div></td><td class="num">{{ ev.score_disciplina|num }}</td></tr>
 <tr><td>Seguridad</td><td><div class="barra"><span style="width:{{ ev.score_seguridad|ancho }}%"></span></div></td><td class="num">{{ ev.score_seguridad|num }}</td></tr>
-</tbody></table></div>
-<div class="card" style="font-size:.9rem"><b>Cómo mejorar:</b> evitar retrabajos (hacer bien la primera vez), usar siempre el EPP, reportar cualquier daño al momento.</div>
+</tbody></table><p class="muted" style="font-size:.82rem;margin-bottom:0">Para mejorar: hacer bien la primera vez (evitar retrabajos), fichar en horario, usar siempre el EPP y reportar cualquier daño al momento.</p></div>
 {% endblock %}

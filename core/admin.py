@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Alerta, Cliente, Parametros, Persona, Zona
+from .models import Alerta, Cliente, Notificacion, Parametros, Persona, Zona
 
 admin.site.site_header = "Virguel — ERP operativo"
 admin.site.site_title = "Virguel ERP"
@@ -10,7 +10,8 @@ admin.site.index_title = "Administración de datos"
 @admin.register(Parametros)
 class ParametrosAdmin(admin.ModelAdmin):
     fieldsets = [
-        ("Control de personal", {"fields": ["tolerancia_tarde_minutos", "horas_jornada", "destinatarios_parte"]}),
+        ("Control de personal", {"fields": ["tolerancia_tarde_minutos", "horas_jornada", "destinatarios_parte",
+                                            "encuesta_diaria"]}),
         ("Stock", {"fields": ["dias_max_stock", "dias_aviso_stock", "dias_cobertura_stock_min"]}),
         ("Capacidad", {"fields": ["clientes_por_tecnico_dia", "usar_hectareas", "hectareas_dia_min",
                                   "hectareas_dia_max", "tecnicos_por_cuadrilla"]}),
@@ -46,7 +47,7 @@ class PersonaAdmin(admin.ModelAdmin):
 
 @admin.register(Cliente)
 class ClienteAdmin(admin.ModelAdmin):
-    list_display = ["numero", "nombre", "zona", "tipo", "cantidad_televisores"]
+    list_display = ["numero", "nombre", "telefono", "zona", "tipo", "cantidad_televisores"]
     list_filter = ["tipo", "zona"]
     search_fields = ["numero", "nombre", "direccion"]
 
@@ -56,3 +57,10 @@ class AlertaAdmin(admin.ModelAdmin):
     list_display = ["titulo", "modulo", "nivel", "actualizada", "resuelta"]
     list_filter = ["resuelta", "nivel", "modulo"]
     search_fields = ["titulo", "detalle"]
+
+
+@admin.register(Notificacion)
+class NotificacionAdmin(admin.ModelAdmin):
+    list_display = ["creada", "persona", "titulo", "leida"]
+    list_filter = ["leida"]
+    search_fields = ["persona__apellido", "titulo"]

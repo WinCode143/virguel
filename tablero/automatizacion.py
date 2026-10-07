@@ -22,7 +22,10 @@ C, A = Alerta.Nivel.CRITICA, Alerta.Nivel.AVISO
 
 def generar_encuestas(fecha=None):
     """Una encuesta por técnico que estuvo en calle y tiene supervisor asignado."""
+    from core.models import Parametros
     fecha = fecha or timezone.localdate()
+    if not Parametros.actual().encuesta_diaria:
+        return 0
     creadas = 0
     for j in Jornada.objects.filter(fecha=fecha, en_calle=True, tecnico__supervisor__isnull=False
                                     ).select_related("tecnico"):
@@ -132,6 +135,38 @@ def alertas_incidentes(hoy):
                      "Revisar causas raíz y capacitación del personal involucrado.", C, url)
 
 
+def recordar_evaluacion_semanal(hoy):
+    """Jueves: recordar a los técnicos que aún no evaluaron a su supervisor esta semana."""
+    from core.notificaciones import notificar
+    from supervision.models import EncuestaSemanal
+    if hoy.weekday() != 3:
+        return 0
+    lunes = hoy - timedelta(days=hoy.weekday())
+    ya = set(EncuestaSemanal.objects.filter(semana=lunes).values_list("tecnico_id", flat=True))
+    n = 0
+    for t in Persona.objects.filter(rol="tecnico", activo=True, supervisor__isnull=False).exclude(id__in=ya):
+        notificar(t, "Evaluá a tu supervisor de esta semana", "Son 6 preguntas y es confidencial.", "/app/mi-supervisor/")
+        n += 1
+    return n
+
+
+def alertas_partes(hoy):
+    from inventario.models import MovimientoStockTecnico
+    from inventario.stock_tecnico import partes_paradas
+    from django.db.models import Sum
+    with SincronizadorAlertas(Alerta.Modulo.PARTES) as s:
+        url = reverse("tablero:stock_tecnicos")
+        for f in partes_paradas(hoy=hoy):
+            s.alerta(f"parada-{f['tecnico'].id}-{f['material'].id}",
+                     f"{f['tecnico'].nombre_completo}: {f['cantidad'].normalize():f} {f['material'].unidad} de {f['material'].nombre} sin usar hace {f['dias']} días",
+                     f"Valor ${f['valor']:,.0f}. Pedir devolución al depósito.", C if f["dias"] >= 90 else A, url)
+        for r in (MovimientoStockTecnico.objects.values("tecnico_id", "tecnico__apellido", "material__nombre", "material_id")
+                  .annotate(t=Sum("cantidad")).filter(t__lt=0)):
+            s.alerta(f"negativo-{r['tecnico_id']}-{r['material_id']}",
+                     f"{r['tecnico__apellido']}: usó {(-r['t']).normalize():f} de {r['material__nombre']} sin tenerlo a su cargo",
+                     "Falta registrar una entrega o hay un error de carga.", A, url)
+
+
 def alertas_personal(hoy):
     from personal.indicadores import documentos_faltantes_o_vencidos, resumen
     from personal.models import Novedad
@@ -160,7 +195,8 @@ def ejecutar(hoy=None, log=print, enviar_parte=True):
     ultima = EvaluacionHistorica.objects.order_by("-fecha").values_list("fecha", flat=True).first()
     if ultima is None or (hoy - ultima).days >= 7:
         log(f"Historial semanal de evaluación guardado: {guardar_historial(hoy)} técnicos")
-    for nombre, f in (("personal", alertas_personal), ("stock", alertas_stock), ("flota", alertas_flota), ("EPP", alertas_epp),
+    log(f"Recordatorios de evaluación semanal: {recordar_evaluacion_semanal(hoy)}")
+    for nombre, f in (("personal", alertas_personal), ("stock", alertas_stock), ("partes de técnicos", alertas_partes), ("flota", alertas_flota), ("EPP", alertas_epp),
                       ("personas", alertas_personas), ("incidentes", alertas_incidentes)):
         f(hoy)
         log(f"Alertas de {nombre} actualizadas")

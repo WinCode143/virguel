@@ -1,0 +1,16 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Pedidos de partes · Virguel{% endblock %}
+{% block encabezado %}<h1>8 · Pedidos de partes de los técnicos</h1><p class="sub">El técnico pide desde el celular, el supervisor aprueba y el depósito entrega acá. Al entregar, las partes salen del depósito y pasan al stock del técnico.</p>{% endblock %}
+{% block contenido %}
+<div class="card"><h2>Abiertos ({{ abiertos|length }})</h2>
+{% for p in abiertos %}<form method="post" style="border-bottom:1px solid var(--grid);padding:.8rem 0">{% csrf_token %}<input type="hidden" name="pedido" value="{{ p.id }}">
+<div style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap"><div><b>{{ p.tecnico.nombre_completo }}</b> <span class="muted">· sup. {{ p.tecnico.supervisor.apellido|default:"—" }} · {{ p.creado|date:"d/m H:i" }}</span>{% if p.motivo %}<br><span class="muted">“{{ p.motivo }}”</span>{% endif %}</div>
+<span class="estado {% if p.estado == 'aprobado' %}ok{% else %}aviso{% endif %}">{{ p.get_estado_display }}{% if p.aprobado_por %} por {{ p.aprobado_por.apellido }}{% endif %}</span></div>
+<table style="margin:.5rem 0"><thead><tr><th>Parte</th><th class="num">Pidió</th><th class="num">En depósito</th><th class="num">Entregar</th></tr></thead><tbody>
+{% for i in p.items.all %}<tr><td>{{ i.material.nombre }}</td><td class="num">{{ i.cantidad|cant }} {{ i.material.unidad }}</td><td class="num">{% with s=stock_dep|get:i.material_id %}{% if s < i.cantidad %}<span class="estado aviso">{{ s|cant }}</span>{% else %}{{ s|cant }}{% endif %}{% endwith %}</td>
+<td class="num"><input name="cant_{{ i.id }}" value="{{ i.cantidad|stringformat:'s' }}" style="width:6rem;text-align:right"></td></tr>{% endfor %}</tbody></table>
+<div style="display:flex;gap:.5rem;flex-wrap:wrap"><button class="btn" name="accion" value="entregar">Entregar</button><input name="respuesta" placeholder="Motivo si se rechaza"><button class="btn sec" name="accion" value="rechazar">Rechazar</button></div>
+{% if p.estado == 'pendiente' %}<p class="muted" style="font-size:.8rem;margin:.4rem 0 0">Todavía no lo aprobó el supervisor; se puede entregar igual si es urgente.</p>{% endif %}
+</form>{% empty %}<p class="muted">No hay pedidos abiertos.</p>{% endfor %}</div>
+<div class="card"><h2>Últimos cerrados</h2><table><tbody>{% for p in cerrados %}<tr><td>{{ p.creado|date:"d/m" }}</td><td>{{ p.tecnico.nombre_completo }}</td><td><span class="estado {% if p.estado == 'entregado' %}ok{% else %}critico{% endif %}">{{ p.get_estado_display }}</span></td><td class="muted">{{ p.respuesta }}</td></tr>{% empty %}<tr><td class="muted">—</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

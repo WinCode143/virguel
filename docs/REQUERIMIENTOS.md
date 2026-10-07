@@ -31,6 +31,19 @@ Restricciones del cliente:
 | Parte diario | **Mail automático cada noche**: a gerencia (general) y a cada supervisor (su equipo) con presentes, sin aviso, tardanzas, novedades, operación, siniestros, documentación por vencer y alertas críticas. |
 | La asistencia pesa en la evaluación | Las faltas sin justificar (2 puntos) y llegadas tarde (0,3) suman a la dimensión **disciplina** del diagnóstico de cada técnico. |
 
+## 0.b Pedidos del usuario sobre la app del técnico (07/10/2026)
+| Pedido | Implementación |
+|---|---|
+| Historial de órdenes cerradas | `/app/historial/`, con detalle de cada cierre. |
+| Ver sanciones y controles recibidos | `/app/legajo/` ("Mi legajo"). |
+| Notificaciones en el celular | Campanita en la app + Web Push (`core/notificaciones.py`). Órdenes nuevas, pedidos, controles, sanciones, recordatorio semanal. |
+| Ficha completa de la orden | Teléfono (llamar), Google Maps, visitas anteriores, indicaciones. |
+| Qué datos cargar al cerrar | Motivo si no se resolvió, tiempo medido (empezar/terminar), materiales de su stock precargados, series instaladas/retiradas, foto, conformidad (nombre, DNI, firma), ubicación. |
+| Partes a cargo y descontarlas | Stock propio por técnico (`inventario.MovimientoStockTecnico`): el depósito entrega, la orden consume, se puede devolver. Partes paradas > 60 días y saldos negativos generan alerta. |
+| Forma de pedir partes | Pedido desde la app (o automático según sus órdenes) → aprueba el supervisor → entrega el depósito. Notificaciones en cada paso. |
+| Métricas de rendimiento | "Mi rendimiento": meta diaria personal, órdenes/día, efectividad, minutos vs. estándar, retrabajos, controles, presentismo, motivos de no resolución y evolución semanal vs. el equipo. |
+| Evaluar al supervisor cada semana | `supervision.EncuestaSemanal`: 6 preguntas + 2 comentarios, una por semana, confidencial; recordatorio los jueves; cuenta en el puntaje "imagen/trato" del supervisor. La encuesta diaria quedó opcional (Parámetros). |
+
 ## 1. Operación y gestión de técnicos
 | Pedido | Implementación |
 |---|---|

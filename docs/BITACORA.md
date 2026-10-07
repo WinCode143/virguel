@@ -180,3 +180,46 @@ También preguntó qué existe: app móvil (sí, PWA), sitio web (sí), dashboar
   enfermedad/falta, sin control no hay faltas, fichada con hora del celular, permisos del
   supervisor sobre avisos y legajos, aviso con certificado, capacidad sin hectáreas).
 - Revisión visual de todas las pantallas nuevas (escritorio y celular).
+
+---
+
+## 2026-10-07 — Sesión 1, cuarta parte: la app del técnico
+
+El usuario revisó qué ve un técnico y pidió: historial de órdenes, ver sus sanciones y
+controles, notificaciones, ficha completa de la orden, repensar los datos del cierre,
+**partes a cargo del técnico descontadas al usarlas**, **pedido de partes**, métricas de
+rendimiento y **evaluación semanal del supervisor**.
+
+### Hecho
+- **Cierre de orden rediseñado**: empezar/terminar (tiempo automático), motivo de no resolución,
+  materiales precargados según el tipo de trabajo y elegidos de su stock, series, foto,
+  conformidad con firma en pantalla (canvas → PNG), ubicación al cerrar.
+- **Stock por técnico** (`inventario/stock_tecnico.py`): entregas (salen de los lotes del depósito
+  por FIFO), consumo en órdenes (no vuelve a tocar el depósito), devoluciones (vuelven como lote),
+  partes paradas por FIFO, faltante para sus órdenes. El stock diario suma depósito + técnicos.
+- **Pedidos de partes**: técnico → supervisor (aprueba en la app) → depósito (entrega en el escritorio).
+- **Notificaciones**: modelo `Notificacion` + Web Push con claves VAPID (`manage.py generar_claves_push`).
+  Disparadores: orden asignada (una sola notificación por técnico en la asignación masiva),
+  control recibido, acción correctiva, pedido nuevo/aprobado/rechazado/listo, recordatorio semanal.
+- **Evaluación semanal del supervisor**: una por semana y técnico; entra al puntaje del supervisor
+  (promedio con la encuesta diaria, que ahora se puede apagar).
+- Pantallas nuevas en la app: ficha de orden, historial, mis partes, pedir partes, mi legajo,
+  mi rendimiento, evaluar a mi supervisor, notificaciones, menú "Yo"; para el supervisor, pedidos
+  del equipo. En el escritorio: pedidos de partes y partes en manos de técnicos.
+- Datos demo: entregas semanales a técnicos y consumo desde su stock (85.000 movimientos),
+  teléfonos de clientes, motivos de no resolución, evaluaciones semanales, pedidos en curso,
+  técnicos "de riesgo" que acumulan partes sin usar.
+
+### Problemas encontrados y corregidos
+- Al reemplazar la vista de la orden se borraron por accidente "Mi EPP" y "Mi desempeño";
+  se detectó enseguida y se restauraron.
+- Demo: consumos fraccionarios de equipos (0,2 módems) y redondeo de entregas que generaba
+  alertas falsas de "usó sin tenerlo a su cargo" → unidades enteras y redondeo hacia arriba.
+- El cierre sin `_momento_cliente` (sólo fecha) no respetaba la fecha de carga → corregido.
+
+### Calidad
+- Tests: **46**, todos pasan (nuevos: cierre que descuenta del stock del técnico, motivo
+  obligatorio, tiempo medido, pedido → aprobación → entrega, permisos de supervisor sobre pedidos,
+  partes paradas FIFO, faltante para órdenes, devolución, evaluación semanal única y su efecto
+  en el puntaje, notificaciones).
+- Nueva dependencia: **pywebpush**.

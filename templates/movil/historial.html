@@ -1,0 +1,11 @@
+{% extends "movil/base_movil.html" %}
+{% block titulo_movil %}Mis órdenes cerradas{% endblock %}
+{% block contenido %}
+<form method="get" class="form-movil" style="margin-bottom:.8rem"><select name="estado" onchange="this.form.submit()">
+<option value="">Todas</option><option value="completada" {% if estado == 'completada' %}selected{% endif %}>Completadas</option>
+<option value="fallida" {% if estado == 'fallida' %}selected{% endif %}>No resueltas</option><option value="reprogramada" {% if estado == 'reprogramada' %}selected{% endif %}>Reprogramadas</option></select></form>
+<div class="card"><ul class="lista-ot">{% for o in ordenes %}
+<li><a href="{% url 'movil:orden' o.id %}" style="color:inherit;flex:1"><b>{{ o.tipo }}</b><br><span class="muted" style="font-size:.85rem">{{ o.fecha_ejecucion|date:"D d/m" }} · {{ o.numero }}{% if o.cliente %} · {{ o.cliente.direccion }}{% endif %}{% if o.minutos_reales %} · {{ o.minutos_reales }} min{% endif %}</span></a>
+<span class="estado {% if o.estado == 'completada' %}ok{% elif o.estado == 'fallida' %}critico{% else %}aviso{% endif %}">{{ o.get_estado_display|truncatechars:12 }}</span></li>
+{% empty %}<li class="muted">Sin órdenes cerradas.</li>{% endfor %}</ul></div>
+{% endblock %}

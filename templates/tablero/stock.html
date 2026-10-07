@@ -9,8 +9,8 @@
   <div class="card kpi"><div class="etq">Compra necesaria ({{ horizonte }} días)</div><div class="valor">{{ compra_total|pesos }}</div><div class="det">según demanda comercial</div></div>
 </div>
 <div class="card"><h2>Stock diario vs. personal en calle</h2><div class="tabla-scroll"><table>
-<thead><tr><th>Material</th><th class="num">Stock</th><th class="num">Por técnico</th><th class="num">Consumo/técnico/día</th><th class="num">Consumo diario</th><th class="num">Días de cobertura</th><th>Estado</th></tr></thead>
-<tbody>{% for f in sd.filas %}<tr><td>{{ f.material.nombre }} <span class="muted">{{ f.material.codigo }}</span></td><td class="num">{{ f.stock|num }} {{ f.material.unidad }}</td>
+<thead><tr><th>Material</th><th class="num">Depósito</th><th class="num">En técnicos</th><th class="num">Stock total</th><th class="num">Por técnico</th><th class="num">Consumo/técnico/día</th><th class="num">Consumo diario</th><th class="num">Días de cobertura</th><th>Estado</th></tr></thead>
+<tbody>{% for f in sd.filas %}<tr><td>{{ f.material.nombre }} <span class="muted">{{ f.material.codigo }}</span></td><td class="num">{{ f.deposito|num }}</td><td class="num">{{ f.en_tecnicos|num }}</td><td class="num">{{ f.stock|num }} {{ f.material.unidad }}</td>
 <td class="num">{{ f.por_tecnico|num:1 }}</td><td class="num">{{ f.consumo_tecnico_dia|num:2 }}</td><td class="num">{{ f.consumo_dia|num:1 }}</td><td class="num">{{ f.dias_cobertura|num:1 }}</td>
 <td><span class="estado {{ f.estado }}">{% if f.estado == 'ok' %}OK{% elif f.estado == 'aviso' %}Bajo{% else %}Crítico{% endif %}</span></td></tr>{% endfor %}</tbody></table></div></div>
 <div class="grid g2">

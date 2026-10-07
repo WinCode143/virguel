@@ -161,3 +161,37 @@ class EncuestaSupervisor(models.Model):
     def promedio(self) -> float | None:
         notas = [n for n in (self.trato, self.claridad, self.apoyo, self.presencia) if n]
         return sum(notas) / len(notas) if notas else None
+
+
+class EncuestaSemanal(models.Model):
+    """Evaluación semanal, más completa, que el técnico hace de su supervisor.
+
+    Una por técnico y semana (la semana se identifica por su lunes). Confidencial:
+    el supervisor sólo ve promedios."""
+
+    semana = models.DateField(db_index=True, help_text="Lunes de la semana evaluada.")
+    tecnico = models.ForeignKey(Persona, on_delete=models.CASCADE, related_name="encuestas_semanales")
+    supervisor = models.ForeignKey(Persona, on_delete=models.CASCADE, related_name="encuestas_semanales_recibidas")
+    respondida = models.DateTimeField(auto_now_add=True)
+    general = models.PositiveSmallIntegerField("Calificación general de la semana", validators=ESCALA_1_5)
+    trato = models.PositiveSmallIntegerField("Trato y respeto", validators=ESCALA_1_5)
+    organizacion = models.PositiveSmallIntegerField("Organización y reparto del trabajo", validators=ESCALA_1_5)
+    apoyo = models.PositiveSmallIntegerField("Apoyo cuando hubo problemas", validators=ESCALA_1_5)
+    ensenanza = models.PositiveSmallIntegerField("Te ayudó a mejorar / te enseñó", validators=ESCALA_1_5)
+    justicia = models.PositiveSmallIntegerField("Fue justo con el equipo", validators=ESCALA_1_5)
+    lo_mejor = models.TextField("Lo mejor de la semana", blank=True)
+    a_mejorar = models.TextField("Qué debería mejorar", blank=True)
+
+    class Meta:
+        ordering = ["-semana"]
+        unique_together = [("semana", "tecnico")]
+        verbose_name = "Evaluación semanal al supervisor"
+        verbose_name_plural = "Evaluaciones semanales a supervisores"
+
+    def __str__(self):
+        return f"Semana {self.semana:%d/%m} {self.tecnico.apellido} → {self.supervisor.apellido}"
+
+    @property
+    def promedio(self) -> float:
+        notas = [self.general, self.trato, self.organizacion, self.apoyo, self.ensenanza, self.justicia]
+        return sum(notas) / len(notas)

@@ -265,21 +265,47 @@ class AccesoTests(TestCase):
         self.assertIsNotNone(e.respondida)
         self.assertEqual(e.promedio, 4)
 
-    def test_tecnico_cierra_orden_y_descuenta_material(self):
+    def test_tecnico_cierra_orden_y_descuenta_de_su_stock(self):
+        from inventario.stock_tecnico import entregar, saldo
         tipo = TipoTarea.objects.create(codigo="I", nombre="Inst", puede_requerir_decodificador=True)
         m = Material.objects.create(codigo="C", nombre="Cable", costo_unitario=Decimal("2"))
         LoteIngreso.objects.create(material=m, cantidad=100)
+        entregar(self.tec_p, m, 50)  # el depósito le entrega 50: salen del depósito
+        self.assertEqual((m.stock_actual, saldo(self.tec_p, m)), (50, 50))
         ot = OrdenTrabajo.objects.create(numero="1", tipo=tipo, tecnico=self.tec_p, estado="asignada")
         self.client.login(username="tec", password="x")
+        self.assertEqual(self.client.get(f"/app/orden/{ot.id}/").status_code, 200)
         r = self.client.post(f"/app/orden/{ot.id}/", {"resultado": "completada", "minutos_reales": 50,
                                                       "decodificador_solicitado": "on", "decodificadores_instalados": 1,
-                                                      "material_1": m.id, "cantidad_1": "30"})
+                                                      "material_1": m.id, "cantidad_1": "30",
+                                                      "series_instaladas": "ABC123", "conforme_nombre": "Ana"})
         self.assertEqual(r.status_code, 302)
         ot.refresh_from_db()
-        self.assertEqual(ot.estado, "completada")
+        self.assertEqual((ot.estado, ot.series_instaladas, ot.conforme_nombre), ("completada", "ABC123", "Ana"))
         self.assertTrue(ot.decodificador_solicitado)
-        self.assertEqual(m.stock_actual, 70)
+        self.assertEqual(saldo(self.tec_p, m), 20)      # se descontó de SU stock
+        self.assertEqual(m.stock_actual, 50)            # el depósito no cambia al cerrar
         self.assertEqual(Salida.objects.get(orden=ot).costo_total, Decimal("60"))
+
+    def test_orden_no_resuelta_exige_motivo(self):
+        tipo = TipoTarea.objects.create(codigo="R", nombre="Rep")
+        ot = OrdenTrabajo.objects.create(numero="2", tipo=tipo, tecnico=self.tec_p, estado="asignada")
+        self.client.login(username="tec", password="x")
+        r = self.client.post(f"/app/orden/{ot.id}/", {"resultado": "fallida"})
+        self.assertEqual(r.status_code, 200)
+        self.client.post(f"/app/orden/{ot.id}/", {"resultado": "fallida", "motivo_no_resuelto": "cliente_ausente"})
+        ot.refresh_from_db()
+        self.assertEqual((ot.estado, ot.motivo_no_resuelto), ("fallida", "cliente_ausente"))
+
+    def test_empezar_trabajo_mide_el_tiempo(self):
+        tipo = TipoTarea.objects.create(codigo="R", nombre="Rep")
+        ot = OrdenTrabajo.objects.create(numero="3", tipo=tipo, tecnico=self.tec_p, estado="asignada")
+        self.client.login(username="tec", password="x")
+        hace = timezone.now() - timedelta(minutes=45)
+        self.client.post(f"/app/orden/{ot.id}/", {"accion": "empezar", "_momento_cliente": hace.isoformat()})
+        self.client.post(f"/app/orden/{ot.id}/", {"resultado": "completada"})
+        ot.refresh_from_db()
+        self.assertIn(ot.minutos_reales, (44, 45, 46))
 
 
 class ImportacionTests(TestCase):
@@ -482,3 +508,98 @@ class ControlPersonalTests(TestCase):
         # no puede autoasignarse una "suspensión" o "injustificada"
         r = self.client.post("/app/ausencia/", {"tipo": "injustificada", "desde": HOY.isoformat(), "hasta": HOY.isoformat()})
         self.assertEqual(r.status_code, 200)
+
+
+
+class PartesTecnicoTests(TestCase):
+    def setUp(self):
+        self.sup = persona("S1", rol="supervisor", usuario=User.objects.create_user("sup", password="x"))
+        self.t = persona("T1", supervisor=self.sup, usuario=User.objects.create_user("tec", password="x"))
+        self.ger = User.objects.create_user("ger", password="x")
+        self.ger.groups.add(Group.objects.create(name="Gerencia"))
+        self.m = Material.objects.create(codigo="ONT", nombre="Módem", costo_unitario=Decimal("100"))
+        LoteIngreso.objects.create(material=self.m, cantidad=20)
+
+    def test_pedido_aprobado_y_entregado_pasa_al_stock_del_tecnico(self):
+        from core.models import Notificacion
+        from inventario.models import PedidoMaterial
+        from inventario.stock_tecnico import saldo
+        self.client.login(username="tec", password="x")
+        self.client.post("/app/stock/pedir/", {"material_1": self.m.id, "cantidad_1": "5", "motivo": "x"})
+        ped = PedidoMaterial.objects.get()
+        self.assertTrue(Notificacion.objects.filter(persona=self.sup).exists())  # se avisó al supervisor
+        self.client.login(username="sup", password="x")
+        self.client.post("/app/pedidos/", {"pedido": ped.id, "accion": "aprobar"})
+        ped.refresh_from_db()
+        self.assertEqual(ped.estado, "aprobado")
+        self.client.login(username="ger", password="x")
+        item = ped.items.get()
+        self.client.post("/tablero/pedidos/", {"pedido": ped.id, "accion": "entregar", f"cant_{item.id}": "4"})
+        ped.refresh_from_db()
+        self.assertEqual(ped.estado, "entregado")
+        self.assertEqual((saldo(self.t, self.m), self.m.stock_actual), (4, 16))
+        self.assertTrue(Notificacion.objects.filter(persona=self.t, titulo__icontains="listo").exists())
+
+    def test_supervisor_no_aprueba_pedidos_de_otro_equipo(self):
+        from inventario.models import PedidoMaterial
+        otro = persona("T2")
+        ped = PedidoMaterial.objects.create(tecnico=otro)
+        self.client.login(username="sup", password="x")
+        self.assertEqual(self.client.post("/app/pedidos/", {"pedido": ped.id, "accion": "aprobar"}).status_code, 404)
+
+    def test_partes_paradas_fifo(self):
+        from inventario.stock_tecnico import consumir, entregar, partes_paradas
+        entregar(self.t, self.m, 5, fecha=HOY - timedelta(days=90))
+        entregar(self.t, self.m, 5, fecha=HOY - timedelta(days=5))
+        consumir(self.t, None, self.m, 3, fecha=HOY - timedelta(days=2))  # consume primero lo más viejo
+        f = partes_paradas([self.t], HOY)[0]
+        self.assertEqual((f["cantidad"], f["dias"]), (2, 90))
+
+    def test_faltante_para_ordenes(self):
+        from inventario.models import RecetaMaterial
+        from inventario.stock_tecnico import entregar, faltante_para_ordenes
+        tipo = TipoTarea.objects.create(codigo="I", nombre="Inst")
+        RecetaMaterial.objects.create(tipo_tarea=tipo, material=self.m, cantidad=1)
+        for i in range(3):
+            OrdenTrabajo.objects.create(numero=f"o{i}", tipo=tipo, tecnico=self.t, estado="asignada")
+        entregar(self.t, self.m, 1)
+        filas, n = faltante_para_ordenes(self.t)
+        self.assertEqual((n, filas[0]["necesito"], filas[0]["falta"]), (3, 3, 2))
+
+    def test_devolucion_vuelve_al_deposito(self):
+        from inventario.stock_tecnico import devolver, entregar, saldo
+        entregar(self.t, self.m, 5)
+        devolver(self.t, self.m, 2)
+        self.assertEqual((saldo(self.t, self.m), self.m.stock_actual), (3, 17))
+
+
+class EncuestaSemanalTests(TestCase):
+    def test_una_evaluacion_por_semana_y_cuenta_para_el_supervisor(self):
+        from supervision.evaluacion import evaluar_supervisores
+        from supervision.models import EncuestaSemanal
+        sup = persona("S1", rol="supervisor")
+        t = persona("T1", supervisor=sup, usuario=User.objects.create_user("tec", password="x"))
+        self.client.login(username="tec", password="x")
+        datos = {k: 4 for k in ("general", "trato", "organizacion", "apoyo", "ensenanza", "justicia")}
+        self.client.post("/app/mi-supervisor/", datos)
+        self.client.post("/app/mi-supervisor/", {**datos, "general": 1})  # segunda vez la misma semana: se ignora
+        self.assertEqual(EncuestaSemanal.objects.filter(tecnico=t).count(), 1)
+        ev = [e for e in evaluar_supervisores(HOY, 30) if e.supervisor == sup][0]
+        self.assertEqual(ev.nota_semanal, 4)
+        self.assertEqual(ev.score_imagen, 75)
+
+
+class NotificacionesTests(TestCase):
+    def test_orden_asignada_y_control_notifican_al_tecnico(self):
+        from core.models import Notificacion
+        sup = persona("S1", rol="supervisor")
+        t = persona("T1", supervisor=sup, usuario=User.objects.create_user("tec", password="x"))
+        tipo = TipoTarea.objects.create(codigo="R", nombre="Rep")
+        OrdenTrabajo.objects.create(numero="1", tipo=tipo, tecnico=t, estado="asignada")
+        InformeControl.objects.create(supervisor=sup, tecnico=t, puntaje=2, desvio_detectado=True)
+        titulos = list(Notificacion.objects.filter(persona=t).values_list("titulo", flat=True))
+        self.assertEqual(len(titulos), 2)
+        self.client.login(username="tec", password="x")
+        self.assertContains(self.client.get("/app/"), 'class="badge"')
+        self.client.get("/app/notificaciones/")
+        self.assertFalse(Notificacion.objects.filter(persona=t, leida=False).exists())

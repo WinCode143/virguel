@@ -111,6 +111,11 @@ class Command(BaseCommand):
         EvaluacionHistorica.objects.all().delete()
         for m in (Asistencia, Novedad, DocumentoPersonal, TipoDocumento, Feriado):
             m.objects.all().delete()
+        from core.models import Notificacion
+        from inventario.models import MovimientoStockTecnico, PedidoMaterial
+        from supervision.models import EncuestaSemanal
+        for m in (MovimientoStockTecnico, PedidoMaterial, EncuestaSemanal, Notificacion):
+            m.objects.all().delete()
         for m in (Egreso, CostoFijo, Alerta, AccionCorrectiva, InformeControl, EncuestaSupervisor, TareaSupervisor,
                   Siniestro, Salida, LoteIngreso, DemandaComercial, RecetaMaterial, Participacion, Capacitacion,
                   EvaluacionCompetencia, Curso, Competencia, Asignacion, Elemento, Jornada, OrdenTrabajo,
@@ -174,7 +179,8 @@ class Command(BaseCommand):
                     direccion=f"Calle {self.r.randint(1, 180)} N° {self.r.randint(100, 4999)}",
                     zona=self.r.choice(self.zonas),
                     tipo=self.r.choices(["residencial", "moderno", "comercial"], [55, 35, 10])[0],
-                    cantidad_televisores=self.r.choices([1, 2, 3], [50, 35, 15])[0]) for i in range(1, 2501)])
+                    cantidad_televisores=self.r.choices([1, 2, 3], [50, 35, 15])[0],
+                    telefono=f"11{self.r.randint(40000000, 69999999)}") for i in range(1, 2501)])
 
     def personas(self):
         r = self.r
@@ -508,6 +514,10 @@ class Command(BaseCommand):
                                                         * (1.25 if t.perfil in ("capacitar", "nuevo") else 1))
                                      if estado == "completada" else None,
                                      decodificador_solicitado=deco,
+                                     motivo_no_resuelto=r.choices(
+                                         ["cliente_ausente", "falta_material", "problema_red", "direccion", "clima", "rechazo"],
+                                         [40, 15 if t.perfil != "riesgo" else 30, 20, 8, 10, 7])[0]
+                                     if estado in ("fallida", "reprogramada") else "",
                                      decodificadores_instalados=(2 if r.random() < .22 else 1) if deco else 0)
                     ordenes.append(o)
                     meta_ordenes.append((o, t, fecha, cod))
@@ -559,7 +569,10 @@ class Command(BaseCommand):
             if o.estado != "completada":
                 continue
             for mc, q in self.recetas[cod]:
-                cant = Decimal(str(round(q * r.uniform(.8, 1.2), 0 if q >= 2 else 1))) or Decimal("1")
+                if self.mat[mc].unidad == "u":  # equipos y piezas: unidades enteras
+                    cant = Decimal(max(1, round(q * r.uniform(.8, 1.2))))
+                else:
+                    cant = Decimal(str(round(q * r.uniform(.8, 1.2)))) or Decimal("1")
                 salidas.append((fecha, self.mat[mc], cant, t, o))
             if o.decodificadores_instalados:
                 salidas.append((fecha, self.mat["DECO-HD"], Decimal(o.decodificadores_instalados), t, o))
@@ -592,8 +605,40 @@ class Command(BaseCommand):
         comprar(self.mat["AMP"], self.hoy - timedelta(days=52), Decimal("25"))
         comprar(self.mat["FO-ROS"], self.hoy - timedelta(days=67), Decimal("400"))
 
-        objetos_salida = []
+        # Flujo real de partes: el depósito entrega cada lunes a cada técnico lo que va a usar en la
+        # semana (+15 %); al cerrar cada orden el consumo se descuenta del stock del técnico.
+        from inventario.models import MovimientoStockTecnico
+        necesidad = defaultdict(Decimal)  # (lunes, tecnico_id, codigo) -> cantidad
+        for f, m, cant, t, o in salidas:
+            necesidad[(f - timedelta(days=f.weekday()), t.id, m.codigo)] += cant
+        tec_por_id = {t.id: t for t in self.tecs}
+        saldo = defaultdict(Decimal)  # (tecnico_id, codigo) -> cantidad
+        objetos_salida, movimientos = [], []
+
+        def sacar_de_lotes(m, cant, fecha):
+            restante, costo = cant, Decimal("0")
+            for l in lotes[m.codigo]:
+                if restante <= 0:
+                    break
+                if l.cantidad_disponible <= 0 or l.fecha > fecha:
+                    continue
+                # el lote parado de roseta/coaxial no se usa (quedó en otro depósito)
+                if l.fecha in (self.hoy - timedelta(days=67), self.hoy - timedelta(days=84)):
+                    continue
+                tomado = min(l.cantidad_disponible, restante)
+                l.cantidad_disponible -= tomado
+                restante -= tomado
+                costo += tomado * l.costo_unitario
+            return costo + max(restante, Decimal("0")) * m.costo_unitario
+
+        def entregar_sim(t, m, cant, fecha):
+            objetos_salida.append(Salida(material=m, fecha=fecha, cantidad=cant, tecnico=t, motivo="entrega",
+                                         costo_total=sacar_de_lotes(m, cant, fecha)))
+            movimientos.append(MovimientoStockTecnico(tecnico=t, material=m, fecha=fecha, tipo="entrega", cantidad=cant))
+            saldo[(t.id, m.codigo)] += cant
+
         idx = 0
+        acopio = self.hoy - timedelta(days=80)
         for d in range((self.hoy - self.inicio).days + 1):
             fecha = self.inicio + timedelta(days=d)
             if fecha.weekday() == 0 and fecha > self.inicio:  # compra los lunes
@@ -605,29 +650,32 @@ class Command(BaseCommand):
                                                  else Decimal("16"))
                     if stock < objetivo:
                         comprar(m, fecha, (objetivo - stock + prom_diario[c] * 6).quantize(Decimal("1")))
+            if fecha.weekday() == 0 or fecha == self.inicio:  # entrega semanal a técnicos
+                lunes_ = fecha - timedelta(days=fecha.weekday())
+                for (lu, tid, cod), q in necesidad.items():
+                    if lu != lunes_:
+                        continue
+                    falta = (q * Decimal("1.15") - saldo[(tid, cod)]).to_integral_value(rounding="ROUND_CEILING")
+                    if falta > 0:
+                        entregar_sim(tec_por_id[tid], self.mat[cod], falta, fecha)
+            if fecha == acopio:  # técnicos que acumulan partes que no usan (para el control de partes paradas)
+                for t in [t for t in self.tecs if t.perfil == "riesgo"]:
+                    entregar_sim(t, self.mat["AMP"], Decimal("2"), fecha)
+                    entregar_sim(t, self.mat["DECO-SD"], Decimal("3"), fecha)
             while idx < len(salidas) and salidas[idx][0] == fecha:
                 f, m, cant, t, o = salidas[idx]
                 idx += 1
-                restante, costo = cant, Decimal("0")
-                for l in lotes[m.codigo]:
-                    if restante <= 0:
-                        break
-                    if l.cantidad_disponible <= 0 or l.fecha > fecha:
-                        continue
-                    # el lote parado de roseta/coaxial no se usa (quedó en otro depósito)
-                    if l.fecha == self.hoy - timedelta(days=67) or l.fecha == self.hoy - timedelta(days=84):
-                        continue
-                    tomado = min(l.cantidad_disponible, restante)
-                    l.cantidad_disponible -= tomado
-                    restante -= tomado
-                    costo += tomado * l.costo_unitario
-                if restante > 0:
-                    costo += restante * m.costo_unitario
                 objetos_salida.append(Salida(material=m, fecha=f, cantidad=cant, tecnico=t, orden=o,
-                                             costo_total=costo, motivo="consumo"))
+                                             costo_total=cant * m.costo_unitario, motivo="consumo",
+                                             observaciones="Del stock del técnico"))
+                movimientos.append(MovimientoStockTecnico(tecnico=t, material=m, fecha=f, tipo="consumo",
+                                                          cantidad=-cant, orden=o))
+                saldo[(t.id, m.codigo)] -= cant
         LoteIngreso.objects.bulk_create(todos_lotes, batch_size=2000)
         Salida.objects.bulk_create(objetos_salida, batch_size=5000)
-        self.stdout.write(f"  {len(todos_lotes)} lotes de stock, {len(objetos_salida)} salidas")
+        MovimientoStockTecnico.objects.bulk_create(movimientos, batch_size=5000)
+        self.stdout.write(f"  {len(todos_lotes)} lotes de stock, {len(objetos_salida)} salidas, "
+                          f"{len(movimientos)} movimientos de stock de técnicos")
 
     def supervision(self):
         r = self.r
@@ -714,6 +762,37 @@ class Command(BaseCommand):
             for inf, t, s, tipo, f in acciones_pend], batch_size=2000)
         EncuestaSupervisor.objects.bulk_create(encuestas, batch_size=5000)
         TareaSupervisor.objects.bulk_create(tareas, batch_size=2000)
+        # Evaluación semanal al supervisor (≈65 % de los técnicos la responde cada semana)
+        from supervision.models import EncuestaSemanal
+        semanales = []
+        lunes_ = self.inicio + timedelta(days=(7 - self.inicio.weekday()) % 7)
+        while lunes_ <= self.hoy:
+            trabajaron = set()
+            for k in range(6):
+                trabajaron |= jornadas.get(lunes_ + timedelta(days=k), set())
+            for s_ in self.sups:
+                base = s_.perfil["trato"]
+                for t in tecs_de[s_.id]:
+                    if t.id not in trabajaron or r.random() > .65 or (lunes_ == self.hoy - timedelta(days=self.hoy.weekday()) and r.random() < .5):
+                        continue
+                    n = lambda ajuste=0: max(1, min(5, round(r.gauss(base + ajuste, .7))))
+                    semanales.append(EncuestaSemanal(
+                        semana=lunes_, tecnico=t, supervisor=s_, general=n(), trato=n(), organizacion=n(.2),
+                        apoyo=n(), ensenanza=n(-.2 if s_.perfil["informes"] < 2 else .1), justicia=n(),
+                        lo_mejor="" if r.random() < .8 else r.choice(["Nos ayudó con una instalación difícil.", "Buena organización de la semana."]),
+                        a_mejorar="" if r.random() < .8 else r.choice(comentarios_mal if base < 3 else ["Más presencia en calle."])))
+            lunes_ += timedelta(days=7)
+        EncuestaSemanal.objects.bulk_create(semanales, batch_size=2000)
+        # Pedidos de partes en curso
+        from inventario.models import PedidoItem, PedidoMaterial
+        for t in r.sample(self.tecs, 6):
+            ped = PedidoMaterial.objects.create(tecnico=t, motivo="Para mis órdenes asignadas",
+                                                estado=r.choice(["pendiente", "pendiente", "aprobado"]))
+            if ped.estado == "aprobado":
+                ped.aprobado_por = t.supervisor
+                ped.save()
+            for c in r.sample(["FO-CON", "FO-ROS", "ONT", "DECO-HD", "GRAMPA"], 2):
+                PedidoItem.objects.create(pedido=ped, material=self.mat[c], cantidad=Decimal(r.choice([2, 5, 10, 20])))
         self.stdout.write(f"  {len(informes)} informes, {len(acciones_pend)} acciones, {len(encuestas)} encuestas")
 
     def siniestros(self):

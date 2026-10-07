@@ -11,6 +11,8 @@
 | git | — | Control de versiones. |
 | gunicorn | 23 | Servidor de aplicación Python en producción. |
 | Caddy | 2 | Proxy web en producción con certificado HTTPS automático (Let's Encrypt). |
+| pywebpush | 2.x | Enviar notificaciones push (Web Push / VAPID) al celular de técnicos y supervisores. |
+| Web Push API + Canvas | estándar web | Notificaciones en el celular y firma del cliente con el dedo al cerrar una orden. |
 | openpyxl | 3.1 | Leer archivos Excel (.xlsx) en la importación masiva. |
 | Chart.js | 4.4.7 (servido localmente en `static/vendor/`) | Gráficos de los tableros. |
 | PWA (Web App Manifest + Service Worker) | estándar web | App de campo instalable en el celular sin pasar por tiendas de apps. |

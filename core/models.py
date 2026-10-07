@@ -23,6 +23,9 @@ class Parametros(models.Model):
     destinatarios_parte = models.TextField(
         "Mails que reciben el parte diario completo", blank=True,
         help_text="Uno por línea. Los supervisores reciben además el parte de su equipo en su propio mail.")
+    encuesta_diaria = models.BooleanField(
+        "Encuesta diaria al supervisor", default=True,
+        help_text="La encuesta corta de cada día. La evaluación semanal está siempre disponible.")
     usar_hectareas = models.BooleanField(
         "Medir hectáreas cubiertas", default=False,
         help_text="Opcional. Si está apagado, la capacidad se calcula sólo por clientes por técnico.")
@@ -167,6 +170,9 @@ class Cliente(models.Model):
     zona = models.ForeignKey(Zona, null=True, blank=True, on_delete=models.SET_NULL, related_name="clientes")
     tipo = models.CharField(max_length=20, choices=Tipo.choices, default=Tipo.RESIDENCIAL)
     cantidad_televisores = models.PositiveSmallIntegerField(default=1)
+    telefono = models.CharField(max_length=30, blank=True)
+    latitud = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitud = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
 
     class Meta:
         ordering = ["numero"]
@@ -186,6 +192,7 @@ class Alerta(models.Model):
     class Modulo(models.TextChoices):
         PERSONAL = "personal", "Personal / asistencia"
         STOCK = "stock", "Inventario / stock"
+        PARTES = "partes", "Partes en manos de técnicos"
         FLOTA = "flota", "Flota"
         EPP = "epp", "Herramientas / EPP"
         TECNICOS = "tecnicos", "Técnicos"
@@ -213,3 +220,35 @@ class Alerta(models.Model):
 
     def __str__(self):
         return f"[{self.get_nivel_display()}] {self.titulo}"
+
+
+class Notificacion(models.Model):
+    """Aviso para una persona: se ve en la app (campanita) y, si autorizó, llega al celular."""
+
+    persona = models.ForeignKey(Persona, on_delete=models.CASCADE, related_name="notificaciones")
+    titulo = models.CharField(max_length=120)
+    texto = models.CharField(max_length=300, blank=True)
+    url = models.CharField(max_length=300, blank=True)
+    creada = models.DateTimeField(auto_now_add=True)
+    leida = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-creada"]
+        verbose_name_plural = "Notificaciones"
+
+    def __str__(self):
+        return f"{self.persona}: {self.titulo}"
+
+
+class SuscripcionPush(models.Model):
+    """Permiso del navegador del celular para recibir notificaciones (Web Push)."""
+
+    persona = models.ForeignKey(Persona, on_delete=models.CASCADE, related_name="suscripciones_push")
+    endpoint = models.URLField(max_length=600, unique=True)
+    p256dh = models.CharField(max_length=200)
+    auth = models.CharField(max_length=100)
+    creada = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Suscripción a notificaciones"
+        verbose_name_plural = "Suscripciones a notificaciones"
