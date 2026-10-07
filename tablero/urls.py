@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import exportar, views
+from . import exportar, importar, views
 
 app_name = "tablero"
 urlpatterns = [
@@ -16,7 +16,10 @@ urlpatterns = [
     path("finanzas/", views.finanzas, name="finanzas"),
     path("stock/", views.stock, name="stock"),
     path("planificacion/", views.planificacion, name="planificacion"),
+    path("encuestas/", views.encuestas, name="encuestas"),
     path("alertas/", views.alertas, name="alertas"),
     path("alertas/<int:pk>/resolver/", views.resolver_alerta, name="resolver_alerta"),
     path("powerbi/", exportar.indice, name="powerbi"),
+    path("importar/", importar.vista, name="importar"),
+    path("importar/plantilla/<slug:tipo>.csv", importar.plantilla, name="plantilla"),
 ]

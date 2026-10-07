@@ -89,3 +89,16 @@ services vencidos, siniestros y demanda comercial con un pico de campaña.
 4. Instalación en servidor con HTTPS (ver `docs/ARQUITECTURA.md`).
 5. Calibrar umbrales del diagnóstico con 2–3 meses de datos reales.
 6. Modo sin señal en la app (guardar formularios y enviarlos al recuperar conexión).
+
+### Agregados (misma sesión, segunda parte)
+- **Encuestas por WhatsApp** (`/tablero/encuestas/`): lista de encuestas del día con botón
+  que abre WhatsApp con el mensaje y el link listos (enlaces `wa.me`, sin proveedor pago).
+  Supervisores ven sólo su equipo; nunca el contenido de las respuestas.
+- **Importación masiva Excel/CSV** (`/tablero/importar/`, `tablero/importar.py`) para la
+  carga inicial: personas (crea usuarios y accesos), vehículos, materiales, stock por lote,
+  clientes, demanda comercial y órdenes. Plantillas descargables. Todo o nada: si una fila
+  falla, no se guarda nada y se lista fila por fila qué corregir. Acepta formato argentino
+  (1.500 / 12,50 / dd/mm/aaaa) y separador `,` o `;`.
+  Los tests detectaron y se corrigió: "1.500" se leía como 1,5.
+- Nueva dependencia: **openpyxl** (lectura de Excel).
+- Tests: 25, todos pasan.

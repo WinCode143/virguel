@@ -9,6 +9,7 @@
 | Docker / Docker Compose | — | Levantar PostgreSQL aislado (`docker compose up -d`). |
 | uv | — | Crear el entorno virtual e instalar dependencias rápido. |
 | git | — | Control de versiones. |
+| openpyxl | 3.1 | Leer archivos Excel (.xlsx) en la importación masiva. |
 | Chart.js | 4.4.7 (servido localmente en `static/vendor/`) | Gráficos de los tableros. |
 | PWA (Web App Manifest + Service Worker) | estándar web | App de campo instalable en el celular sin pasar por tiendas de apps. |
 | Geolocation API / captura de cámara (HTML) | estándar web | Ubicación y foto en los informes de control del supervisor. |

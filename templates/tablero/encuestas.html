@@ -1,0 +1,19 @@
+{% extends "escritorio.html" %}
+{% block titulo %}Encuestas · Virguel{% endblock %}
+{% block encabezado %}<h1>2 · Encuestas del día</h1><p class="sub">Una encuesta por técnico que salió a la calle. Enviá el link por WhatsApp con un clic (se abre WhatsApp con el mensaje listo).</p>{% endblock %}
+{% block contenido %}
+<form class="filtros" method="get"><label>Fecha<input type="date" name="fecha" value="{{ fecha|date:'Y-m-d' }}" onchange="this.form.submit()"></label></form>
+<div class="grid g3">
+  <div class="card kpi"><div class="etq">Encuestas generadas</div><div class="valor">{{ filas|length }}</div></div>
+  <div class="card kpi"><div class="etq">Respondidas</div><div class="valor">{{ respondidas }}</div></div>
+  <div class="card kpi"><div class="etq">Pendientes</div><div class="valor">{{ pendientes }}</div></div>
+</div>
+<div class="card"><div class="tabla-scroll"><table>
+<thead><tr><th>Técnico</th><th>Supervisor evaluado</th><th>Teléfono</th><th>Estado</th><th></th></tr></thead>
+<tbody>{% for f in filas %}<tr><td>{{ f.e.tecnico.apellido }}, {{ f.e.tecnico.nombre }}</td><td>{{ f.e.supervisor.apellido }}</td><td>{{ f.e.tecnico.telefono|default:"—" }}</td>
+<td>{% if f.e.respondida %}<span class="estado ok">Respondida</span>{% else %}<span class="estado aviso">Pendiente</span>{% endif %}</td>
+<td style="white-space:nowrap">{% if not f.e.respondida %}{% if f.wa %}<a class="btn" href="{{ f.wa }}" target="_blank" rel="noopener">Enviar por WhatsApp</a>{% endif %}
+<button class="btn sec" type="button" onclick="navigator.clipboard.writeText('{{ f.url }}');this.textContent='Copiado ✓'">Copiar link</button>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="5" class="muted">No hay encuestas para esta fecha. Se generan al cerrar la jornada y con la tarea diaria.</td></tr>{% endfor %}</tbody></table></div>
+<p class="muted" style="font-size:.82rem;margin-bottom:0">El contenido de las respuestas no se muestra aquí: es confidencial. Para automatizar el envío sin clics se puede integrar WhatsApp Business API o SMS más adelante.</p></div>
+{% endblock %}

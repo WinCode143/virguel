@@ -2,6 +2,7 @@
 
 Ejecutar:  python manage.py test tests
 """
+import io
 from datetime import timedelta
 from decimal import Decimal
 
@@ -263,3 +264,48 @@ class AccesoTests(TestCase):
         self.assertTrue(ot.decodificador_solicitado)
         self.assertEqual(m.stock_actual, 70)
         self.assertEqual(Salida.objects.get(orden=ot).costo_total, Decimal("60"))
+
+
+class ImportacionTests(TestCase):
+    def setUp(self):
+        u = User.objects.create_user("ger", password="x")
+        u.groups.add(Group.objects.create(name="Gerencia"))
+        self.client.login(username="ger", password="x")
+
+    def subir(self, tipo, contenido, nombre="datos.csv"):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        return self.client.post("/tablero/importar/", {"tipo": tipo, "archivo": SimpleUploadedFile(
+            nombre, contenido.encode("utf-8"), content_type="text/csv")})
+
+    def test_importa_personas_con_usuario_y_supervisor(self):
+        r = self.subir("personas", "legajo;nombre;apellido;rol;legajo_supervisor;usuario;dni\n"
+                                   "S9;Ana;Sup;supervisor;;asup;111\n"
+                                   "T9;Beto;Tec;tecnico;S9;btec;222\n")
+        self.assertEqual(r.status_code, 302)
+        t = Persona.objects.get(legajo="T9")
+        self.assertEqual(t.supervisor.legajo, "S9")
+        self.assertTrue(t.usuario.check_password("222"))
+
+    def test_error_en_una_fila_no_guarda_nada(self):
+        r = self.subir("materiales", "codigo,nombre,costo_unitario\nA,Cable,10\nB,Conector,abc\n")
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "no es un número")
+        self.assertFalse(Material.objects.exists())
+
+    def test_importa_stock_con_formato_argentino(self):
+        Material.objects.create(codigo="A", nombre="Cable")
+        self.subir("stock", "codigo_material;fecha_ingreso;cantidad;costo_unitario\nA;01/08/2026;1.500;12,50\n")
+        lote = LoteIngreso.objects.get()
+        self.assertEqual((lote.cantidad, lote.costo_unitario), (Decimal("1500"), Decimal("12.50")))
+
+    def test_importa_excel(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from openpyxl import Workbook
+        wb = Workbook()
+        wb.active.append(["patente", "marca", "modelo", "anio", "km_actual", "vencimiento_vtv"])
+        wb.active.append(["ab 123 cd", "Fiat", "Fiorino", 2022, 45000, timezone.datetime(2026, 12, 1)])
+        buf = io.BytesIO()
+        wb.save(buf)
+        self.client.post("/tablero/importar/", {"tipo": "vehiculos", "archivo": SimpleUploadedFile("v.xlsx", buf.getvalue())})
+        v = Vehiculo.objects.get(patente="AB123CD")
+        self.assertEqual((v.km_actual, v.vencimiento_vtv.month), (45000, 12))

@@ -7,6 +7,7 @@ from django.contrib import messages
 from django.db.models import Avg, Count, Q, Sum
 from django.db.models.functions import TruncMonth, TruncWeek
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -467,6 +468,41 @@ def planificacion(request):
         "zona": zona, "p": p, "dia": dia, "dias": dias,
         "deco_faltante": max(0.0, deco["estimado"] - float(stock_deco)),
         "prev": prevision_materiales(hoy, fin)})
+
+
+# ---------------------------------------------------------------- envío de encuestas
+def link_whatsapp(telefono: str, texto: str) -> str | None:
+    """Enlace wa.me con el mensaje precargado (formato argentino: 54 9 + área + número)."""
+    from urllib.parse import quote
+    digitos = "".join(ch for ch in telefono or "" if ch.isdigit())
+    if not digitos:
+        return None
+    if digitos.startswith("0"):
+        digitos = digitos[1:]
+    if not digitos.startswith("54"):
+        digitos = "549" + digitos
+    return f"https://wa.me/{digitos}?text={quote(texto)}"
+
+
+@requiere_rol(*TODOS)
+def encuestas(request):
+    """Encuestas del día con link para enviar por WhatsApp (sin proveedor pago)."""
+    hoy = timezone.localdate()
+    try:
+        fecha = date.fromisoformat(request.GET.get("fecha", ""))
+    except ValueError:
+        fecha = hoy
+    qs = (EncuestaSupervisor.objects.filter(fecha=fecha, tecnico__in=_equipo(request))
+          .select_related("tecnico", "supervisor").order_by("respondida", "tecnico__apellido"))
+    filas = []
+    for e in qs:
+        url = request.build_absolute_uri(reverse("encuesta", args=[e.token]))
+        texto = (f"Hola {e.tecnico.nombre}, ¿cómo te fue hoy? Contanos cómo te trató tu supervisor "
+                 f"(20 segundos, confidencial): {url}")
+        filas.append({"e": e, "url": url, "wa": link_whatsapp(e.tecnico.telefono, texto)})
+    respondidas = sum(1 for f in filas if f["e"].respondida)
+    return render(request, "tablero/encuestas.html", {"filas": filas, "fecha": fecha, "respondidas": respondidas,
+                                                       "pendientes": len(filas) - respondidas})
 
 
 # ---------------------------------------------------------------- alertas

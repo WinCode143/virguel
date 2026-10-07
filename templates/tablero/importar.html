@@ -1,0 +1,22 @@
+{% extends "escritorio.html" %}
+{% block titulo %}Importar · Virguel{% endblock %}
+{% block encabezado %}<h1>Importar datos desde Excel o CSV</h1><p class="sub">Para la carga inicial. Si alguna fila tiene error no se guarda nada y se indica qué corregir. Las filas que ya existen (mismo legajo, patente, código o número) se actualizan.</p>{% endblock %}
+{% block contenido %}
+{% if resultado %}<div class="card" style="border-color:var(--critico)"><h2>No se importó: {{ resultado.errores|length }} fila{{ resultado.errores|length|pluralize }} con error ({{ resultado.tipo }})</h2>
+<table><thead><tr><th>Fila</th><th>Problema</th></tr></thead><tbody>{% for n, e in resultado.errores|slice:":100" %}<tr><td class="num">{{ n }}</td><td>{{ e }}</td></tr>{% endfor %}</tbody></table>
+{% if resultado.errores|length > 100 %}<p class="muted">… y {{ resultado.errores|length|add:"-100" }} más.</p>{% endif %}</div>{% endif %}
+<div class="grid g2">
+<form class="card form-movil" method="post" enctype="multipart/form-data" style="align-self:start">{% csrf_token %}
+  <h2>Subir archivo</h2>
+  <label for="tipo">Qué datos contiene</label>
+  <select name="tipo" id="tipo" required>{% for k, nombre, cols, ayuda in importadores %}<option value="{{ k }}">{{ nombre }}</option>{% endfor %}</select>
+  <label for="archivo">Archivo (.xlsx o .csv; la primera fila son los nombres de columna)</label>
+  <input type="file" name="archivo" id="archivo" accept=".xlsx,.csv" required>
+  <button class="btn">Importar</button>
+  <p class="muted" style="font-size:.82rem">Orden sugerido: supervisores → técnicos → vehículos → materiales → stock → clientes → órdenes / demanda.</p>
+</form>
+<div class="card"><h2>Plantillas</h2><table><tbody>{% for k, nombre, cols, ayuda in importadores %}
+<tr><td><b>{{ nombre }}</b><div class="muted" style="font-size:.78rem">{{ cols|join:", " }}</div>{% if ayuda %}<div style="font-size:.8rem;color:var(--ink-2)">{{ ayuda }}</div>{% endif %}</td>
+<td style="white-space:nowrap"><a href="{% url 'tablero:plantilla' k %}">Descargar plantilla</a></td></tr>{% endfor %}</tbody></table></div>
+</div>
+{% endblock %}

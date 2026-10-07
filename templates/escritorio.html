@@ -11,6 +11,7 @@
       <a href="{% url 'tablero:operacion' %}" class="{% if u == 'operacion' %}activo{% endif %}">1 · Operación diaria</a>
       <a href="{% url 'tablero:tecnicos' %}" class="{% if u == 'tecnicos' or u == 'tecnico' %}activo{% endif %}">5 · Técnicos y riesgo</a>
       <a href="{% url 'tablero:capacitacion' %}" class="{% if u == 'capacitacion' %}activo{% endif %}">5 · Capacitación</a>
+      <a href="{% url 'tablero:encuestas' %}" class="{% if u == 'encuestas' %}activo{% endif %}">2 · Encuestas del día</a>
       {% if es_gerencia %}<a href="{% url 'tablero:supervisores' %}" class="{% if u == 'supervisores' %}activo{% endif %}">2 · Supervisores</a>{% endif %}
       <a href="{% url 'tablero:incidentes' %}" class="{% if u == 'incidentes' %}activo{% endif %}">3 · Incidentes y daños</a>
       <div class="grupo">Recursos</div>
@@ -22,6 +23,7 @@
       <a href="{% url 'tablero:planificacion' %}" class="{% if u == 'planificacion' %}activo{% endif %}">9 · Planificación y capacidad</a>
       {% if es_gerencia %}
       <a href="{% url 'tablero:powerbi' %}" class="{% if u == 'powerbi' %}activo{% endif %}">Power BI / exportar</a>
+      <a href="{% url 'tablero:importar' %}" class="{% if u == 'importar' %}activo{% endif %}">Importar Excel / CSV</a>
       <a href="{% url 'admin:index' %}">Carga de datos (admin)</a>
       {% endif %}
       {% if es_supervisor %}<a href="{% url 'movil:inicio' %}">App de supervisor</a>{% endif %}
