@@ -1,0 +1,24 @@
+{% extends "movil/base_movil.html" %}
+{% block contenido %}
+<div class="grid g2" style="grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.8rem">
+  <div class="card kpi" style="margin:0"><div class="etq">En calle</div><div class="valor">{{ en_calle }}/{{ equipo }}</div></div>
+  <div class="card kpi" style="margin:0"><div class="etq">Informes hoy</div><div class="valor">{{ informes_hoy }}</div><div class="det">objetivo: 4</div></div>
+</div>
+<div class="acciones">
+  <a class="accion" href="{% url 'movil:informe' %}"><span class="ico">✓</span>Nuevo control<small>con foto y ubicación</small></a>
+  <a class="accion" href="{% url 'movil:accion' %}"><span class="ico">✎</span>Acción correctiva<small>recapacitación, multa…</small></a>
+</div>
+<div class="card"><h2>Órdenes del equipo hoy ({{ total_ots }})</h2>
+<p style="margin:0">Completadas: <b>{{ resumen.completada|default:0 }}</b> · Pendientes: {{ resumen.pendiente|default:0 }} · Asignadas: {{ resumen.asignada|default:0 }} · Fallidas: {{ resumen.fallida|default:0 }}</p></div>
+<div class="card"><h2>Mis objetivos de hoy</h2>
+{% for t in tareas %}<form method="post" action="{% url 'movil:tarea' t.id %}" class="form-movil" style="border-bottom:1px solid var(--grid);padding-bottom:.6rem">{% csrf_token %}
+  <b>{{ t.descripcion }}</b>{% if t.meta %} <span class="muted">(meta {{ t.meta }})</span>{% endif %}
+  {% if t.meta %}<label>Resultado</label><input type="number" name="resultado" value="{{ t.resultado|default:'' }}" min="0">
+  {% else %}<label>Estado</label><select name="estado">{% for k, v in t.Estado.choices %}<option value="{{ k }}" {% if k == t.estado %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>{% endif %}
+  <button class="btn sec">Actualizar</button></form>
+{% empty %}<p class="muted">Gerencia no te asignó objetivos para hoy.</p>{% endfor %}</div>
+<div class="card"><h2>Desvíos sin acción correctiva</h2>
+<ul class="lista-ot">{% for i in desvios_sin_accion %}<li><div>{{ i.tecnico.nombre_completo }}<br><span class="muted" style="font-size:.85rem">{{ i.fecha|date:"d/m" }} · {{ i.descripcion|truncatechars:50 }}</span></div>
+<a class="btn sec" href="{% url 'movil:accion' %}?informe={{ i.id }}&tecnico={{ i.tecnico_id }}">Resolver</a></li>
+{% empty %}<li class="muted">Todos los desvíos tienen acción. ✓</li>{% endfor %}</ul></div>
+{% endblock %}

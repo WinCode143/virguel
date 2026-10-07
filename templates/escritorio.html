@@ -1,0 +1,47 @@
+{% extends "base.html" %}{% load static %}
+{% block cuerpo %}
+{% with u=request.resolver_match.url_name %}
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="marca">Virguel<small>Tablero de control y ERP</small></div>
+    <nav class="nav">
+      <a href="{% url 'tablero:inicio' %}" class="{% if u == 'inicio' %}activo{% endif %}">Resumen</a>
+      <a href="{% url 'tablero:alertas' %}" class="{% if u == 'alertas' %}activo{% endif %}">Alertas {% if alertas_criticas %}<span class="badge">{{ alertas_criticas }}</span>{% endif %}</a>
+      <div class="grupo">Operación</div>
+      <a href="{% url 'tablero:operacion' %}" class="{% if u == 'operacion' %}activo{% endif %}">1 · Operación diaria</a>
+      <a href="{% url 'tablero:tecnicos' %}" class="{% if u == 'tecnicos' or u == 'tecnico' %}activo{% endif %}">5 · Técnicos y riesgo</a>
+      <a href="{% url 'tablero:capacitacion' %}" class="{% if u == 'capacitacion' %}activo{% endif %}">5 · Capacitación</a>
+      {% if es_gerencia %}<a href="{% url 'tablero:supervisores' %}" class="{% if u == 'supervisores' %}activo{% endif %}">2 · Supervisores</a>{% endif %}
+      <a href="{% url 'tablero:incidentes' %}" class="{% if u == 'incidentes' %}activo{% endif %}">3 · Incidentes y daños</a>
+      <div class="grupo">Recursos</div>
+      <a href="{% url 'tablero:herramientas' %}" class="{% if u == 'herramientas' %}activo{% endif %}">4 · Herramientas y EPP</a>
+      <a href="{% url 'tablero:flota' %}" class="{% if u == 'flota' %}activo{% endif %}">6 · Flota</a>
+      <a href="{% url 'tablero:stock' %}" class="{% if u == 'stock' %}activo{% endif %}">8 · Stock y demanda</a>
+      {% if es_gerencia %}<a href="{% url 'tablero:finanzas' %}" class="{% if u == 'finanzas' %}activo{% endif %}">7 · Finanzas</a>{% endif %}
+      <div class="grupo">Gerencial</div>
+      <a href="{% url 'tablero:planificacion' %}" class="{% if u == 'planificacion' %}activo{% endif %}">9 · Planificación y capacidad</a>
+      {% if es_gerencia %}
+      <a href="{% url 'tablero:powerbi' %}" class="{% if u == 'powerbi' %}activo{% endif %}">Power BI / exportar</a>
+      <a href="{% url 'admin:index' %}">Carga de datos (admin)</a>
+      {% endif %}
+      {% if es_supervisor %}<a href="{% url 'movil:inicio' %}">App de supervisor</a>{% endif %}
+    </nav>
+  </aside>
+  <main class="contenido">
+    <div class="topbar">
+      <div>
+        <button class="btn sec menu-toggle" onclick="document.getElementById('sidebar').classList.toggle('abierto')" aria-label="Menú">☰</button>
+        {% block encabezado %}{% endblock %}
+      </div>
+      <div class="usuario">
+        <span>{{ request.user.get_full_name|default:request.user.username }}</span>
+        <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="btn sec">Salir</button></form>
+      </div>
+    </div>
+    {% if messages %}<ul class="mensajes">{% for m in messages %}<li class="{{ m.tags }}">{{ m }}</li>{% endfor %}</ul>{% endif %}
+    {% block contenido %}{% endblock %}
+  </main>
+</div>
+{% endwith %}
+{% endblock %}
+{% block scripts %}<script src="{% static 'vendor/chart.umd.min.js' %}"></script><script src="{% static 'js/graficos.js' %}"></script>{% endblock %}

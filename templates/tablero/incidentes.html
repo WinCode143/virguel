@@ -1,0 +1,27 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Incidentes · Virguel{% endblock %}
+{% block encabezado %}<h1>3 · Incidentes y daños en terreno</h1><p class="sub">Fallas graves con responsabilidad civil: cuántas, cuánto cuestan y cómo accionar.</p>{% endblock %}
+{% block contenido %}
+<div class="grid g4">
+  <div class="card kpi"><div class="etq">Siniestros este mes</div><div class="valor">{{ mes_total }}</div><div class="det">{{ mes_rc }} graves con responsabilidad civil</div></div>
+  <div class="card kpi"><div class="etq">Abiertos</div><div class="valor">{{ abiertos|length }}</div><div class="det">pendientes de resolución</div></div>
+  <div class="card kpi"><div class="etq">Costo 12 meses</div><div class="valor">{{ costo_anual|pesos }}</div><div class="det">real o estimado</div></div>
+  <div class="card kpi"><div class="etq">Recuperado</div><div class="valor">{{ recuperado|pesos }}</div><div class="det">seguro / descuentos</div></div>
+</div>
+<div class="grid g2">
+  {% include "tablero/_grafico.html" with id="g-mes" datos=g_mes titulo="Siniestros por mes y gravedad" %}
+  {% include "tablero/_grafico.html" with id="g-costo" datos=g_costo titulo="Costo mensual de siniestros" %}
+</div>
+<div class="card"><h2>Siniestros abiertos y acción recomendada</h2><div class="tabla-scroll"><table>
+<thead><tr><th>N°</th><th>Fecha</th><th>Tipo</th><th>Gravedad</th><th>Técnico</th><th>Estado</th><th class="num">Costo est.</th><th>Recomendación</th></tr></thead>
+<tbody>{% for s in abiertos %}<tr><td><a href="{% url 'admin:incidentes_siniestro_change' s.id %}">{{ s.numero }}</a></td><td>{{ s.fecha|date:"d/m/Y" }}</td><td>{{ s.get_tipo_display }}</td>
+<td><span class="estado {% if s.gravedad == 'critica' %}critico{% elif s.gravedad == 'grave' %}aviso{% else %}info{% endif %}">{{ s.get_gravedad_display }}</span></td>
+<td>{{ s.tecnico.apellido|default:"—" }}</td><td>{{ s.get_estado_display }}</td><td class="num">{{ s.costo_estimado|pesos }}</td><td style="font-size:.85rem">{{ s.recomendacion_legal }}</td></tr>
+{% empty %}<tr><td colspan="8" class="muted">No hay siniestros abiertos.</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="grid g2">
+  <div class="card"><h2>Por tipo (12 meses)</h2><table><thead><tr><th>Tipo</th><th class="num">Cantidad</th><th class="num">Costo real</th></tr></thead>
+  <tbody>{% for t in tipos %}<tr><td>{{ t.nombre }}</td><td class="num">{{ t.n }}</td><td class="num">{{ t.c|pesos }}</td></tr>{% endfor %}</tbody></table></div>
+  <div class="card"><h2>Técnicos reincidentes (6 meses)</h2><table><thead><tr><th>Técnico</th><th class="num">Siniestros</th></tr></thead>
+  <tbody>{% for r in reincidentes %}<tr><td><a href="{% url 'tablero:tecnico' r.tecnico__id %}">{{ r.tecnico__apellido }}, {{ r.tecnico__nombre }}</a></td><td class="num">{{ r.n }}</td></tr>{% empty %}<tr><td class="muted">Sin reincidentes.</td></tr>{% endfor %}</tbody></table></div>
+</div>
+{% endblock %}

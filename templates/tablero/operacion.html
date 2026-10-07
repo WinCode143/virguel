@@ -1,0 +1,31 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Operación · Virguel{% endblock %}
+{% block encabezado %}<h1>1 · Operación y productividad</h1><p class="sub">{{ desde|date:"d/m/Y" }} – {{ hasta|date:"d/m/Y" }}</p>{% endblock %}
+{% block contenido %}
+<form class="filtros" method="get">
+  <label>Hasta<input type="date" name="hasta" value="{{ hasta|date:'Y-m-d' }}"></label>
+  <label>Días<select name="dias">
+    <option value="7" {% if dias == 7 %}selected{% endif %}>7</option><option value="30" {% if dias == 30 %}selected{% endif %}>30</option>
+    <option value="60" {% if dias == 60 %}selected{% endif %}>60</option><option value="90" {% if dias == 90 %}selected{% endif %}>90</option></select></label>
+  <button class="btn sec">Aplicar</button>
+</form>
+<div class="grid g4">
+  <div class="card kpi"><div class="etq">OT completadas</div><div class="valor">{{ comp|num }}</div><div class="det">de {{ total|num }} ejecutadas · {{ efectividad|num }}% efectividad</div></div>
+  <div class="card kpi"><div class="etq">OT por técnico-día</div><div class="valor">{{ ots_por_jornada|num:2 }}</div><div class="det">{{ jornadas_calle|num }} jornadas en calle</div></div>
+  <div class="card kpi"><div class="etq">Hectáreas por técnico-día</div><div class="valor">{{ ha_prom|num:2 }}</div><div class="det">promedio relevado</div></div>
+  <div class="card kpi"><div class="etq">Retrabajos</div><div class="valor">{{ retrabajos|num }}</div><div class="det">visitas para corregir trabajos previos</div></div>
+</div>
+{% include "tablero/_grafico.html" with id="g-estado" datos=g_estado titulo="Órdenes ejecutadas por día y resultado" %}
+<div class="grid g2">
+  {% include "tablero/_grafico.html" with id="g-calle" datos=g_calle titulo="Personal técnico en calle" %}
+  {% include "tablero/_grafico.html" with id="g-ha" datos=g_ha titulo="Hectáreas cubiertas por día" %}
+</div>
+<div class="grid g2">
+  <div class="card"><h2>Por tipo de tarea</h2><div class="tabla-scroll"><table>
+    <thead><tr><th>Tipo</th><th class="num">Completadas</th><th class="num">Min. reales</th><th class="num">Min. estándar</th></tr></thead>
+    <tbody>{% for t in tipos %}<tr><td>{{ t.tipo__nombre }}</td><td class="num">{{ t.n }}</td><td class="num">{{ t.mins|num }}</td><td class="num">{{ t.est|num }}</td></tr>{% endfor %}</tbody></table></div></div>
+  <div class="card"><h2>Productividad por técnico</h2><div class="tabla-scroll" style="max-height:420px;overflow-y:auto"><table>
+    <thead><tr><th>Técnico</th><th class="num">OT</th><th class="num">Días calle</th><th class="num">OT/día</th></tr></thead>
+    <tbody>{% for f in filas %}<tr><td><a href="{% url 'tablero:tecnico' f.id %}">{{ f.nombre }}</a></td><td class="num">{{ f.ots }}</td><td class="num">{{ f.dias }}</td><td class="num">{{ f.prom|num:2 }}</td></tr>{% endfor %}</tbody></table></div></div>
+</div>
+{% endblock %}

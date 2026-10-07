@@ -1,0 +1,13 @@
+{% extends "movil/base_movil.html" %}{% load formato %}
+{% block titulo_movil %}Mi desempeño{% endblock %}
+{% block contenido %}
+<div class="card"><div class="kpi"><div class="etq">Órdenes por día en calle (90 días)</div><div class="valor">{{ ev.productividad|num:2 }}</div>
+<div class="det">{% if ev.tendencia > 0 %}Subiendo {{ ev.tendencia|num }}% 📈{% elif ev.tendencia < 0 %}Bajando {{ ev.tendencia|num }}%{% else %}Estable{% endif %} · {{ ev.indice_productividad|pct }} del promedio del equipo</div></div></div>
+<div class="card"><table><tbody>
+<tr><td>Productividad</td><td style="width:45%"><div class="barra"><span style="width:{{ ev.score_productividad|ancho }}%"></span></div></td><td class="num">{{ ev.score_productividad|num }}</td></tr>
+<tr><td>Calidad</td><td><div class="barra"><span style="width:{{ ev.score_calidad|ancho }}%"></span></div></td><td class="num">{{ ev.score_calidad|num }}</td></tr>
+<tr><td>Disciplina</td><td><div class="barra"><span style="width:{{ ev.score_disciplina|ancho }}%"></span></div></td><td class="num">{{ ev.score_disciplina|num }}</td></tr>
+<tr><td>Seguridad</td><td><div class="barra"><span style="width:{{ ev.score_seguridad|ancho }}%"></span></div></td><td class="num">{{ ev.score_seguridad|num }}</td></tr>
+</tbody></table></div>
+<div class="card" style="font-size:.9rem"><b>Cómo mejorar:</b> evitar retrabajos (hacer bien la primera vez), usar siempre el EPP, reportar cualquier daño al momento.</div>
+{% endblock %}

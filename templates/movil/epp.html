@@ -1,0 +1,9 @@
+{% extends "movil/base_movil.html" %}
+{% block titulo_movil %}Mi EPP y herramientas{% endblock %}
+{% block contenido %}
+<div class="card"><ul class="lista-ot">{% for a in asignaciones %}
+<li><div><b>{{ a.elemento }}</b><br><span class="muted" style="font-size:.85rem">Entregado {{ a.fecha_entrega|date:"d/m/Y" }}{% if a.fecha_vencimiento %} · vence {{ a.fecha_vencimiento|date:"d/m/Y" }}{% endif %}</span>
+{% if a.vencida %}<br><span class="estado critico">Vencido: pedí reemplazo</span>{% endif %}</div>
+{% if not a.conformidad_firmada %}<form method="post">{% csrf_token %}<input type="hidden" name="asignacion" value="{{ a.id }}"><button class="btn">Recibí</button></form>{% else %}<span class="estado ok">Recibido</span>{% endif %}</li>
+{% empty %}<li class="muted">No tenés elementos asignados.</li>{% endfor %}</ul></div>
+{% endblock %}

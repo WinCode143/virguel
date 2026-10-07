@@ -1,0 +1,26 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Finanzas · Virguel{% endblock %}
+{% block encabezado %}<h1>7 · Finanzas y flujo de fondos</h1><p class="sub">Sólo egresos: la empresa no vende. Los gastos de compras, flota, EPP y siniestros se registran solos desde la operación.</p>{% endblock %}
+{% block contenido %}
+<div class="grid g4">
+  <div class="card kpi"><div class="etq">Egresos del mes</div><div class="valor">{{ mes_actual|pesos }}</div></div>
+  {% for p in proy %}<div class="card kpi"><div class="etq">Proyección {{ p.mes|date:"F Y" }}</div><div class="valor">{{ p.total|pesos }}</div><div class="det">materiales según {{ p.origen_materiales }}</div></div>{% endfor %}
+</div>
+<div class="grid g2">
+  {% include "tablero/_grafico.html" with id="g-hist" datos=g_hist titulo="Egresos reales por mes y categoría" %}
+  {% include "tablero/_grafico.html" with id="g-proy" datos=g_proy titulo="Egresos proyectados (3 meses)" nota="Mes en curso: sólo lo que resta del mes." %}
+</div>
+<div class="card"><h2>Detalle de la proyección</h2><div class="tabla-scroll"><table>
+<thead><tr><th>Mes</th><th class="num">Materiales</th><th class="num">Flota</th><th class="num">EPP / herramientas</th><th class="num">Siniestros</th><th class="num">Costos fijos</th><th class="num">Total</th></tr></thead>
+<tbody>{% for p in proy %}<tr><td>{{ p.mes|date:"F Y" }}</td><td class="num">{{ p.materiales|pesos }}</td><td class="num">{{ p.flota|pesos }}</td><td class="num">{{ p.epp|pesos }}</td><td class="num">{{ p.siniestros|pesos }}</td><td class="num">{{ p.fijos|pesos }}</td><td class="num"><b>{{ p.total|pesos }}</b></td></tr>{% endfor %}</tbody></table></div>
+<ul class="muted" style="font-size:.82rem;margin:.75rem 0 0;padding-left:1.1rem">
+<li>Materiales: demanda comercial × consumo por tipo de tarea × costo; si no hay demanda cargada, promedio de los últimos 3 meses.</li>
+<li>Flota: services que vencen en el mes. EPP: elementos que vencen y hay que reponer. Siniestros: abiertos (mes actual) o promedio histórico.</li></ul></div>
+<div class="grid g2">
+  <div class="card"><h2>Mes en curso por categoría</h2><table><tbody>{% for c in por_cat %}<tr><td>{{ c.categoria__nombre }}</td><td class="num">{{ c.t|pesos }}</td></tr>{% endfor %}</tbody></table></div>
+  <div class="card"><h2>Costos fijos mensuales</h2><table><tbody>{% for f in fijos %}<tr><td>{{ f.descripcion }}</td><td>{{ f.categoria }}</td><td class="num">{{ f.monto_mensual|pesos }}</td></tr>{% empty %}<tr><td class="muted">Sin costos fijos cargados.</td></tr>{% endfor %}</tbody></table>
+  <p><a href="{% url 'admin:finanzas_costofijo_changelist' %}">Editar costos fijos</a> · <a href="{% url 'admin:finanzas_egreso_add' %}">Cargar egreso manual</a></p></div>
+</div>
+<div class="card"><h2>Últimos egresos</h2><div class="tabla-scroll"><table><thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Origen</th><th class="num">Monto</th></tr></thead>
+<tbody>{% for e in ultimos %}<tr><td>{{ e.fecha|date:"d/m/Y" }}</td><td>{{ e.categoria }}</td><td>{{ e.descripcion }}</td><td class="muted">{% if e.automatico %}automático{% else %}manual{% endif %}</td><td class="num">{{ e.monto|pesos }}</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

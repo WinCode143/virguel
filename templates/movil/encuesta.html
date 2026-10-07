@@ -1,0 +1,12 @@
+{% extends "movil/base_movil.html" %}
+{% block titulo_movil %}Encuesta del día{% endblock %}
+{% block contenido %}
+<p class="muted">Sobre <b>{{ e.supervisor.nombre_completo }}</b> · {{ e.fecha|date:"l d/m" }}. Es confidencial: el supervisor sólo ve promedios.</p>
+<form method="post" class="card form-movil">{% csrf_token %}
+  {% for f in form %}{% if f.name == 'comentario' %}{{ f.label_tag }}{{ f }}{% else %}
+    <label>{{ f.label }}</label>
+    <div class="estrellas">{% for r in f %}<input type="radio" name="{{ f.html_name }}" value="{{ r.data.value }}" id="{{ r.id_for_label }}" {% if r.data.selected %}checked{% endif %} required><label for="{{ r.id_for_label }}" title="{{ r.data.value }}">★</label>{% endfor %}</div>
+  {% endif %}{{ f.errors }}{% endfor %}
+  <button class="btn">Enviar</button>
+</form>
+{% endblock %}

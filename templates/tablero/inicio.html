@@ -1,0 +1,40 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Resumen · Virguel{% endblock %}
+{% block encabezado %}<h1>Resumen operativo</h1><p class="sub">Datos del {{ dia|date:"l d/m/Y" }}{% if es_supervisor %} · sólo tu equipo{% endif %}</p>{% endblock %}
+{% block contenido %}
+<div class="grid g4">
+  <div class="card kpi"><div class="etq">Técnicos en calle</div><div class="valor">{{ en_calle }}</div>
+    <div class="det">{{ cap.cuadrillas|num:1 }} cuadrillas · {{ cap.ha_min|num }}–{{ cap.ha_max|num }} ha/día</div></div>
+  <div class="card kpi"><div class="etq">Órdenes completadas</div><div class="valor">{{ completadas_dia }}</div>
+    <div class="det">Capacidad estimada {{ cap.clientes_min|num }}–{{ cap.clientes_max|num }} clientes</div></div>
+  <div class="card kpi"><div class="etq">Stock parado +{{ p.dias_max_stock|default:"60" }} días</div><div class="valor">{{ parado_valor|pesos }}</div>
+    <div class="det">{{ parado_lotes }} lote{{ parado_lotes|pluralize }} · <a href="{% url 'tablero:stock' %}">ver stock</a></div></div>
+  <div class="card kpi"><div class="etq">Prob. de pedido de decodificador</div><div class="valor">{{ prob.media|pct }}</div>
+    <div class="det">Rango 90%: {{ prob.inf90|pct }}–{{ prob.sup90|pct }} · {{ prob.observados }} casos reales</div></div>
+</div>
+<div class="grid g4">
+  <div class="card kpi"><div class="etq">Técnicos en riesgo alto</div><div class="valor">{{ riesgo|length }}</div>
+    <div class="det"><a href="{% url 'tablero:tecnicos' %}?diagnostico=Riesgo alto – evaluar desvinculación">ver detalle</a></div></div>
+  <div class="card kpi"><div class="etq">Necesitan capacitación</div><div class="valor">{{ capacitar|length }}</div>
+    <div class="det"><a href="{% url 'tablero:capacitacion' %}">plan de capacitación</a></div></div>
+  <div class="card kpi"><div class="etq">Siniestros del mes</div><div class="valor">{{ siniestros_mes }}</div>
+    <div class="det">{{ siniestros_graves_mes }} grave{{ siniestros_graves_mes|pluralize:"s" }} o crítico{{ siniestros_graves_mes|pluralize:"s" }}</div></div>
+  <div class="card kpi"><div class="etq">{% if es_gerencia %}Egresos del mes{% else %}Nota de la encuesta (30 días){% endif %}</div>
+    <div class="valor">{% if es_gerencia %}{{ egresos_mes|pesos }}{% else %}{{ nota_sup|num:1 }} / 5{% endif %}</div>
+    <div class="det">{% if es_gerencia %}Nota de supervisores: {{ nota_sup|num:1 }} / 5{% else %}promedio de tu equipo{% endif %}</div></div>
+</div>
+<div class="grid g2">
+  {% include "tablero/_grafico.html" with id="g-prod" datos=g_prod titulo="Órdenes completadas vs. capacidad estimada (30 días)" nota="Capacidad = técnicos en calle × hectáreas × densidad de clientes, con tope de visitas por técnico." %}
+  {% include "tablero/_grafico.html" with id="g-diag" datos=g_diag titulo="Diagnóstico de técnicos" nota="Ventana de evaluación configurable (por defecto 90 días)." %}
+</div>
+<div class="card">
+  <h2>Alertas abiertas {% if alertas_abiertas %}<span class="muted">({{ alertas_abiertas }})</span>{% endif %}</h2>
+  {% for a in alertas %}
+    <div class="alerta-item"><span class="estado {{ a.nivel|nivel_alerta }}">{{ a.get_nivel_display }}</span>
+      <div class="txt"><div>{% if a.url %}<a href="{{ a.url }}">{{ a.titulo }}</a>{% else %}{{ a.titulo }}{% endif %}</div>
+      {% if a.detalle %}<div class="det">{{ a.detalle|truncatechars:160 }}</div>{% endif %}</div>
+      <span class="muted" style="font-size:.8rem">{{ a.get_modulo_display }}</span></div>
+  {% empty %}<p class="muted">Sin alertas abiertas. Las alertas se recalculan con la tarea diaria.</p>{% endfor %}
+  {% if alertas_abiertas > 8 %}<p><a href="{% url 'tablero:alertas' %}">Ver todas →</a></p>{% endif %}
+</div>
+{% endblock %}

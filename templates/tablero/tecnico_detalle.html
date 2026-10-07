@@ -1,0 +1,28 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}{{ t.nombre_completo }} · Virguel{% endblock %}
+{% block encabezado %}<h1>{{ t.apellido }}, {{ t.nombre }}</h1>
+<p class="sub">Legajo {{ t.legajo }} · Ingreso {{ t.fecha_ingreso|date:"d/m/Y" }} · Supervisor: {{ t.supervisor.nombre_completo|default:"—" }} · Zona: {{ t.zona|default:"—" }}</p>{% endblock %}
+{% block contenido %}
+<div class="grid g4">
+  <div class="card kpi"><div class="etq">Diagnóstico</div><div style="margin:.5rem 0"><span class="estado {{ ev.color }}">{{ ev.diagnostico }}</span></div><div class="det">{{ ev.motivos|join:"; "|default:"Sin observaciones" }}</div></div>
+  <div class="card kpi"><div class="etq">Riesgo operativo</div><div class="valor">{{ ev.riesgo|num }}/100</div><div class="det">Nivel {{ ev.nivel_riesgo }}</div></div>
+  <div class="card kpi"><div class="etq">Productividad</div><div class="valor">{{ ev.productividad|num:2 }} OT/día</div><div class="det">{{ ev.indice_productividad|pct }} de la mediana · tendencia {% if ev.tendencia > 0 %}+{% endif %}{{ ev.tendencia|num }}%</div></div>
+  <div class="card kpi"><div class="etq">Calidad</div><div class="valor">{{ ev.score_calidad|num }}/100</div><div class="det">{{ ev.retrabajos_causados }} retrabajos · {{ ev.fallidas }} fallidas · controles {{ ev.puntaje_controles|num:1 }}/5</div></div>
+</div>
+{% include "tablero/_grafico.html" with id="g-tec" datos=g titulo="Órdenes completadas por día en calle (semanal) vs. promedio del equipo" nota="Capacidad a largo plazo: lo que importa es hacia dónde va la curva, no un día aislado." %}
+<div class="grid g2">
+  <div class="card"><h2>Acciones correctivas</h2><table><tbody>{% for a in acciones %}<tr><td>{{ a.fecha|date:"d/m/Y" }}</td><td>{{ a.get_tipo_display }}</td><td>{{ a.descripcion|truncatechars:60 }}</td><td class="num">{% if a.monto %}{{ a.monto|pesos }}{% endif %}</td></tr>{% empty %}<tr><td class="muted">Ninguna.</td></tr>{% endfor %}</tbody></table></div>
+  <div class="card"><h2>Siniestros</h2><table><tbody>{% for s in siniestros %}<tr><td>{{ s.fecha|date:"d/m/Y" }}</td><td>{{ s.get_tipo_display }}</td><td>{{ s.get_gravedad_display }}</td><td class="num">{{ s.costo_real|default:s.costo_estimado|pesos }}</td></tr>{% empty %}<tr><td class="muted">Ninguno.</td></tr>{% endfor %}</tbody></table></div>
+  <div class="card"><h2>Capacitaciones</h2><table><tbody>{% for c in capacitaciones %}<tr><td>{{ c.capacitacion.fecha|date:"d/m/Y" }}</td><td>{{ c.capacitacion.curso }}{% if c.capacitacion.en_produccion %} <span class="muted">(en producción)</span>{% endif %}</td><td>{% if c.aprobado %}Aprobado{% else %}No aprobado{% endif %}</td></tr>{% empty %}<tr><td class="muted">Ninguna.</td></tr>{% endfor %}</tbody></table></div>
+  <div class="card"><h2>Controles recibidos</h2><table><tbody>{% for i in informes %}<tr><td>{{ i.fecha|date:"d/m/Y" }}</td><td>{{ i.get_tipo_display }}</td><td class="num">{{ i.puntaje }}/5</td><td>{% if i.desvio_detectado %}<span class="estado aviso">Desvío</span>{% endif %}</td></tr>{% empty %}<tr><td class="muted">Ninguno.</td></tr>{% endfor %}</tbody></table></div>
+  <div class="card"><h2>EPP y herramientas en uso</h2><table><tbody>{% for a in asignaciones %}<tr><td>{{ a.elemento }}</td><td>{{ a.fecha_entrega|date:"d/m/Y" }}</td><td>{% if a.vencida %}<span class="estado critico">Vencido</span>{% elif a.fecha_vencimiento %}vence {{ a.fecha_vencimiento|date:"d/m/Y" }}{% endif %}</td></tr>{% empty %}<tr><td class="muted">Sin asignaciones.</td></tr>{% endfor %}</tbody></table></div>
+  <div class="card"><h2>Detalle de puntajes</h2><table><tbody>
+    <tr><td>Productividad</td><td style="width:50%"><div class="barra"><span style="width:{{ ev.score_productividad|ancho }}%"></span></div></td><td class="num">{{ ev.score_productividad|num }}</td></tr>
+    <tr><td>Calidad</td><td><div class="barra"><span style="width:{{ ev.score_calidad|ancho }}%"></span></div></td><td class="num">{{ ev.score_calidad|num }}</td></tr>
+    <tr><td>Disciplina</td><td><div class="barra"><span style="width:{{ ev.score_disciplina|ancho }}%"></span></div></td><td class="num">{{ ev.score_disciplina|num }}</td></tr>
+    <tr><td>Seguridad</td><td><div class="barra"><span style="width:{{ ev.score_seguridad|ancho }}%"></span></div></td><td class="num">{{ ev.score_seguridad|num }}</td></tr>
+    <tr><td colspan="3" class="muted" style="font-size:.8rem">EPP obligatorio faltante o vencido: {{ ev.epp_faltantes }} · Puntos de disciplina: {{ ev.puntos_disciplina|num:1 }} · Puntos de siniestros: {{ ev.puntos_siniestros|num:1 }}</td></tr>
+  </tbody></table></div>
+</div>
+<p><a class="btn sec" href="{% url 'admin:core_persona_change' t.id %}">Editar ficha</a></p>
+{% endblock %}

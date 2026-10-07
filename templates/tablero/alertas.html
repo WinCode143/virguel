@@ -1,0 +1,15 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Alertas · Virguel{% endblock %}
+{% block encabezado %}<h1>Alertas</h1><p class="sub">Generadas automáticamente cada día. Se cierran solas cuando la condición desaparece.</p>{% endblock %}
+{% block contenido %}
+<form class="filtros" method="get">
+  <label>Módulo<select name="modulo" onchange="this.form.submit()"><option value="">Todos</option>{% for k, v in modulos %}<option value="{{ k }}" {% if k == modulo %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label>
+  <label>Ver<select name="resueltas" onchange="this.form.submit()"><option value="">Abiertas</option><option value="1" {% if request.GET.resueltas == '1' %}selected{% endif %}>Resueltas</option></select></label>
+</form>
+<div class="card">{% for a in alertas %}
+  <div class="alerta-item"><span class="estado {{ a.nivel|nivel_alerta }}">{{ a.get_nivel_display }}</span>
+  <div class="txt"><div>{% if a.url %}<a href="{{ a.url }}">{{ a.titulo }}</a>{% else %}{{ a.titulo }}{% endif %}</div>
+  <div class="det">{{ a.get_modulo_display }} · desde {{ a.creada|date:"d/m/Y" }}{% if a.detalle %} · {{ a.detalle }}{% endif %}</div></div>
+  {% if es_gerencia and not a.resuelta %}<form method="post" action="{% url 'tablero:resolver_alerta' a.id %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="btn sec">Resolver</button></form>{% endif %}</div>
+{% empty %}<p class="muted">No hay alertas.</p>{% endfor %}</div>
+{% endblock %}

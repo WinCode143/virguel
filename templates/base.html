@@ -1,0 +1,14 @@
+{% load static %}<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}Virguel ERP{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <link rel="icon" href="{% static 'img/icono.svg' %}">
+  {% block head %}{% endblock %}
+</head>
+<body>{% block cuerpo %}{% endblock %}
+{% block scripts %}{% endblock %}
+</body>
+</html>

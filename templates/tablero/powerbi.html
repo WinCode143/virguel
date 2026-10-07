@@ -1,0 +1,17 @@
+{% extends "escritorio.html" %}
+{% block titulo %}Power BI · Virguel{% endblock %}
+{% block encabezado %}<h1>Power BI y exportaciones</h1><p class="sub">Dos formas de llevar los datos a Power BI.</p>{% endblock %}
+{% block contenido %}
+<div class="grid g2">
+<div class="card"><h2>Opción A — Conexión directa a PostgreSQL (recomendada)</h2>
+<ol style="padding-left:1.1rem;color:var(--ink-2);font-size:.92rem">
+<li>Power BI Desktop → Obtener datos → <b>Base de datos PostgreSQL</b>.</li>
+<li>Servidor: <code>&lt;host&gt;:5434</code>, base: <code>virguel</code>.</li>
+<li>Usuario de sólo lectura: <code>powerbi_lector</code> (se crea con <code>manage.py crear_lector_powerbi</code>).</li>
+<li>Elegir las vistas del esquema <b>powerbi</b> (ordenes, jornadas, stock_lotes, siniestros, egresos…). Ya traen nombres legibles.</li>
+</ol></div>
+<div class="card"><h2>Opción B — CSV por web</h2>
+<p style="font-size:.92rem;color:var(--ink-2)">Power BI → Obtener datos → <b>Web</b>, con la URL del dataset y <code>?token=…</code>{% if not hay_token %} <span class="estado aviso">Falta definir POWERBI_TOKEN en .env</span>{% endif %}. También sirve para abrir en Excel.</p>
+<table><tbody>{% for k, nombre in datasets %}<tr><td>{{ nombre }}</td><td><a href="{% url 'exportar_csv' k %}">Descargar CSV</a></td><td class="muted" style="font-size:.78rem">{{ base }}{{ k }}.csv</td></tr>{% endfor %}</tbody></table></div>
+</div>
+{% endblock %}

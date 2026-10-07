@@ -1,0 +1,11 @@
+{% load static %}{
+  "name": "Virguel — App de campo",
+  "short_name": "Virguel",
+  "start_url": "/app/",
+  "scope": "/app/",
+  "display": "standalone",
+  "background_color": "#f9f9f7",
+  "theme_color": "#2a78d6",
+  "lang": "es-AR",
+  "icons": [{"src": "{% static 'img/icono.svg' %}", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}]
+}

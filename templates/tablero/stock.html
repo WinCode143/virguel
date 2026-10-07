@@ -1,0 +1,30 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Stock · Virguel{% endblock %}
+{% block encabezado %}<h1>8 · Inventario, demanda y abastecimiento</h1><p class="sub">Stock diario cruzado con el personal en calle ({{ sd.tecnicos_en_calle }} técnicos) y antigüedad por lote (máximo {{ p.dias_max_stock }} días).</p>{% endblock %}
+{% block contenido %}
+<div class="grid g4">
+  <div class="card kpi"><div class="etq">Valor en stock</div><div class="valor">{{ valor_total|pesos }}</div></div>
+  <div class="card kpi"><div class="etq">Parado +{{ p.dias_max_stock }} días</div><div class="valor">{{ valor_parado|pesos }}</div></div>
+  <div class="card kpi"><div class="etq">Materiales con cobertura baja</div><div class="valor">{{ faltantes|length }}</div><div class="det">menos de {{ p.dias_cobertura_stock_min }} días o bajo mínimo</div></div>
+  <div class="card kpi"><div class="etq">Compra necesaria ({{ horizonte }} días)</div><div class="valor">{{ compra_total|pesos }}</div><div class="det">según demanda comercial</div></div>
+</div>
+<div class="card"><h2>Stock diario vs. personal en calle</h2><div class="tabla-scroll"><table>
+<thead><tr><th>Material</th><th class="num">Stock</th><th class="num">Por técnico</th><th class="num">Consumo/técnico/día</th><th class="num">Consumo diario</th><th class="num">Días de cobertura</th><th>Estado</th></tr></thead>
+<tbody>{% for f in sd.filas %}<tr><td>{{ f.material.nombre }} <span class="muted">{{ f.material.codigo }}</span></td><td class="num">{{ f.stock|num }} {{ f.material.unidad }}</td>
+<td class="num">{{ f.por_tecnico|num:1 }}</td><td class="num">{{ f.consumo_tecnico_dia|num:2 }}</td><td class="num">{{ f.consumo_dia|num:1 }}</td><td class="num">{{ f.dias_cobertura|num:1 }}</td>
+<td><span class="estado {{ f.estado }}">{% if f.estado == 'ok' %}OK{% elif f.estado == 'aviso' %}Bajo{% else %}Crítico{% endif %}</span></td></tr>{% endfor %}</tbody></table></div></div>
+<div class="grid g2">
+  {% include "tablero/_grafico.html" with id="g-aging" datos=g_aging titulo="Antigüedad del stock (valor por tramo)" %}
+  <div class="card"><h2>Lotes por vencer o vencidos</h2><div class="tabla-scroll" style="max-height:330px;overflow-y:auto"><table>
+  <thead><tr><th>Material</th><th>Ingreso</th><th class="num">Disponible</th><th class="num">Días</th><th class="num">Valor</th></tr></thead>
+  <tbody>{% for f in criticos %}<tr><td>{{ f.material.nombre }}</td><td>{{ f.lote.fecha|date:"d/m/Y" }}</td><td class="num">{{ f.lote.cantidad_disponible|num }}</td>
+  <td class="num"><span class="estado {{ f.estado }}">{{ f.dias }}</span></td><td class="num">{{ f.valor|pesos }}</td></tr>{% empty %}<tr><td class="muted">Ningún lote supera los {{ p.dias_aviso_stock }} días.</td></tr>{% endfor %}</tbody></table></div></div>
+</div>
+<div class="card"><h2>Previsión de materiales según demanda comercial</h2>
+<form class="filtros" method="get"><label>Horizonte (días)<input type="number" name="horizonte" min="1" max="60" value="{{ horizonte }}"></label><button class="btn sec">Recalcular</button></form>
+<div class="tabla-scroll"><table><thead><tr><th>Material</th><th class="num">Necesario</th><th class="num">Stock</th><th class="num">Faltante</th><th class="num">Costo de compra</th></tr></thead>
+<tbody>{% for f in prev %}<tr><td>{{ f.material.nombre }}</td><td class="num">{{ f.necesario|num }}</td><td class="num">{{ f.stock|num }}</td>
+<td class="num">{% if f.faltante %}<span class="estado critico">{{ f.faltante|num }}</span>{% else %}—{% endif %}</td><td class="num">{{ f.costo_compra|pesos }}</td></tr>
+{% empty %}<tr><td class="muted">No hay demanda comercial cargada para el período.</td></tr>{% endfor %}</tbody></table></div>
+<p><a href="{% url 'admin:inventario_demandacomercial_add' %}">Cargar demanda comercial</a> · <a href="{% url 'admin:inventario_loteingreso_add' %}">Registrar ingreso</a> · <a href="{% url 'admin:inventario_recetamaterial_changelist' %}">Materiales por tipo de tarea</a></p></div>
+{% endblock %}

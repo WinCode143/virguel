@@ -1,0 +1,26 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Herramientas y EPP · Virguel{% endblock %}
+{% block encabezado %}<h1>4 · Herramientas, EPP y materiales críticos</h1><p class="sub">Que nadie salga a la calle sin sus elementos de seguridad vigentes.</p>{% endblock %}
+{% block contenido %}
+<div class="grid g3">
+  <div class="card kpi"><div class="etq">Técnicos con EPP completo</div><div class="valor">{{ completos }} / {{ total }}</div><div class="det">{{ obligatorios|length }} elementos obligatorios</div></div>
+  <div class="card kpi"><div class="etq">Vencidos o por vencer (30 días)</div><div class="valor">{{ proximos|length }}</div></div>
+  <div class="card kpi"><div class="etq">Pérdidas/daños (6 meses)</div><div class="valor">{{ perdidas|length }}</div><div class="det">personas con elementos perdidos o dañados</div></div>
+</div>
+<div class="grid g2">
+<div class="card"><h2>Cumplimiento por técnico</h2><div class="tabla-scroll" style="max-height:460px;overflow-y:auto"><table>
+<thead><tr><th>Técnico</th><th>Estado</th><th>Falta / vencido</th></tr></thead>
+<tbody>{% for f in filas %}<tr><td>{{ f.t.apellido }}, {{ f.t.nombre }}</td>
+<td>{% if f.falta %}<span class="estado critico">Incompleto</span>{% else %}<span class="estado ok">Completo</span>{% endif %}</td>
+<td style="font-size:.85rem">{{ f.falta|join:", " }}</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="card"><h2>Vencimientos</h2><div class="tabla-scroll" style="max-height:460px;overflow-y:auto"><table>
+<thead><tr><th>Persona</th><th>Elemento</th><th>Vence</th></tr></thead>
+<tbody>{% for a in proximos %}<tr><td>{{ a.persona.apellido }}</td><td>{{ a.elemento }}</td>
+<td>{% if a.fecha_vencimiento < hoy %}<span class="estado critico">{{ a.fecha_vencimiento|date:"d/m/Y" }}</span>{% else %}<span class="estado aviso">{{ a.fecha_vencimiento|date:"d/m/Y" }}</span>{% endif %}</td></tr>
+{% empty %}<tr><td class="muted">Nada por vencer.</td></tr>{% endfor %}</tbody></table></div></div>
+</div>
+<div class="card"><h2>Pañol</h2><table><thead><tr><th>Elemento</th><th>Tipo</th><th class="num">Vida útil</th><th>Obligatorio</th><th class="num">Costo</th><th class="num">Stock</th></tr></thead>
+<tbody>{% for e in elementos %}<tr><td>{{ e.nombre }}</td><td>{{ e.get_tipo_display }}</td><td class="num">{{ e.vida_util_dias|default:"—" }} días</td><td>{% if e.obligatorio_tecnicos %}Sí{% endif %}</td><td class="num">{{ e.costo|pesos }}</td>
+<td class="num">{% if e.obligatorio_tecnicos and e.stock < 3 %}<span class="estado aviso">{{ e.stock }}</span>{% else %}{{ e.stock }}{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+<p><a class="btn sec" href="{% url 'admin:herramientas_asignacion_add' %}">Registrar entrega</a></p>
+{% endblock %}

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block titulo %}Ingresar · Virguel{% endblock %}
+{% block head %}<meta name="theme-color" content="#2a78d6">{% endblock %}
+{% block cuerpo %}
+<div class="login-wrap"><div class="login">
+  <h1 style="margin-bottom:1rem">Virguel</h1>
+  <div class="card">
+    <form method="post">{% csrf_token %}
+      {% if form.errors %}<p class="errorlist">Usuario o contraseña incorrectos.</p>{% endif %}
+      <label for="id_username">Usuario</label>
+      <input id="id_username" name="username" autocomplete="username" autofocus required>
+      <label for="id_password">Contraseña</label>
+      <input id="id_password" name="password" type="password" autocomplete="current-password" required>
+      <input type="hidden" name="next" value="{{ next }}">
+      <button class="btn">Ingresar</button>
+    </form>
+  </div>
+  <p class="muted" style="font-size:.85rem;margin-top:1rem">Técnicos y supervisores entran a la app del celular; gerencia y administración, al tablero.</p>
+</div></div>
+{% endblock %}

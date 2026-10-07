@@ -1,0 +1,9 @@
+{% load formato %}<div class="card">
+  <h2>{{ titulo }}</h2>{% if nota %}<p class="muted" style="margin:-.5rem 0 .75rem;font-size:.82rem">{{ nota }}</p>{% endif %}
+  <div class="chart-box{% if alto %} alto{% endif %}"><canvas data-grafico="{{ id }}" role="img" aria-label="{{ titulo }}"></canvas></div>
+  {{ datos|json_script:id }}
+  <details class="tabla-datos"><summary>Ver datos en tabla</summary>
+    <div class="tabla-scroll"><table><thead><tr><th></th>{% for s in datos.series %}<th class="num">{{ s.nombre }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for e in datos.etiquetas %}<tr><td>{{ e }}</td>{% for s in datos.series %}<td class="num">{{ s.datos|idx:forloop.parentloop.counter0|num:1 }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+  </details>
+</div>

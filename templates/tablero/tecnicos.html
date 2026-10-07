@@ -1,0 +1,32 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Técnicos · Virguel{% endblock %}
+{% block encabezado %}<h1>5 · Técnicos: capacidad, riesgo y capacitación</h1>
+<p class="sub">Evaluación de los últimos {{ ventana }} días. No mide sólo si produce hoy: separa productividad, calidad, disciplina y seguridad, y mira la tendencia.</p>{% endblock %}
+{% block contenido %}
+<form class="filtros" method="get"><label>Diagnóstico<select name="diagnostico" onchange="this.form.submit()">
+  <option value="">Todos</option>{% for d in diagnosticos %}<option {% if d == filtro %}selected{% endif %}>{{ d }}</option>{% endfor %}</select></label></form>
+<div class="card"><div class="tabla-scroll"><table>
+<thead><tr><th>Técnico</th><th>Diagnóstico</th><th class="num">Riesgo</th><th class="num">OT/día</th><th class="num">vs. equipo</th><th class="num">Tendencia</th>
+<th>Productividad</th><th>Calidad</th><th>Disciplina</th><th>Seguridad</th><th>Motivos</th></tr></thead>
+<tbody>{% for e in evs %}<tr>
+  <td style="white-space:nowrap"><a href="{% url 'tablero:tecnico' e.tecnico.id %}">{{ e.tecnico.apellido }}, {{ e.tecnico.nombre }}</a><div class="muted" style="font-size:.78rem">{{ e.tecnico.legajo }} · {{ e.dias_calle }} días en calle</div></td>
+  <td><span class="estado {{ e.color }}">{{ e.diagnostico }}</span></td>
+  <td class="num">{{ e.riesgo|num }} <span class="muted">({{ e.nivel_riesgo }})</span></td>
+  <td class="num">{{ e.productividad|num:2 }}</td>
+  <td class="num">{{ e.indice_productividad|pct }}</td>
+  <td class="num">{% if e.tendencia > 0 %}+{% endif %}{{ e.tendencia|num }}%</td>
+  <td title="{{ e.score_productividad|num }}/100"><div class="barra"><span style="width:{{ e.score_productividad|ancho }}%"></span></div></td>
+  <td title="{{ e.score_calidad|num }}/100"><div class="barra"><span style="width:{{ e.score_calidad|ancho }}%"></span></div></td>
+  <td title="{{ e.score_disciplina|num }}/100"><div class="barra"><span style="width:{{ e.score_disciplina|ancho }}%"></span></div></td>
+  <td title="{{ e.score_seguridad|num }}/100"><div class="barra"><span style="width:{{ e.score_seguridad|ancho }}%"></span></div></td>
+  <td style="font-size:.8rem;min-width:280px">{{ e.motivos|join:"; " }}</td>
+</tr>{% empty %}<tr><td colspan="11" class="muted">Sin técnicos para mostrar.</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="card"><h2>Cómo se interpreta</h2>
+<ul style="margin:0;padding-left:1.1rem;color:var(--ink-2);font-size:.9rem">
+  <li><b>Necesita capacitación en producción:</b> rinde por debajo del 79% de la mediana del equipo, pero su calidad, disciplina y seguridad están bien. El problema es de oficio, no de actitud.</li>
+  <li><b>Riesgo alto – evaluar desvinculación:</b> falla en dos o más dimensiones además de la productividad (calidad, disciplina, seguridad), o ya fue capacitado en producción y no mejoró.</li>
+  <li><b>En observación:</b> falla en una dimensión; conviene seguimiento del supervisor.</li>
+  <li><b>En curva de aprendizaje:</b> ingresó hace menos de 60 días; la baja productividad es esperable.</li>
+  <li><b>Riesgo (0–100):</b> 100 − (20% productividad + 30% calidad + 25% disciplina + 25% seguridad). Alto ≥ 50, medio ≥ 30.</li>
+</ul></div>
+{% endblock %}

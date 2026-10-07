@@ -1,0 +1,34 @@
+{% extends "base.html" %}{% load static %}
+{% block head %}
+<meta name="theme-color" content="#2a78d6">
+<link rel="manifest" href="{% url 'movil:manifest' %}">
+<link rel="apple-touch-icon" href="{% static 'img/icono.svg' %}">
+{% endblock %}
+{% block cuerpo %}
+<div class="movil">
+  <header>
+    <div><div class="hola">{% block titulo_movil %}Hola, {{ request.user.persona.nombre|default:request.user.username }}{% endblock %}</div>
+    <div class="rol">{% if es_supervisor %}Supervisor{% else %}Técnico{% endif %} · {% now "l d/m" %}</div></div>
+    <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="btn sec" style="padding:.4rem .7rem">Salir</button></form>
+  </header>
+  {% if messages %}<ul class="mensajes">{% for m in messages %}<li class="{{ m.tags }}">{{ m }}</li>{% endfor %}</ul>{% endif %}
+  {% block contenido %}{% endblock %}
+</div>
+{% if request.user.is_authenticated %}
+<nav class="tabbar">
+  <a href="{% url 'movil:inicio' %}" class="{% if tab == 'inicio' %}activo{% endif %}"><span class="ico">⌂</span>Inicio</a>
+  {% if es_supervisor %}
+  <a href="{% url 'movil:informe' %}" class="{% if tab == 'control' %}activo{% endif %}"><span class="ico">✓</span>Control</a>
+  <a href="{% url 'movil:indicadores' %}" class="{% if tab == 'yo' %}activo{% endif %}"><span class="ico">★</span>Mis indicadores</a>
+  <a href="{% url 'tablero:inicio' %}"><span class="ico">▦</span>Tablero</a>
+  {% else %}
+  <a href="{% url 'movil:epp' %}" class="{% if tab == 'epp' %}activo{% endif %}"><span class="ico">⛑</span>Mi EPP</a>
+  <a href="{% url 'movil:desempeno' %}" class="{% if tab == 'yo' %}activo{% endif %}"><span class="ico">★</span>Mi desempeño</a>
+  {% endif %}
+  <a href="{% url 'movil:incidente' %}"><span class="ico">⚠</span>Incidente</a>
+</nav>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script>
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("{% url 'movil:sw' %}", {scope: "/app/"}).catch(() => {});
+</script>{% endblock %}

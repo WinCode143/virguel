@@ -1,0 +1,19 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Flota · Virguel{% endblock %}
+{% block encabezado %}<h1>6 · Flota y services</h1><p class="sub">Próximo service estimado por kilómetros recorridos y por fecha, lo que ocurra primero.</p>{% endblock %}
+{% block contenido %}
+<div class="grid g4">
+  <div class="card kpi"><div class="etq">Operativos</div><div class="valor">{{ operativos }} / {{ total }}</div><div class="det">{{ usados }} en uso el {{ dia|date:"d/m" }}</div></div>
+  <div class="card kpi"><div class="etq">En taller</div><div class="valor">{{ taller }}</div></div>
+  <div class="card kpi"><div class="etq">Fuera de servicio</div><div class="valor">{{ fuera }}</div></div>
+  <div class="card kpi"><div class="etq">Con service vencido</div><div class="valor">{{ vencidos }}</div></div>
+</div>
+<div class="card"><div class="tabla-scroll"><table>
+<thead><tr><th>Vehículo</th><th>Estado</th><th class="num">Km</th><th>Asignado a</th><th>Próximo service</th><th>VTV</th><th>Seguro</th></tr></thead>
+<tbody>{% for f in filas %}<tr><td><a href="{% url 'admin:flota_vehiculo_change' f.v.id %}">{{ f.v.patente }}</a> <span class="muted">{{ f.v.marca }} {{ f.v.modelo }} {{ f.v.anio }}</span></td>
+<td>{{ f.v.get_estado_display }}</td><td class="num">{{ f.v.km_actual|num }}</td><td>{{ f.v.asignado_a.apellido|default:"—" }}</td>
+<td>{% if f.peor %}<span class="estado {{ f.peor.estado }}">{{ f.peor.tipo.nombre }}: {% if f.peor.dias <= 0 %}vencido{% else %}en {{ f.peor.dias }} días{% endif %}</span>{% if f.peor.km_restantes is not None %} <span class="muted">({{ f.peor.km_restantes|num }} km)</span>{% endif %}{% else %}—{% endif %}</td>
+<td>{{ f.v.vencimiento_vtv|date:"d/m/Y"|default:"—" }}</td><td>{{ f.v.vencimiento_seguro|date:"d/m/Y"|default:"—" }}</td></tr>{% endfor %}</tbody></table></div></div>
+{% include "tablero/_grafico.html" with id="g-flota" datos=g titulo="Costo de services por vehículo (12 meses)" %}
+<p><a class="btn sec" href="{% url 'admin:flota_servicerealizado_add' %}">Registrar service</a></p>
+{% endblock %}

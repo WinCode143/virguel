@@ -1,0 +1,31 @@
+{% extends "movil/base_movil.html" %}
+{% block contenido %}
+{% if encuesta %}<a class="card" style="display:block;border-color:var(--accent)" href="{% url 'encuesta' encuesta.token %}"><b>Encuesta del día pendiente</b><br><span class="muted">¿Cómo te trató tu supervisor? Lleva 20 segundos y es confidencial.</span></a>{% endif %}
+{% if epp_vencido %}<div class="card"><span class="estado critico">Tenés {{ epp_vencido }} elemento{{ epp_vencido|pluralize }} de seguridad vencido{{ epp_vencido|pluralize }}</span> · <a href="{% url 'movil:epp' %}">ver</a></div>{% endif %}
+
+<div class="card">
+  {% if not jornada %}
+    <h2>Iniciar jornada</h2>
+    <form method="post" action="{% url 'movil:jornada' 'iniciar' %}" class="form-movil">{% csrf_token %}
+      {{ inicio_form.vehiculo.label_tag }}{{ inicio_form.vehiculo }}
+      {{ inicio_form.km_inicio.label_tag }}{{ inicio_form.km_inicio }}
+      <button class="btn">Salgo a la calle</button></form>
+  {% elif jornada.km_fin is None and jornada.hectareas_cubiertas == 0 %}
+    <h2>Jornada en curso</h2><p class="muted" style="margin:.2rem 0 0">{{ hechas }} orden{{ hechas|pluralize:"es" }} completada{{ hechas|pluralize }} hoy{% if jornada.vehiculo %} · {{ jornada.vehiculo.patente }}{% endif %}</p>
+    <details style="margin-top:.5rem"><summary class="muted">Finalizar jornada</summary>
+    <form method="post" action="{% url 'movil:jornada' 'finalizar' %}" class="form-movil">{% csrf_token %}
+      {% if jornada.vehiculo %}{{ fin_form.km_fin.label_tag }}{{ fin_form.km_fin }}{% endif %}
+      {{ fin_form.hectareas_cubiertas.label_tag }}{{ fin_form.hectareas_cubiertas }}
+      <button class="btn sec">Terminar el día</button></form></details>
+  {% else %}
+    <h2>Jornada finalizada</h2><p class="muted" style="margin:0">{{ hechas }} órdenes completadas · {{ jornada.hectareas_cubiertas }} ha.</p>
+  {% endif %}
+</div>
+
+<div class="card"><h2>Mis órdenes pendientes ({{ ots|length }})</h2>
+<ul class="lista-ot">{% for ot in ots %}
+  <li><div><b>{{ ot.tipo }}</b><br><span class="muted" style="font-size:.85rem">{{ ot.numero }}{% if ot.cliente %} · {{ ot.cliente.direccion|default:ot.cliente.nombre }}{% endif %}{% if ot.fecha_programada < jornada.fecha %} · atrasada{% endif %}</span></div>
+  <a class="btn" href="{% url 'movil:orden' ot.id %}">Cerrar</a></li>
+{% empty %}<li class="muted">No tenés órdenes pendientes.</li>{% endfor %}</ul></div>
+{% if epp_sin_firmar %}<div class="card"><a href="{% url 'movil:epp' %}">Confirmá la recepción de {{ epp_sin_firmar }} elemento{{ epp_sin_firmar|pluralize }} entregado{{ epp_sin_firmar|pluralize }} →</a></div>{% endif %}
+{% endblock %}

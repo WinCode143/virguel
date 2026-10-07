@@ -1,0 +1,31 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Supervisores · Virguel{% endblock %}
+{% block encabezado %}<h1>2 · Desempeño de supervisores</h1><p class="sub">Últimos {{ dias }} días · encuesta diaria de técnicos, informes de control, gestión de desvíos y objetivos.</p>{% endblock %}
+{% block contenido %}
+{% include "tablero/_grafico.html" with id="g-sup" datos=g titulo="Puntaje por eje (0–100)" alto=True %}
+<div class="card"><div class="tabla-scroll"><table>
+<thead><tr><th>Supervisor</th><th class="num">Total</th><th class="num">Técnicos</th><th class="num">Nota encuesta</th><th class="num">Respuesta</th>
+<th class="num">Informes/día</th><th class="num">Calidad doc.</th><th class="num">Desvíos con acción</th><th class="num">Días respuesta</th><th class="num">Objetivos</th><th class="num">Siniestros equipo</th></tr></thead>
+<tbody>{% for e in evs %}<tr>
+  <td>{{ e.supervisor.apellido }}, {{ e.supervisor.nombre }}</td>
+  <td class="num"><span class="estado {{ e.color }}">{{ e.score_total|num }}</span></td>
+  <td class="num">{{ e.tecnicos_a_cargo }}</td>
+  <td class="num">{{ e.nota_encuesta|num:2 }} / 5</td>
+  <td class="num">{{ e.tasa_respuesta|pct }}</td>
+  <td class="num">{{ e.informes_por_dia|num:1 }}</td>
+  <td class="num">{{ e.calidad_documentacion|num }}/100</td>
+  <td class="num">{{ e.desvios_con_accion }}/{{ e.desvios }}</td>
+  <td class="num">{{ e.dias_respuesta_prom|num:1 }}</td>
+  <td class="num">{{ e.cumplimiento_tareas|pct }}</td>
+  <td class="num">{{ e.siniestros_equipo }}</td>
+</tr>{% endfor %}</tbody></table></div>
+<p class="muted" style="font-size:.82rem;margin-bottom:0">Total = 30% imagen/trato + 25% control en calle + 20% gestión de desvíos + 25% objetivos. Objetivo de referencia: 4 informes de control por día. Calidad de documentación: descripción, foto, ubicación y orden asociada.</p></div>
+<div class="grid g2">
+  {% include "tablero/_grafico.html" with id="g-sem" datos=g_sem titulo="Evolución semanal de la encuesta (toda la supervisión, 1–5)" %}
+  <div class="card"><h2>Últimos comentarios de técnicos</h2>
+    {% for c in comentarios %}<div class="alerta-item"><div class="txt"><div>“{{ c.comentario }}”</div><div class="det">{{ c.fecha|date:"d/m" }} · sobre {{ c.supervisor.apellido }} · trato {{ c.trato }}/5</div></div></div>
+    {% empty %}<p class="muted">Sin comentarios.</p>{% endfor %}
+    <p class="muted" style="font-size:.8rem">Los comentarios se muestran sin identificar al técnico.</p></div>
+</div>
+<p><a class="btn sec" href="{% url 'admin:supervision_tareasupervisor_add' %}">Asignar objetivo a un supervisor</a></p>
+{% endblock %}

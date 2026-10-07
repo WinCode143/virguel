@@ -1,0 +1,23 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Capacitación · Virguel{% endblock %}
+{% block encabezado %}<h1>5 · Capacitación y competencias</h1><p class="sub">Quién necesita capacitación y si las capacitaciones dadas funcionaron.</p>{% endblock %}
+{% block contenido %}
+<div class="grid g3">
+  <div class="card kpi"><div class="etq">Técnicos a capacitar</div><div class="valor">{{ pendientes|length }}</div><div class="det">baja productividad sin problemas de conducta</div></div>
+  <div class="card kpi"><div class="etq">Capacitaciones evaluadas</div><div class="valor">{{ filas|length }}</div><div class="det">últimos 6 meses</div></div>
+  <div class="card kpi"><div class="etq">Mejora promedio tras capacitar</div><div class="valor">{% if mejora_prom is not None %}{% if mejora_prom > 0 %}+{% endif %}{{ mejora_prom|num }}%{% else %}—{% endif %}</div><div class="det">OT/día, 30 días después vs. 30 días antes</div></div>
+</div>
+<div class="card"><h2>Plan sugerido: capacitación en producción</h2><div class="tabla-scroll"><table>
+<thead><tr><th>Técnico</th><th>Supervisor</th><th>Diagnóstico</th><th class="num">OT/día</th><th class="num">vs. equipo</th><th>Motivo</th></tr></thead>
+<tbody>{% for e in pendientes %}<tr><td><a href="{% url 'tablero:tecnico' e.tecnico.id %}">{{ e.tecnico.apellido }}, {{ e.tecnico.nombre }}</a></td><td>{{ e.tecnico.supervisor.apellido|default:"—" }}</td>
+<td><span class="estado {{ e.color }}">{{ e.diagnostico }}</span></td><td class="num">{{ e.productividad|num:2 }}</td><td class="num">{{ e.indice_productividad|pct }}</td><td style="font-size:.85rem">{{ e.motivos|join:"; " }}</td></tr>
+{% empty %}<tr><td colspan="6" class="muted">Nadie requiere capacitación por productividad en este momento.</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="card"><h2>Efectividad de capacitaciones dadas</h2><div class="tabla-scroll"><table>
+<thead><tr><th>Fecha</th><th>Curso</th><th>Técnico</th><th class="num">OT/día antes</th><th class="num">OT/día después</th><th class="num">Variación</th><th>Resultado</th></tr></thead>
+<tbody>{% for f in filas %}<tr><td>{{ f.p.capacitacion.fecha|date:"d/m/Y" }}</td><td>{{ f.p.capacitacion.curso }}{% if f.p.capacitacion.en_produccion %} <span class="muted">(en producción)</span>{% endif %}</td>
+<td>{{ f.p.persona.apellido }}, {{ f.p.persona.nombre }}</td><td class="num">{{ f.antes|num:2 }}</td><td class="num">{{ f.despues|num:2 }}</td>
+<td class="num">{% if f.var is not None %}{% if f.var > 0 %}+{% endif %}{{ f.var|num }}%{% else %}—{% endif %}</td>
+<td>{% if f.var is None %}<span class="estado info">Sin datos</span>{% elif f.var >= 10 %}<span class="estado ok">Mejoró</span>{% elif f.var > -5 %}<span class="estado aviso">Sin cambio</span>{% else %}<span class="estado critico">Empeoró</span>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="7" class="muted">Sin capacitaciones registradas en los últimos 6 meses.</td></tr>{% endfor %}</tbody></table></div></div>
+<p><a class="btn sec" href="{% url 'admin:capacitacion_capacitacion_add' %}">Registrar capacitación</a></p>
+{% endblock %}
