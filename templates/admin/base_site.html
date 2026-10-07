@@ -1,0 +1,29 @@
+{% extends "admin/base.html" %}{% load static %}
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | Virguel{% endblock %}
+{% block extrahead %}{{ block.super }}
+<script>/* mismo tema que en el resto del sistema */
+  try { var t = localStorage.getItem("tema") || "auto"; localStorage.setItem("theme", t);
+        document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<link rel="icon" href="{% static 'img/icono.svg' %}">
+<style>
+  /* Identidad Virguel sobre el admin de Django (respeta su modo oscuro) */
+  :root, html[data-theme="light"] {
+    --primary: #2a78d6; --secondary: #1f68c2; --accent: #ffd36b; --primary-fg: #fff;
+    --header-bg: #13181f; --header-color: #e8eaee; --header-link-color: #fff; --header-branding-color: #fff;
+    --breadcrumbs-bg: #1f68c2; --link-fg: #1f68c2; --link-hover-color: #0d4a96; --link-selected-fg: #1f68c2;
+    --button-bg: #2a78d6; --button-hover-bg: #1f68c2; --default-button-bg: #1f68c2; --default-button-hover-bg: #15569f;
+    --selected-row: #eaf2fd; --font-family-primary: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  html[data-theme="dark"] { --header-branding-color: #fff; --accent: #ffd36b; --primary: #3987e5; --secondary: #2a78d6; --link-fg: #7fb2f0; --link-hover-color: #a9cbf5;
+    --breadcrumbs-bg: #1b2a3d; --header-bg: #0e0e0d; --selected-row: #1b2a3d; }
+  #site-name a, #site-name a:visited { color: #fff !important; }
+  #branding h1 a { display: flex; align-items: center; gap: .5rem; font-weight: 700; }
+  #branding img { width: 26px; height: 26px; border-radius: 7px; }
+  .volver-tablero { margin-left: 1rem; }
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+{% endblock %}
+{% block branding %}<div id="site-name"><a href="{% url 'admin:index' %}"><img src="{% static 'img/icono.svg' %}" alt=""> Virguel · Carga de datos</a></div>
+{% if user.is_anonymous %}{% include "admin/color_theme_toggle.html" %}{% endif %}{% endblock %}
+{% block userlinks %}<a class="volver-tablero" href="{% url 'raiz' %}">← Volver al sistema</a> / {{ block.super }}{% endblock %}
+{% block nav-global %}{% endblock %}

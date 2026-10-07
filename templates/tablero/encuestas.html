@@ -1,6 +1,6 @@
 {% extends "escritorio.html" %}
 {% block titulo %}Encuestas · Virguel{% endblock %}
-{% block encabezado %}<h1>2 · Encuestas del día</h1><p class="sub">Una encuesta por técnico que salió a la calle. Enviá el link por WhatsApp con un clic (se abre WhatsApp con el mensaje listo).</p>{% endblock %}
+{% block encabezado %}<h1>Encuestas del día</h1><p class="sub">Una encuesta por técnico que salió a la calle. Enviá el link por WhatsApp con un clic (se abre WhatsApp con el mensaje listo).</p>{% endblock %}
 {% block contenido %}
 <form class="filtros" method="get"><label>Fecha<input type="date" name="fecha" value="{{ fecha|date:'Y-m-d' }}" onchange="this.form.submit()"></label></form>
 <div class="grid g3">

@@ -1,12 +1,12 @@
-{% extends "movil/base_movil.html" %}
+{% extends "movil/base_movil.html" %}{% load ui %}
 {% block titulo_movil %}Yo{% endblock %}
 {% block contenido %}
 <div class="acciones">
-  <a class="accion" href="{% url 'movil:desempeno' %}"><span class="ico">★</span>Mi rendimiento<small>métricas y evolución</small></a>
-  <a class="accion" href="{% url 'movil:mi_supervisor' %}"><span class="ico">☺</span>Evaluar a mi supervisor<small>{% if encuesta_semanal_pendiente %}pendiente esta semana{% else %}hecha esta semana ✓{% endif %}</small></a>
-  <a class="accion" href="{% url 'movil:historial' %}"><span class="ico">☰</span>Mis órdenes<small>historial</small></a>
-  <a class="accion" href="{% url 'movil:legajo' %}"><span class="ico">▤</span>Mi legajo<small>controles y sanciones</small></a>
-  <a class="accion" href="{% url 'movil:epp' %}"><span class="ico">⛑</span>Mi EPP<small>equipo de seguridad</small></a>
-  <a class="accion" href="{% url 'movil:notificaciones' %}"><span class="ico">🔔</span>Notificaciones<small>{{ notificaciones_sin_leer|default:0 }} sin leer</small></a>
+  <a class="accion" href="{% url 'movil:desempeno' %}">{% icono 'tendencia' %}Mi rendimiento<small>métricas y evolución</small></a>
+  <a class="accion" href="{% url 'movil:mi_supervisor' %}">{% icono 'encuesta' %}Evaluar a mi supervisor<small>{% if encuesta_semanal_pendiente %}pendiente esta semana{% else %}hecha esta semana ✓{% endif %}</small></a>
+  <a class="accion" href="{% url 'movil:historial' %}">{% icono 'lista' %}Mis órdenes<small>historial</small></a>
+  <a class="accion" href="{% url 'movil:legajo' %}">{% icono 'legajo' %}Mi legajo<small>controles y sanciones</small></a>
+  <a class="accion" href="{% url 'movil:epp' %}">{% icono 'casco' %}Mi EPP<small>equipo de seguridad</small></a>
+  <a class="accion" href="{% url 'movil:notificaciones' %}">{% icono 'campana' %}Notificaciones<small>{{ notificaciones_sin_leer|default:0 }} sin leer</small></a>
 </div>
 {% endblock %}

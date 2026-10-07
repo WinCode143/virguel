@@ -301,3 +301,37 @@ apartado gráfico**.
 
 ### Calidad
 - Tests: **55**, todos pasan.
+
+---
+
+## 2026-10-07 — Sesión 1, séptima parte: rediseño de interfaz, modo oscuro y orden
+
+Pedido: "mejorá la UI/UX de la aplicación, la web y todo el proyecto, agregá modo oscuro, ordená todo".
+
+### Hecho
+- **Sistema de diseño nuevo** (`static/css/app.css`): tokens de color claro/oscuro, tipografía Inter,
+  tarjetas, tablas con encabezado fijo, estados con fondo suave + forma + texto, foco de teclado
+  visible, botones con estados, avisos tipo "toast" que se cierran solos, estilos de impresión.
+- **Modo oscuro con selector** (claro / oscuro / automático) en escritorio, app, login y carga de
+  datos; se recuerda por dispositivo, se aplica antes de pintar (sin parpadeo) y los gráficos se
+  redibujan con los colores del tema.
+- **Menú reorganizado por tarea** (sin la numeración del pedido original): Inicio, Personal,
+  Productividad, Desempeño y calidad, Operación, Inventario, Recursos, Administración. Grupos
+  plegables con íconos, el grupo actual abierto y memoria de los grupos abiertos.
+- **Barra superior fija**: buscador de personas (atajo `/`), alertas, tema y usuario.
+- **Íconos SVG propios** (49) en lugar de emojis/caracteres; componentes de plantilla `{% icono %}`,
+  `{% nav %}` y `{% grupo_abierto %}` (`core/templatetags/ui.py`).
+- **App de campo**: encabezado fijo con "volver", barra inferior con íconos y aviso de pendientes,
+  botones más grandes, tarjetas de acción con íconos, tema.
+- **Login** rediseñado; **carga de datos (admin)** con la identidad de Virguel, tema sincronizado,
+  link "volver al sistema", secciones con nombres claros y en el mismo orden que el menú.
+- Títulos de pantallas sin la numeración "1 ·", "5 ·", etc. Índice de documentación `docs/README.md`.
+
+### Problemas encontrados y corregidos
+- Un reemplazo automático rompió la primera línea de dos plantillas de la app; se detectó al
+  compilar todas las plantillas y se corrigió.
+- El título de la carga de datos salía amarillo en modo oscuro.
+
+### Calidad
+- Todas las plantillas compilan; 55 tests pasan; revisión visual en claro y oscuro (escritorio,
+  celular, login y carga de datos).

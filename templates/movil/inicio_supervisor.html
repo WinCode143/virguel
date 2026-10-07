@@ -1,4 +1,4 @@
-{% extends "movil/base_movil.html" %}
+{% extends "movil/base_movil.html" %}{% load ui %}
 {% block contenido %}
 {% include "movil/_fichada.html" %}
 {% if faltan or tarde or novedades_pendientes %}<div class="card" style="border-color:var({% if faltan %}--critico{% else %}--aviso{% endif %})"><h2>Asistencia del equipo hoy</h2>
@@ -12,8 +12,8 @@
 </div>
 {% if pedidos_pendientes %}<a class="card" style="display:block;border-color:var(--aviso)" href="{% url 'movil:pedidos' %}"><b>{{ pedidos_pendientes }} pedido{{ pedidos_pendientes|pluralize }} de partes para aprobar →</b></a>{% endif %}
 <div class="acciones">
-  <a class="accion" href="{% url 'movil:informe' %}"><span class="ico">✓</span>Nuevo control<small>con foto y ubicación</small></a>
-  <a class="accion" href="{% url 'movil:accion' %}"><span class="ico">✎</span>Acción correctiva<small>recapacitación, multa…</small></a>
+  <a class="accion" href="{% url 'movil:informe' %}">{% icono 'check' %}Nuevo control<small>con foto y ubicación</small></a>
+  <a class="accion" href="{% url 'movil:accion' %}">{% icono 'firma' %}Acción correctiva<small>recapacitación, multa…</small></a>
 </div>
 <div class="card"><h2>Órdenes del equipo hoy ({{ total_ots }})</h2>
 <p style="margin:0">Completadas: <b>{{ resumen.completada|default:0 }}</b> · Pendientes: {{ resumen.pendiente|default:0 }} · Asignadas: {{ resumen.asignada|default:0 }} · Fallidas: {{ resumen.fallida|default:0 }}</p></div>

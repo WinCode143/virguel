@@ -14,6 +14,8 @@
 | pywebpush | 2.x | Enviar notificaciones push (Web Push / VAPID) al celular de técnicos y supervisores. |
 | Web Push API + Canvas | estándar web | Notificaciones en el celular y firma del cliente con el dedo al cerrar una orden. |
 | openpyxl | 3.1 | Leer archivos Excel (.xlsx) en la importación masiva. |
+| Inter (Google Fonts) | — | Tipografía de la interfaz (si no carga, se usa la del sistema). |
+| Íconos SVG propios | — | Sprite `static/img/iconos.svg` (49 íconos de línea); reemplaza emojis que se ven distinto en cada celular. |
 | Chart.js | 4.4.7 (servido localmente en `static/vendor/`) | Gráficos de los tableros. |
 | PWA (Web App Manifest + Service Worker) | estándar web | App de campo instalable en el celular sin pasar por tiendas de apps. |
 | Geolocation API / captura de cámara (HTML) | estándar web | Ubicación y foto en los informes de control del supervisor. |

@@ -1,6 +1,6 @@
 {% extends "escritorio.html" %}{% load formato %}
 {% block titulo %}Stock · Virguel{% endblock %}
-{% block encabezado %}<h1>8 · Inventario, demanda y abastecimiento</h1><p class="sub">Stock diario cruzado con el personal en calle ({{ sd.tecnicos_en_calle }} técnicos) y antigüedad por lote (máximo {{ p.dias_max_stock }} días).</p>{% endblock %}
+{% block encabezado %}<h1>Inventario, demanda y abastecimiento</h1><p class="sub">Stock diario cruzado con el personal en calle ({{ sd.tecnicos_en_calle }} técnicos) y antigüedad por lote (máximo {{ p.dias_max_stock }} días).</p>{% endblock %}
 {% block contenido %}
 <div class="grid g4">
   <div class="card kpi"><div class="etq">Valor en stock</div><div class="valor">{{ valor_total|pesos }}</div></div>

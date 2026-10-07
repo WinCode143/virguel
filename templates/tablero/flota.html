@@ -1,6 +1,6 @@
 {% extends "escritorio.html" %}{% load formato %}
 {% block titulo %}Flota · Virguel{% endblock %}
-{% block encabezado %}<h1>6 · Flota y services</h1><p class="sub">Próximo service estimado por kilómetros recorridos y por fecha, lo que ocurra primero.</p>{% endblock %}
+{% block encabezado %}<h1>Flota y services</h1><p class="sub">Próximo service estimado por kilómetros recorridos y por fecha, lo que ocurra primero.</p>{% endblock %}
 {% block contenido %}
 <div class="grid g4">
   <div class="card kpi"><div class="etq">Operativos</div><div class="valor">{{ operativos }} / {{ total }}</div><div class="det">{{ usados }} en uso el {{ dia|date:"d/m" }}</div></div>

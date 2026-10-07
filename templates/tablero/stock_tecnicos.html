@@ -1,6 +1,6 @@
 {% extends "escritorio.html" %}{% load formato %}
 {% block titulo %}Partes en técnicos · Virguel{% endblock %}
-{% block encabezado %}<h1>8 · Partes en manos de técnicos</h1><p class="sub">Lo que cada técnico tiene a su cargo (camioneta). Se descuenta solo al cerrar órdenes. Saldo negativo = usó partes que no figuraban a su cargo.</p>{% endblock %}
+{% block encabezado %}<h1>Partes en manos de técnicos</h1><p class="sub">Lo que cada técnico tiene a su cargo (camioneta). Se descuenta solo al cerrar órdenes. Saldo negativo = usó partes que no figuraban a su cargo.</p>{% endblock %}
 {% block contenido %}
 <div class="grid g3">
   <div class="card kpi"><div class="etq">Valor en manos de técnicos</div><div class="valor">{{ valor_total|pesos }}</div></div>

@@ -1,6 +1,6 @@
 {% extends "escritorio.html" %}{% load formato %}
 {% block titulo %}Finanzas · Virguel{% endblock %}
-{% block encabezado %}<h1>7 · Finanzas y flujo de fondos</h1><p class="sub">Sólo egresos: la empresa no vende. Los gastos de compras, flota, EPP y siniestros se registran solos desde la operación.</p>{% endblock %}
+{% block encabezado %}<h1>Finanzas y flujo de fondos</h1><p class="sub">Sólo egresos: la empresa no vende. Los gastos de compras, flota, EPP y siniestros se registran solos desde la operación.</p>{% endblock %}
 {% block contenido %}
 <div class="grid g4">
   <div class="card kpi"><div class="etq">Egresos del mes</div><div class="valor">{{ mes_actual|pesos }}</div></div>

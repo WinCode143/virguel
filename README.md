@@ -9,8 +9,9 @@ planificación.
 - **Supervisores** → app móvil (`/app/`) + tableros de su equipo en la PC.
 - **Técnicos** → app móvil (`/app/`), instalable en el celular.
 - **Power BI** → vistas SQL en el esquema `powerbi` y CSV por web.
+- **Tema claro / oscuro / automático** en todas las pantallas (botón del sol/luna).
 
-Documentación:
+Documentación (índice completo en [docs/README.md](docs/README.md)):
 - [docs/REQUERIMIENTOS.md](docs/REQUERIMIENTOS.md) — qué pidió el cliente y cómo se resolvió cada punto.
 - [docs/METRICAS.md](docs/METRICAS.md) — indicadores de productividad (IPT técnicos, IGS supervisores).
 - [docs/MANUAL.md](docs/MANUAL.md) — uso por rol.

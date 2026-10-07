@@ -1,4 +1,4 @@
-{% extends "movil/base_movil.html" %}{% load formato %}
+{% extends "movil/base_movil.html" %}{% load formato ui %}
 {% block titulo_movil %}{{ ot.numero }}{% endblock %}
 {% block contenido %}
 <div class="card">
@@ -8,8 +8,8 @@
   {{ ot.cliente.direccion }}{% if ot.zona %} · {{ ot.zona }}{% endif %}<br>
   <span class="muted">{{ ot.cliente.get_tipo_display }} · {{ ot.cliente.cantidad_televisores }} TV</span></p>{% endif %}
   <div class="acciones" style="margin:.8rem 0 0">
-    {% if ot.cliente.telefono %}<a class="accion" href="tel:{{ ot.cliente.telefono }}"><span class="ico">✆</span>Llamar<small>{{ ot.cliente.telefono }}</small></a>{% endif %}
-    {% if mapa %}<a class="accion" href="{{ mapa }}" target="_blank" rel="noopener"><span class="ico">⌖</span>Cómo llegar<small>Google Maps</small></a>{% endif %}
+    {% if ot.cliente.telefono %}<a class="accion" href="tel:{{ ot.cliente.telefono }}">{% icono 'telefono' %}Llamar<small>{{ ot.cliente.telefono }}</small></a>{% endif %}
+    {% if mapa %}<a class="accion" href="{{ mapa }}" target="_blank" rel="noopener">{% icono 'ubicacion' %}Cómo llegar<small>Google Maps</small></a>{% endif %}
   </div>
   {% if ot.observaciones %}<p style="margin:.6rem 0 0;font-size:.9rem"><b>Indicaciones:</b> {{ ot.observaciones }}</p>{% endif %}
 </div>
@@ -33,7 +33,7 @@
 {% if not ot.inicio_trabajo %}
 <form method="post" class="card" data-offline="/app/orden/{{ ot.id }}/">{% csrf_token %}<input type="hidden" name="accion" value="empezar">
   <p class="muted" style="margin:0 0 .6rem">Tocá al llegar: el tiempo de trabajo se mide solo.</p>
-  <button class="btn" style="width:100%;padding:.9rem">▶ Empezar trabajo</button></form>
+  <button class="btn" style="width:100%;padding:.95rem">{% icono 'play' %} Empezar trabajo</button></form>
 {% else %}
 <div class="card"><span class="estado ok">Trabajando desde las {{ ot.inicio_trabajo|time:"H:i" }}</span></div>
 {% endif %}

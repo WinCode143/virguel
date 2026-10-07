@@ -1,6 +1,6 @@
 {% extends "escritorio.html" %}
 {% block titulo %}Asignar órdenes · Virguel{% endblock %}
-{% block encabezado %}<h1>1 · Asignación automática de órdenes</h1><p class="sub">Reparte las órdenes pendientes según lo que rinde realmente cada técnico (promedio de 30 días), por zona, priorizando retrabajos y atrasadas.{% if es_supervisor %} Sólo tu equipo.{% endif %}</p>{% endblock %}
+{% block encabezado %}<h1>Asignación automática de órdenes</h1><p class="sub">Reparte las órdenes pendientes según lo que rinde realmente cada técnico (promedio de 30 días), por zona, priorizando retrabajos y atrasadas.{% if es_supervisor %} Sólo tu equipo.{% endif %}</p>{% endblock %}
 {% block contenido %}
 <form class="filtros" method="get"><label>Fecha a planificar<input type="date" name="fecha" value="{{ fecha|date:'Y-m-d' }}" onchange="this.form.submit()"></label></form>
 <div class="grid g4">

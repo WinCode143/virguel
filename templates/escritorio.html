@@ -1,64 +1,107 @@
-{% extends "base.html" %}{% load static %}
+{% extends "base.html" %}{% load static ui %}
 {% block cuerpo %}
-{% with u=request.resolver_match.url_name %}
 <div class="layout">
-  <aside class="sidebar" id="sidebar">
-    <div class="marca">Virguel<small>Tablero de control y ERP</small></div>
+  <aside class="sidebar" id="sidebar" aria-label="Menú principal">
+    <a class="marca" href="{% url 'tablero:inicio' %}"><img class="logo" src="{% static 'img/icono.svg' %}" alt=""><span><b>Virguel</b><small>Control de personal y operación</small></span></a>
     <nav class="nav">
-      <a href="{% url 'tablero:inicio' %}" class="{% if u == 'inicio' %}activo{% endif %}">Resumen</a>
-      <a href="{% url 'tablero:alertas' %}" class="{% if u == 'alertas' %}activo{% endif %}">Alertas {% if alertas_criticas %}<span class="badge">{{ alertas_criticas }}</span>{% endif %}</a>
-      <div class="grupo">Personal</div>
-      <a href="{% url 'personal:hoy' %}" class="{% if request.resolver_match.app_name == 'personal' and u == 'hoy' %}activo{% endif %}">Asistencia de hoy</a>
-      <a href="{% url 'personal:asistencia' %}" class="{% if u == 'asistencia' %}activo{% endif %}">Presentismo y ausencias</a>
-      <a href="{% url 'personal:legajos' %}" class="{% if u == 'legajos' or u == 'legajo' %}activo{% endif %}">Legajos</a>
-      <a href="{% url 'personal:parte' %}" class="{% if u == 'parte' %}activo{% endif %}">Parte diario (mail)</a>
-      <a href="{% url 'personal:documentos' %}" class="{% if u == 'documentos' %}activo{% endif %}">Documentación</a>
-      {% if es_gerencia %}<a href="{% url 'personal:dotacion' %}" class="{% if u == 'dotacion' %}activo{% endif %}">Dotación y rotación</a>{% endif %}
-      <div class="grupo">Productividad</div>
-      {% if es_gerencia %}<a href="{% url 'tablero:prod_general' %}" class="{% if u == 'prod_general' %}activo{% endif %}">Panel general</a>{% endif %}
-      <a href="{% url 'tablero:prod_tecnicos' %}" class="{% if u == 'prod_tecnicos' %}activo{% endif %}">Índice de técnicos (IPT)</a>
-      {% if es_gerencia %}<a href="{% url 'tablero:prod_supervisores' %}" class="{% if u == 'prod_supervisores' %}activo{% endif %}">Índice de supervisores (IGS)</a>{% endif %}
-      {% if es_supervisor %}<a href="{% url 'tablero:prod_ficha' request.user.persona.id %}" class="{% if u == 'prod_ficha' %}activo{% endif %}">Mi índice (IGS)</a>{% endif %}
-      <div class="grupo">Operación</div>
-      <a href="{% url 'tablero:operacion' %}" class="{% if u == 'operacion' %}activo{% endif %}">1 · Operación diaria</a>
-      <a href="{% url 'tablero:asignacion' %}" class="{% if u == 'asignacion' %}activo{% endif %}">1 · Asignar órdenes</a>
-      <a href="{% url 'tablero:tecnicos' %}" class="{% if u == 'tecnicos' or u == 'tecnico' %}activo{% endif %}">5 · Técnicos y riesgo</a>
-      <a href="{% url 'tablero:capacitacion' %}" class="{% if u == 'capacitacion' %}activo{% endif %}">5 · Capacitación</a>
-      <a href="{% url 'tablero:encuestas' %}" class="{% if u == 'encuestas' %}activo{% endif %}">2 · Encuestas del día</a>
-      {% if es_gerencia %}<a href="{% url 'tablero:supervisores' %}" class="{% if u == 'supervisores' %}activo{% endif %}">2 · Supervisores</a>{% endif %}
-      <a href="{% url 'tablero:incidentes' %}" class="{% if u == 'incidentes' %}activo{% endif %}">3 · Incidentes y daños</a>
-      <div class="grupo">Recursos</div>
-      <a href="{% url 'tablero:herramientas' %}" class="{% if u == 'herramientas' %}activo{% endif %}">4 · Herramientas y EPP</a>
-      <a href="{% url 'tablero:flota' %}" class="{% if u == 'flota' %}activo{% endif %}">6 · Flota</a>
-      <a href="{% url 'tablero:stock' %}" class="{% if u == 'stock' %}activo{% endif %}">8 · Stock y demanda</a>
-      <a href="{% url 'tablero:stock_tecnicos' %}" class="{% if u == 'stock_tecnicos' %}activo{% endif %}">8 · Partes en manos de técnicos</a>
-      {% if es_gerencia %}<a href="{% url 'tablero:pedidos' %}" class="{% if u == 'pedidos' %}activo{% endif %}">8 · Pedidos de partes</a>{% endif %}
-      {% if es_gerencia %}<a href="{% url 'tablero:finanzas' %}" class="{% if u == 'finanzas' %}activo{% endif %}">7 · Finanzas</a>{% endif %}
-      <div class="grupo">Gerencial</div>
-      <a href="{% url 'tablero:planificacion' %}" class="{% if u == 'planificacion' %}activo{% endif %}">9 · Planificación y capacidad</a>
+      <div class="nav-grupo">
+        {% nav 'tablero:inicio' 'Resumen' 'home' %}
+        {% nav 'tablero:alertas' 'Alertas' 'alerta' alertas_criticas %}
+      </div>
+
+      <details class="nav-grupo" {% grupo_abierto 'personal:hoy' 'personal:asistencia' 'personal:legajos' 'personal:legajo' 'personal:documentos' 'personal:dotacion' 'personal:parte' %}>
+        <summary>Personal {% icono 'abajo' %}</summary>
+        {% nav 'personal:hoy' 'Asistencia de hoy' 'reloj' %}
+        {% nav 'personal:asistencia' 'Presentismo y ausencias' 'calendario' %}
+        {% nav 'personal:legajos' 'Legajos' 'legajo' %}
+        {% nav 'personal:documentos' 'Documentación' 'documento' %}
+        {% if es_gerencia %}{% nav 'personal:dotacion' 'Dotación y rotación' 'personas' %}{% endif %}
+        {% nav 'personal:parte' 'Parte diario (mail)' 'correo' %}
+      </details>
+
+      <details class="nav-grupo" {% grupo_abierto 'tablero:prod_general' 'tablero:prod_tecnicos' 'tablero:prod_supervisores' 'tablero:prod_ficha' %}>
+        <summary>Productividad {% icono 'abajo' %}</summary>
+        {% if es_gerencia %}{% nav 'tablero:prod_general' 'Panel general' 'grafico' %}{% endif %}
+        {% nav 'tablero:prod_tecnicos' 'Técnicos (IPT)' 'trofeo' %}
+        {% if es_gerencia %}{% nav 'tablero:prod_supervisores' 'Supervisores (IGS)' 'estrella' %}{% endif %}
+        {% if es_supervisor %}{% nav 'tablero:prod_ficha' 'Mi índice (IGS)' 'estrella' 0 request.user.persona.id %}{% endif %}
+      </details>
+
+      <details class="nav-grupo" {% grupo_abierto 'tablero:tecnicos' 'tablero:capacitacion' 'tablero:supervisores' 'tablero:encuestas' 'tablero:incidentes' %}>
+        <summary>Desempeño y calidad {% icono 'abajo' %}</summary>
+        {% nav 'tablero:tecnicos' 'Técnicos y riesgo' 'escudo' %}
+        {% nav 'tablero:capacitacion' 'Capacitación' 'birrete' %}
+        {% if es_gerencia %}{% nav 'tablero:supervisores' 'Evaluación de supervisores' 'encuesta' %}{% endif %}
+        {% nav 'tablero:encuestas' 'Encuestas del día' 'correo' %}
+        {% nav 'tablero:incidentes' 'Incidentes y daños' 'incidente' %}
+      </details>
+
+      <details class="nav-grupo" {% grupo_abierto 'tablero:operacion' 'tablero:asignacion' 'tablero:planificacion' %}>
+        <summary>Operación {% icono 'abajo' %}</summary>
+        {% nav 'tablero:operacion' 'Operación diaria' 'tendencia' %}
+        {% nav 'tablero:asignacion' 'Asignar órdenes' 'asignar' %}
+        {% nav 'tablero:planificacion' 'Planificación y capacidad' 'mapa' %}
+      </details>
+
+      <details class="nav-grupo" {% grupo_abierto 'tablero:stock' 'tablero:stock_tecnicos' 'tablero:pedidos' 'tablero:herramientas' %}>
+        <summary>Inventario {% icono 'abajo' %}</summary>
+        {% nav 'tablero:stock' 'Stock y demanda' 'caja' %}
+        {% nav 'tablero:stock_tecnicos' 'Partes en técnicos' 'llave' %}
+        {% if es_gerencia %}{% nav 'tablero:pedidos' 'Pedidos de partes' 'carrito' %}{% endif %}
+        {% nav 'tablero:herramientas' 'Herramientas y EPP' 'casco' %}
+      </details>
+
+      <details class="nav-grupo" {% grupo_abierto 'tablero:flota' 'tablero:finanzas' %}>
+        <summary>Recursos {% icono 'abajo' %}</summary>
+        {% nav 'tablero:flota' 'Flota' 'camioneta' %}
+        {% if es_gerencia %}{% nav 'tablero:finanzas' 'Finanzas' 'billetera' %}{% endif %}
+      </details>
+
       {% if es_gerencia %}
-      <a href="{% url 'tablero:powerbi' %}" class="{% if u == 'powerbi' %}activo{% endif %}">Power BI / exportar</a>
-      <a href="{% url 'tablero:importar' %}" class="{% if u == 'importar' %}activo{% endif %}">Importar Excel / CSV</a>
-      <a href="{% url 'admin:index' %}">Carga de datos (admin)</a>
+      <details class="nav-grupo" {% grupo_abierto 'tablero:importar' 'tablero:powerbi' %}>
+        <summary>Administración {% icono 'abajo' %}</summary>
+        {% nav 'tablero:importar' 'Importar Excel / CSV' 'subir' %}
+        {% nav 'tablero:powerbi' 'Power BI y exportar' 'base' %}
+        <a class="nav-item" href="{% url 'admin:index' %}">{% icono 'ajustes' %}<span>Carga de datos</span></a>
+      </details>
       {% endif %}
-      {% if es_supervisor %}<a href="{% url 'movil:inicio' %}">App de supervisor</a>{% endif %}
+      {% if es_supervisor %}
+      <div class="nav-grupo"><a class="nav-item" href="{% url 'movil:inicio' %}">{% icono 'telefono' %}<span>Abrir la app de campo</span></a></div>
+      {% endif %}
     </nav>
+    <div class="nav-pie">Atajo: <kbd>/</kbd> para buscar personas</div>
   </aside>
-  <main class="contenido">
-    <div class="topbar">
-      <div>
-        <button class="btn sec menu-toggle" onclick="document.getElementById('sidebar').classList.toggle('abierto')" aria-label="Menú">☰</button>
-        {% block encabezado %}{% endblock %}
+  <div class="sidebar-velo"></div>
+
+  <div class="principal">
+    <header class="appbar">
+      <button class="icono-btn menu-toggle" data-menu-toggle aria-label="Abrir menú">{% icono 'menu' %}</button>
+      <form class="buscador" action="{% url 'personal:legajos' %}" method="get" role="search">
+        {% icono 'buscar' %}<label for="buscar-persona" class="visualmente-oculto">Buscar persona</label>
+        <input id="buscar-persona" name="q" placeholder="Buscar persona por apellido, legajo o DNI…" autocomplete="off">
+      </form>
+      <span class="espacio"></span>
+      <div class="tema-menu">
+        <button class="icono-btn" type="button" data-tema-actual aria-haspopup="true">{% icono 'auto' %}</button>
+        <div class="tema-opciones" role="menu">
+          <button type="button" role="menuitemradio" data-tema="light">{% icono 'sol' %}Claro</button>
+          <button type="button" role="menuitemradio" data-tema="dark">{% icono 'luna' %}Oscuro</button>
+          <button type="button" role="menuitemradio" data-tema="auto">{% icono 'auto' %}Automático</button>
+        </div>
       </div>
+      <a class="icono-btn" href="{% url 'tablero:alertas' %}" aria-label="Alertas ({{ alertas_abiertas|default:0 }})" title="Alertas">{% icono 'campana' %}{% if alertas_criticas %}<span class="badge">{{ alertas_criticas }}</span>{% endif %}</a>
       <div class="usuario">
-        <span>{{ request.user.get_full_name|default:request.user.username }}</span>
-        <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="btn sec">Salir</button></form>
+        <span class="avatar" aria-hidden="true">{% firstof request.user.first_name|slice:":1" request.user.username|slice:":1" %}{{ request.user.last_name|slice:":1" }}</span>
+        <span class="quien">{{ request.user.get_full_name|default:request.user.username }}<small>{% if es_gerencia %}Gerencia{% elif es_supervisor %}Supervisor{% endif %}</small></span>
+        <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="icono-btn" aria-label="Salir" title="Salir">{% icono 'salir' %}</button></form>
       </div>
-    </div>
-    {% if messages %}<ul class="mensajes">{% for m in messages %}<li class="{{ m.tags }}">{{ m }}</li>{% endfor %}</ul>{% endif %}
-    {% block contenido %}{% endblock %}
-  </main>
+    </header>
+    <main class="contenido" id="contenido">
+      <div class="page-head">{% block encabezado %}{% endblock %}</div>
+      {% block contenido %}{% endblock %}
+    </main>
+    {% if messages %}<ul class="mensajes" role="status">{% for m in messages %}<li class="{{ m.tags }}">{{ m }}</li>{% endfor %}</ul>{% endif %}
+  </div>
 </div>
-{% endwith %}
 {% endblock %}
 {% block scripts %}<script src="{% static 'vendor/chart.umd.min.js' %}"></script><script src="{% static 'js/graficos.js' %}"></script>{% endblock %}

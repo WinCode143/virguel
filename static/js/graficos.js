@@ -62,7 +62,7 @@
         plugins: {
           legend: { display: multi || tipo === "doughnut", position: "bottom",
                     labels: { color: ink2, boxWidth: 10, boxHeight: 10, useBorderRadius: true, borderRadius: 2 } },
-          tooltip: { backgroundColor: css("--surface"), titleColor: css("--ink"), bodyColor: ink2,
+          tooltip: { backgroundColor: css("--surface"), titleColor: css("--ink"), bodyColor: ink2, cornerRadius: 8,
                      borderColor: css("--axis"), borderWidth: 1, padding: 10, boxPadding: 4,
                      callbacks: { label: (ctx) => {
                        const v = typeof ctx.parsed === "number" ? ctx.parsed : (cfg.horizontal ? ctx.parsed.x : ctx.parsed.y);
@@ -77,5 +77,6 @@
     document.querySelectorAll("canvas[data-grafico]").forEach((c) => graficos.push(crear(c)));
   }
   document.addEventListener("DOMContentLoaded", dibujarTodo);
-  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", dibujarTodo);
+  // redibujar con los colores del tema nuevo (claro/oscuro)
+  document.addEventListener("tema-cambiado", () => { if (graficos.length) dibujarTodo(); });
 })();

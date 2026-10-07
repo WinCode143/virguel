@@ -1,9 +1,9 @@
-{% extends "movil/base_movil.html" %}{% load formato %}
+{% extends "movil/base_movil.html" %}{% load formato ui %}
 {% block titulo_movil %}Mis partes{% endblock %}
 {% block contenido %}
 <div class="acciones">
-  <a class="accion" href="{% url 'movil:pedir' %}"><span class="ico">＋</span>Pedir partes<small>al depósito</small></a>
-  {% if falta_algo %}<a class="accion" href="{% url 'movil:pedir' %}?faltante=1" style="border-color:var(--aviso)"><span class="ico">⚡</span>Pedir lo que me falta<small>para mis {{ n_ordenes }} órdenes</small></a>{% endif %}
+  <a class="accion" href="{% url 'movil:pedir' %}">{% icono 'mas' %}Pedir partes<small>al depósito</small></a>
+  {% if falta_algo %}<a class="accion" href="{% url 'movil:pedir' %}?faltante=1" style="border-color:var(--aviso)">{% icono 'carrito' %}Pedir lo que me falta<small>para mis {{ n_ordenes }} órdenes</small></a>{% endif %}
 </div>
 <div class="card"><h2>Lo que tengo a mi cargo</h2><table><tbody>{% for m, c in saldos %}
 <tr><td>{{ m.nombre }}</td><td class="num">{% if c < 0 %}<span class="estado critico">{{ c|cant }}</span>{% else %}{{ c|cant }}{% endif %} {{ m.unidad }}</td></tr>

@@ -1,6 +1,6 @@
 {% extends "escritorio.html" %}{% load formato %}
 {% block titulo %}Pedidos de partes · Virguel{% endblock %}
-{% block encabezado %}<h1>8 · Pedidos de partes de los técnicos</h1><p class="sub">El técnico pide desde el celular, el supervisor aprueba y el depósito entrega acá. Al entregar, las partes salen del depósito y pasan al stock del técnico.</p>{% endblock %}
+{% block encabezado %}<h1>Pedidos de partes de los técnicos</h1><p class="sub">El técnico pide desde el celular, el supervisor aprueba y el depósito entrega acá. Al entregar, las partes salen del depósito y pasan al stock del técnico.</p>{% endblock %}
 {% block contenido %}
 <div class="card"><h2>Abiertos ({{ abiertos|length }})</h2>
 {% for p in abiertos %}<form method="post" style="border-bottom:1px solid var(--grid);padding:.8rem 0">{% csrf_token %}<input type="hidden" name="pedido" value="{{ p.id }}">

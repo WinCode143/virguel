@@ -2,13 +2,19 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block titulo %}Virguel ERP{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2a78d6">
+  <title>{% block titulo %}Virguel{% endblock %}</title>
+  <script>/* aplica el tema guardado antes de pintar (evita parpadeo) */
+    try { var t = localStorage.getItem("tema"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
   <link rel="icon" href="{% static 'img/icono.svg' %}">
   {% block head %}{% endblock %}
 </head>
 <body>{% block cuerpo %}{% endblock %}
+<script src="{% static 'js/ui.js' %}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

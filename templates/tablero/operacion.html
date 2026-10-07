@@ -1,6 +1,6 @@
 {% extends "escritorio.html" %}{% load formato %}
 {% block titulo %}Operación · Virguel{% endblock %}
-{% block encabezado %}<h1>1 · Operación y productividad</h1><p class="sub">{{ desde|date:"d/m/Y" }} – {{ hasta|date:"d/m/Y" }}</p>{% endblock %}
+{% block encabezado %}<h1>Operación y productividad</h1><p class="sub">{{ desde|date:"d/m/Y" }} – {{ hasta|date:"d/m/Y" }}</p>{% endblock %}
 {% block contenido %}
 <form class="filtros" method="get">
   <label>Hasta<input type="date" name="hasta" value="{{ hasta|date:'Y-m-d' }}"></label>

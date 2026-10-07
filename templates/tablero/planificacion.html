@@ -1,6 +1,6 @@
 {% extends "escritorio.html" %}{% load formato l10n %}
 {% block titulo %}Planificación · Virguel{% endblock %}
-{% block encabezado %}<h1>9 · Planificación, capacidad y probabilidades</h1><p class="sub">Simulador: cambiá la cantidad de técnicos y los supuestos y mirá cuántos clientes, técnicos y decodificadores hacen falta.</p>{% endblock %}
+{% block encabezado %}<h1>Planificación, capacidad y probabilidades</h1><p class="sub">Simulador: cambiá la cantidad de técnicos y los supuestos y mirá cuántos clientes, técnicos y decodificadores hacen falta.</p>{% endblock %}
 {% block contenido %}
 <form class="card filtros" method="get" style="margin-bottom:1rem">
   <label>Técnicos en calle<input type="number" name="tecnicos" min="0" value="{{ e.tecnicos }}" style="width:7rem"></label>

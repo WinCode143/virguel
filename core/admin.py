@@ -2,9 +2,22 @@ from django.contrib import admin
 
 from .models import Alerta, Cliente, Indicador, Notificacion, Parametros, Persona, Zona
 
-admin.site.site_header = "Virguel — ERP operativo"
+admin.site.site_header = "Virguel · Carga de datos"
 admin.site.site_title = "Virguel ERP"
-admin.site.index_title = "Administración de datos"
+admin.site.index_title = "Carga y configuración de datos"
+
+# Mismo orden que el menú del sistema (en lugar del alfabético)
+ORDEN_APPS = ["personal", "core", "operaciones", "supervision", "capacitacion", "incidentes", "inventario",
+              "herramientas", "flota", "finanzas", "auth"]
+_get_app_list = admin.AdminSite.get_app_list
+
+
+def _app_list_ordenada(self, request, app_label=None):
+    apps = _get_app_list(self, request, app_label)
+    return sorted(apps, key=lambda a: ORDEN_APPS.index(a["app_label"]) if a["app_label"] in ORDEN_APPS else 99)
+
+
+admin.AdminSite.get_app_list = _app_list_ordenada
 
 
 @admin.register(Parametros)
