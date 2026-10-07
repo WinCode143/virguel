@@ -27,6 +27,17 @@ from tablero.planificacion import capacidad, probabilidad_decodificador
 HOY = timezone.localdate()
 
 
+# En los tests, los usuarios nuevos ya aceptaron el aviso de privacidad (salvo que el test lo cambie).
+def _aceptar_privacidad(sender, instance, created, **kwargs):
+    if created:
+        from core.models import CuentaUsuario
+        CuentaUsuario.objects.get_or_create(usuario=instance, defaults={"acepto_privacidad": timezone.now()})
+
+
+from django.db.models.signals import post_save  # noqa: E402
+post_save.connect(_aceptar_privacidad, sender=User, dispatch_uid="tests_privacidad")
+
+
 def persona(legajo, rol="tecnico", **kw):
     return Persona.objects.create(legajo=legajo, nombre=legajo, apellido=legajo, rol=rol,
                                   fecha_ingreso=kw.pop("fecha_ingreso", HOY - timedelta(days=400)), **kw)
@@ -723,3 +734,89 @@ class ExportacionExcelTests(TestCase):
         wb = load_workbook(io.BytesIO(self.client.get("/tablero/productividad/excel/").content))
         self.assertNotIn("Supervisores", wb.sheetnames)
         self.assertEqual(self.client.get("/tablero/productividad/general/").status_code, 403)
+
+
+
+class LoginYCredencialesTests(TestCase):
+    def setUp(self):
+        self.ger = User.objects.create_user("ger", password="clave-segura-1")
+        self.ger.groups.add(Group.objects.create(name="Gerencia"))
+        self.sup = persona("S1", rol="supervisor", usuario=User.objects.create_user("sup", password="clave-segura-1"))
+        self.t = persona("T7", supervisor=self.sup, dni="30111222",
+                         usuario=User.objects.create_user("tecnico7", password="clave-segura-1"))
+
+    def ingresar(self, usuario, clave="clave-segura-1"):
+        return self.client.post("/login/", {"username": usuario, "password": clave})
+
+    def test_ingreso_con_usuario_legajo_o_dni(self):
+        for ident in ("tecnico7", "T7", "t7", "30111222"):
+            self.client.logout()
+            self.assertEqual(self.ingresar(ident).status_code, 302, ident)
+
+    def test_bloqueo_tras_5_intentos_y_registro(self):
+        from core.models import CuentaUsuario, RegistroAcceso
+        for _ in range(5):
+            self.ingresar("T7", "mala")
+        r = self.ingresar("T7")  # aun con la clave correcta, está bloqueado
+        self.assertContains(r, "bloqueado")
+        self.assertTrue(CuentaUsuario.objects.get(usuario=self.t.usuario).bloqueada)
+        self.assertEqual(RegistroAcceso.objects.filter(evento="fallido").count(), 5)
+        self.assertTrue(RegistroAcceso.objects.filter(evento="bloqueo").exists())
+
+    def test_blanqueo_obliga_a_cambiar_la_clave(self):
+        from core.models import CuentaUsuario
+        self.client.force_login(self.ger)
+        self.client.post(f"/personal/usuarios/{self.t.id}/", {"accion": "blanquear"})
+        clave = self.client.get(f"/personal/usuarios/{self.t.id}/").context["clave"]["clave"]
+        self.assertEqual(len(clave), 14)
+        self.client.logout()
+        self.assertEqual(self.ingresar("T7", clave).status_code, 302)
+        r = self.client.get("/app/")
+        self.assertRedirects(r, "/cuenta/clave/?next=/app/", fetch_redirect_response=False)
+        self.client.post("/cuenta/clave/", {"old_password": clave, "new_password1": "Otra-Clave-77",
+                                            "new_password2": "Otra-Clave-77"})
+        self.assertFalse(CuentaUsuario.objects.get(usuario=self.t.usuario).debe_cambiar_clave)
+        self.assertEqual(self.client.get("/app/").status_code, 200)
+
+    def test_crear_acceso_y_permisos_del_supervisor(self):
+        nuevo = persona("T8", supervisor=self.sup)
+        self.client.force_login(self.sup.usuario)
+        self.client.post(f"/personal/usuarios/{nuevo.id}/", {"accion": "crear"})  # sólo gerencia crea accesos
+        nuevo.refresh_from_db()
+        self.assertIsNone(nuevo.usuario)
+        r = self.client.post(f"/personal/usuarios/{self.t.id}/", {"accion": "blanquear"})  # su equipo: sí
+        self.assertEqual(r.status_code, 302)
+        ajeno = persona("T9")
+        self.assertEqual(self.client.get(f"/personal/usuarios/{ajeno.id}/").status_code, 404)
+        self.client.force_login(self.ger)
+        self.client.post(f"/personal/usuarios/{nuevo.id}/", {"accion": "crear", "usuario": "t8"})
+        nuevo.refresh_from_db()
+        self.assertEqual(nuevo.usuario.username, "t8")
+        self.assertTrue(nuevo.usuario.groups.filter(name="Técnicos").exists())
+
+    def test_egreso_da_de_baja_el_acceso(self):
+        self.t.activo, self.t.fecha_egreso = False, HOY
+        self.t.save()
+        self.t.usuario.refresh_from_db()
+        self.assertFalse(self.t.usuario.is_active)
+        self.assertContains(self.ingresar("T7"), "dado de baja")
+
+    def test_privacidad_se_pide_a_tecnicos(self):
+        from core.models import CuentaUsuario
+        CuentaUsuario.objects.filter(usuario=self.t.usuario).update(acepto_privacidad=None)
+        self.client.force_login(self.t.usuario)
+        self.assertRedirects(self.client.get("/app/"), "/cuenta/privacidad/?next=/app/", fetch_redirect_response=False)
+        self.client.post("/cuenta/privacidad/", {"acepto": "1", "next": "/app/"})
+        self.assertEqual(self.client.get("/app/").status_code, 200)
+
+    def test_rol_deposito_solo_inventario(self):
+        from django.core.management import call_command
+        call_command("configurar_grupos", stdout=io.StringIO())
+        dep = User.objects.create_user("dep", password="x", is_staff=True)
+        dep.groups.add(Group.objects.get(name="Depósito"))
+        self.client.force_login(dep)
+        self.assertRedirects(self.client.get("/"), "/tablero/pedidos/", fetch_redirect_response=False)
+        self.assertEqual(self.client.get("/tablero/pedidos/").status_code, 200)
+        self.assertEqual(self.client.get("/tablero/stock/").status_code, 200)
+        self.assertEqual(self.client.get("/tablero/finanzas/").status_code, 403)
+        self.assertEqual(self.client.get("/tablero/tecnicos/").status_code, 403)

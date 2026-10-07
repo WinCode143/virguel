@@ -1,0 +1,23 @@
+{% extends "escritorio.html" %}{% load ui %}
+{% block titulo %}Usuarios y accesos · Virguel{% endblock %}
+{% block encabezado %}<h1>Usuarios y accesos</h1><p class="sub">{% if es_supervisor %}Accesos de tu equipo: podés blanquear la clave o desbloquear a un técnico.{% else %}Quién puede entrar al sistema, con qué rol y en qué estado está su clave. Las claves nunca se muestran: se blanquean y se entrega una temporal.{% endif %}</p>{% endblock %}
+{% block contenido %}
+<form class="filtros" method="get">
+  <label>Buscar<input name="q" value="{{ q }}" placeholder="Apellido, legajo o usuario"></label>
+  <label>Estado<select name="estado" onchange="this.form.submit()"><option value="">Todos</option>{% for e in estados %}<option {% if e == filtro %}selected{% endif %}>{{ e }}</option>{% endfor %}</select></label>
+  <button class="btn sec">{% icono 'buscar' 'sm' %} Buscar</button>
+  {% if es_gerencia %}<a class="btn sec" href="{% url 'personal:accesos' %}">{% icono 'lista' 'sm' %} Registro de accesos</a>{% endif %}
+</form>
+{% if sin_acceso and es_gerencia %}<div class="card" style="border-color:var(--aviso)"><span class="estado aviso">{{ sin_acceso }} persona{{ sin_acceso|pluralize:"s" }} activa{{ sin_acceso|pluralize }} sin acceso</span> <span class="muted">— entrá a la persona y tocá "Crear acceso".</span></div>{% endif %}
+<div class="card"><div class="tabla-scroll"><table>
+<thead><tr><th>Persona</th><th>Legajo</th><th>Rol</th><th>Usuario</th><th>Estado del acceso</th><th>Último ingreso</th><th></th></tr></thead>
+<tbody>{% for f in filas %}<tr>
+<td><a href="{% url 'personal:legajo' f.p.id %}">{{ f.p.apellido }}, {{ f.p.nombre }}</a>{% if not f.p.activo %} <span class="muted">(egresó)</span>{% endif %}</td>
+<td>{{ f.p.legajo }}</td><td>{{ f.p.get_rol_display }}{% if f.grupos %}<div class="muted" style="font-size:.76rem">{{ f.grupos }}</div>{% endif %}</td>
+<td>{{ f.u.username|default:"—" }}</td><td><span class="estado {{ f.estado.0 }}">{{ f.estado.1 }}</span></td>
+<td>{{ f.u.last_login|date:"d/m/Y H:i"|default:"nunca" }}</td>
+<td><a class="btn sec" href="{% url 'personal:usuario' f.p.id %}">Gestionar</a></td></tr>
+{% empty %}<tr><td colspan="7" class="vacio">Sin resultados.</td></tr>{% endfor %}</tbody></table></div></div>
+{% if externos %}<div class="card"><h2>Usuarios sin legajo</h2><p class="muted" style="margin-top:-.5rem;font-size:.85rem">Cuentas técnicas (p. ej. el administrador). Se gestionan en la carga de datos.</p>
+<table><tbody>{% for u in externos %}<tr><td>{{ u.username }}</td><td>{% if u.is_superuser %}Superusuario{% endif %} {{ u.groups.all|join:", " }}</td><td>{{ u.last_login|date:"d/m/Y H:i"|default:"nunca" }}</td><td><a href="{% url 'admin:auth_user_change' u.id %}">editar</a></td></tr>{% endfor %}</tbody></table></div>{% endif %}
+{% endblock %}

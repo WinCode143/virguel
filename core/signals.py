@@ -38,3 +38,16 @@ def _control_recibido(sender, instance, created, raw=False, **kwargs):
         notificar(instance.tecnico, f"Control de tu supervisor: {instance.puntaje}/5",
                   ("Detectó un desvío. " if instance.desvio_detectado else "") + instance.get_tipo_display(),
                   "/app/legajo/")
+
+
+@receiver(pre_save, sender="core.Persona")
+def _baja_de_acceso_al_egresar(sender, instance, raw=False, **kwargs):
+    """Si la persona egresa o se desactiva, su acceso al sistema se da de baja automáticamente."""
+    if raw or not instance.usuario_id:
+        return
+    if (not instance.activo or instance.fecha_egreso) and instance.usuario.is_active:
+        instance.usuario.is_active = False
+        instance.usuario.save(update_fields=["is_active"])
+        from .models import RegistroAcceso
+        RegistroAcceso.objects.create(usuario=instance.usuario, usuario_ingresado=instance.usuario.username,
+                                      evento=RegistroAcceso.Evento.ADMIN, detalle="Baja automática por egreso")

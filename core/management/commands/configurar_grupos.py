@@ -4,6 +4,7 @@
 
 * Gerencia: todo lo del ERP + alta de usuarios.
 * Administración: todo lo del ERP salvo parámetros, indicadores y usuarios.
+* Depósito: inventario, partes de técnicos, pedidos y herramientas.
 * Supervisores / Técnicos: sin acceso al admin (usan la app y los tableros).
 """
 from django.contrib.auth.models import Group, Permission
@@ -23,6 +24,8 @@ class Command(BaseCommand):
         ger.permissions.set(list(erp) + list(usuarios))
         adm, _ = Group.objects.get_or_create(name="Administración")
         adm.permissions.set(erp.exclude(content_type__model__in=["parametros", "indicador"]))
+        dep, _ = Group.objects.get_or_create(name="Depósito")
+        dep.permissions.set(Permission.objects.filter(content_type__app_label__in=["inventario", "herramientas"]))
         for nombre in ("Supervisores", "Técnicos"):
             Group.objects.get_or_create(name=nombre)
         self.stdout.write(self.style.SUCCESS(

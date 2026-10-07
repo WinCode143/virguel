@@ -8,5 +8,7 @@
   <a class="accion" href="{% url 'movil:legajo' %}">{% icono 'legajo' %}Mi legajo<small>controles y sanciones</small></a>
   <a class="accion" href="{% url 'movil:epp' %}">{% icono 'casco' %}Mi EPP<small>equipo de seguridad</small></a>
   <a class="accion" href="{% url 'movil:notificaciones' %}">{% icono 'campana' %}Notificaciones<small>{{ notificaciones_sin_leer|default:0 }} sin leer</small></a>
+  <a class="accion" href="{% url 'cambiar_clave' %}">{% icono 'llave' %}Cambiar clave<small>acceso al sistema</small></a>
+  <a class="accion" href="{% url 'privacidad' %}">{% icono 'escudo' %}Privacidad<small>qué datos se registran</small></a>
 </div>
 {% endblock %}

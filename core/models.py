@@ -294,3 +294,60 @@ class Indicador(models.Model):
             return 100.0 if (v >= meta if self.mayor_es_mejor else v <= meta) else 0.0
         frac = (v - minimo) / (meta - minimo)
         return max(0.0, min(100.0, frac * 100))
+
+
+class CuentaUsuario(models.Model):
+    """Estado de seguridad de cada acceso al sistema (complementa al usuario de Django)."""
+
+    usuario = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="cuenta")
+    debe_cambiar_clave = models.BooleanField(
+        default=False, help_text="Al ingresar se le pide elegir una clave propia (primer ingreso o tras un blanqueo).")
+    ultimo_cambio_clave = models.DateTimeField(null=True, blank=True)
+    intentos_fallidos = models.PositiveSmallIntegerField(default=0)
+    bloqueado_hasta = models.DateTimeField(null=True, blank=True)
+    acepto_privacidad = models.DateTimeField(null=True, blank=True,
+                                             help_text="Cuándo aceptó el aviso de privacidad (uso de ubicación y datos).")
+
+    class Meta:
+        verbose_name = "Cuenta de usuario"
+        verbose_name_plural = "Cuentas de usuario"
+
+    def __str__(self):
+        return str(self.usuario)
+
+    @property
+    def bloqueada(self) -> bool:
+        return bool(self.bloqueado_hasta and self.bloqueado_hasta > timezone.now())
+
+    @classmethod
+    def de(cls, user):
+        return cls.objects.get_or_create(usuario=user)[0]
+
+
+class RegistroAcceso(models.Model):
+    """Auditoría de ingresos, salidas e intentos fallidos."""
+
+    class Evento(models.TextChoices):
+        INGRESO = "ingreso", "Ingreso"
+        SALIDA = "salida", "Salida"
+        FALLIDO = "fallido", "Intento fallido"
+        BLOQUEO = "bloqueo", "Cuenta bloqueada"
+        CAMBIO_CLAVE = "cambio_clave", "Cambio de clave"
+        BLANQUEO = "blanqueo", "Blanqueo de clave (gerencia)"
+        ADMIN = "admin", "Cambio de acceso (gerencia)"
+
+    fecha = models.DateTimeField(auto_now_add=True, db_index=True)
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                related_name="accesos")
+    usuario_ingresado = models.CharField(max_length=150, blank=True, help_text="Lo que se escribió en 'usuario'.")
+    evento = models.CharField(max_length=15, choices=Evento.choices)
+    ip = models.GenericIPAddressField(null=True, blank=True)
+    dispositivo = models.CharField(max_length=200, blank=True)
+    detalle = models.CharField(max_length=200, blank=True)
+    hecho_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                  related_name="acciones_sobre_accesos")
+
+    class Meta:
+        ordering = ["-fecha"]
+        verbose_name = "Registro de acceso"
+        verbose_name_plural = "Registro de accesos"

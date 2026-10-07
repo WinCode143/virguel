@@ -7,4 +7,4 @@ class CoreConfig(AppConfig):
     verbose_name = "Configuración, personas y clientes"
 
     def ready(self):
-        from . import signals  # noqa: F401
+        from . import autenticacion, signals  # noqa: F401

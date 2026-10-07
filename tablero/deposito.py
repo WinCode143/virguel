@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from core.models import Persona
 from core.notificaciones import notificar
-from core.roles import GERENCIA, SUPERVISOR, persona_de, requiere_rol, rol_de
+from core.roles import DEPOSITO, GERENCIA, SUPERVISOR, persona_de, requiere_rol, rol_de
 from inventario.models import Material, MovimientoStockTecnico, PedidoMaterial
 from inventario.services import StockInsuficiente
 from inventario.stock_tecnico import devolver, entregar, partes_paradas
@@ -22,7 +22,7 @@ def _dec(v):
         return None
 
 
-@requiere_rol(GERENCIA)
+@requiere_rol(GERENCIA, DEPOSITO)
 def pedidos(request):
     if request.method == "POST":
         ped = get_object_or_404(PedidoMaterial.objects.prefetch_related("items__material"), pk=request.POST.get("pedido"))
@@ -65,12 +65,12 @@ def pedidos(request):
         .select_related("tecnico")[:30]})
 
 
-@requiere_rol(GERENCIA, SUPERVISOR)
+@requiere_rol(GERENCIA, SUPERVISOR, DEPOSITO)
 def stock_tecnicos(request):
     tecnicos = Persona.objects.filter(rol="tecnico", activo=True)
     if rol_de(request.user) == SUPERVISOR:
         tecnicos = tecnicos.filter(supervisor=persona_de(request.user))
-    if request.method == "POST" and rol_de(request.user) == GERENCIA:
+    if request.method == "POST" and rol_de(request.user) in (GERENCIA, DEPOSITO):
         t = get_object_or_404(tecnicos, pk=request.POST.get("tecnico"))
         m = get_object_or_404(Material, pk=request.POST.get("material"))
         cant = _dec(request.POST.get("cantidad"))

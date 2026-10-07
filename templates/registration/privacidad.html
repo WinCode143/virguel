@@ -1,0 +1,22 @@
+{% extends "registration/cuenta_base.html" %}
+{% block titulo %}Privacidad · Virguel{% endblock %}
+{% block ancho %}560px{% endblock %}
+{% block tarjeta %}
+<h1 style="font-size:1.2rem;margin-bottom:.8rem">Aviso de privacidad</h1>
+<div style="font-size:.92rem;color:var(--ink-2)">
+<p>Para usar la app de campo, Virguel registra los siguientes datos <b>sólo durante tu jornada laboral</b>:</p>
+<ul style="padding-left:1.1rem;margin:0 0 .8rem">
+  <li><b>Ubicación</b> al fichar entrada y salida, al cerrar una orden y al cargar un control. No se te sigue durante el día.</li>
+  <li><b>Fotos</b> del trabajo, firma y datos del cliente que recibe el trabajo.</li>
+  <li><b>Horarios</b> de fichada, órdenes realizadas, materiales usados y métricas de desempeño.</li>
+</ul>
+<p>Los datos se usan para la gestión de la operación y del personal, no se ceden a terceros y podés pedir acceso o
+rectificación a Recursos Humanos (Ley 25.326 de Protección de Datos Personales).</p>
+<p>Las encuestas sobre tu supervisor son <b>confidenciales</b>: él sólo ve promedios del equipo.</p>
+</div>
+<form method="post">{% csrf_token %}<input type="hidden" name="next" value="{{ next }}">
+  {% if cuenta.acepto_privacidad %}<p class="estado ok">Aceptado el {{ cuenta.acepto_privacidad|date:"d/m/Y" }}</p>
+  {% else %}<button class="btn" name="acepto" value="1">Entendido, acepto</button>{% endif %}
+</form>
+{% endblock %}
+{% block pie %}Texto a validar por el área legal de Virguel.{% endblock %}

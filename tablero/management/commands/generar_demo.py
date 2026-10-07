@@ -233,6 +233,10 @@ class Command(BaseCommand):
             p.prod_individual = r.uniform(0.9, 1.1)
             self.tecs.append(p)
         self.perfil_de = {t.id: t.perfil for t in self.tecs}
+        # usuarios demo: aviso de privacidad ya aceptado (para poder recorrer la app directo)
+        from core.models import CuentaUsuario
+        CuentaUsuario.objects.bulk_create([CuentaUsuario(usuario=u, acepto_privacidad=timezone.now())
+                                           for u in User.objects.all()], ignore_conflicts=True)
         # fecha de capacitación en producción para 'capacitar' (hace poco, aún sin efecto), 'mejora' y 'riesgo'
         self.fecha_cap = {}
         for t in self.tecs:

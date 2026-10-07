@@ -1,5 +1,7 @@
 {% extends "movil/base_movil.html" %}{% load formato %}
-{% block titulo_movil %}Mis indicadores (30 días){% endblock %}
+{% block titulo_movil %}Mis indicadores (30 días)<div class="acciones"><a class="accion" href="{% url 'personal:usuarios' %}">{% load ui %}{% icono 'llave' %}Accesos de mi equipo<small>blanquear claves</small></a>
+<a class="accion" href="{% url 'cambiar_clave' %}">{% icono 'usuario' %}Cambiar mi clave<small>acceso al sistema</small></a></div>
+{% endblock %}
 {% block contenido %}
 <div class="card"><div class="kpi"><div class="etq">Mi índice de gestión (IGS)</div>
 <div class="valor"><span class="estado {{ tb.estado }}">{{ tb.indice|num:0 }} / 100</span></div></div>
@@ -19,4 +21,6 @@
 </tbody></table></div>
 <p class="muted" style="font-size:.85rem">Las respuestas de la encuesta son anónimas: sólo ves el promedio.</p>
 {% else %}<p class="muted">Sin datos todavía.</p>{% endif %}
+<div class="acciones"><a class="accion" href="{% url 'personal:usuarios' %}">{% load ui %}{% icono 'llave' %}Accesos de mi equipo<small>blanquear claves</small></a>
+<a class="accion" href="{% url 'cambiar_clave' %}">{% icono 'usuario' %}Cambiar mi clave<small>acceso al sistema</small></a></div>
 {% endblock %}

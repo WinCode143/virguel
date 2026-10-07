@@ -1,0 +1,16 @@
+{% extends "escritorio.html" %}
+{% block titulo %}Registro de accesos · Virguel{% endblock %}
+{% block encabezado %}<h1>Registro de accesos</h1><p class="sub">Auditoría: ingresos, salidas, intentos fallidos, bloqueos, blanqueos y cambios de rol. <a href="{% url 'personal:usuarios' %}">Volver a usuarios</a></p>{% endblock %}
+{% block contenido %}
+<div class="grid g3">
+  <div class="card kpi"><div class="etq">Ingresos hoy</div><div class="valor">{{ ingresos_hoy }}</div></div>
+  <div class="card kpi"><div class="etq">Intentos fallidos hoy</div><div class="valor">{{ fallidos_hoy }}</div></div>
+  <div class="card kpi"><div class="etq">Bloqueos hoy</div><div class="valor">{% if bloqueos_hoy %}<span class="estado critico">{{ bloqueos_hoy }}</span>{% else %}0{% endif %}</div></div>
+</div>
+<form class="filtros" method="get" style="margin-top:1rem"><label>Evento<select name="evento" onchange="this.form.submit()"><option value="">Todos</option>{% for k, v in eventos %}<option value="{{ k }}" {% if k == evento %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></label></form>
+<div class="card"><div class="tabla-scroll" style="max-height:70vh"><table><thead><tr><th>Fecha</th><th>Usuario</th><th>Evento</th><th>Detalle</th><th>IP</th><th>Dispositivo</th><th>Hecho por</th></tr></thead>
+<tbody>{% for r in registros %}<tr><td>{{ r.fecha|date:"d/m H:i:s" }}</td><td>{{ r.usuario.username|default:r.usuario_ingresado }}</td>
+<td><span class="estado {% if r.evento == 'fallido' or r.evento == 'bloqueo' %}critico{% elif r.evento == 'ingreso' %}ok{% else %}info{% endif %}">{{ r.get_evento_display }}</span></td>
+<td>{{ r.detalle }}</td><td>{{ r.ip|default:"" }}</td><td class="muted" style="font-size:.78rem">{{ r.dispositivo|truncatechars:50 }}</td><td>{{ r.hecho_por.username|default:"" }}</td></tr>
+{% empty %}<tr><td colspan="7" class="vacio">Sin registros.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

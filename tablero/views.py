@@ -15,7 +15,7 @@ from django.views.decorators.http import require_POST
 from capacitacion.evaluacion import Diagnostico, evaluar_tecnicos
 from capacitacion.models import EvaluacionHistorica, Participacion
 from core.models import Alerta, Parametros, Persona, Zona
-from core.roles import GERENCIA, SUPERVISOR, TECNICO, persona_de, requiere_rol, rol_de
+from core.roles import DEPOSITO, GERENCIA, SUPERVISOR, TECNICO, persona_de, requiere_rol, rol_de
 from finanzas.models import CostoFijo, Egreso
 from finanzas.proyeccion import historico_mensual, proyectar
 from flota.models import ServiceRealizado, Vehiculo, proximos_services
@@ -71,6 +71,8 @@ def raiz(request):
     rol = rol_de(request.user)
     if rol is None:
         return redirect("login")
+    if rol == DEPOSITO:
+        return redirect("tablero:pedidos")
     es_celular = "Mobi" in request.headers.get("User-Agent", "")
     if rol == TECNICO or (rol == SUPERVISOR and es_celular):
         return redirect("movil:inicio")
@@ -340,7 +342,7 @@ def incidentes(request):
 
 
 # ---------------------------------------------------------------- 4. herramientas / EPP
-@requiere_rol(*TODOS)
+@requiere_rol(GERENCIA, SUPERVISOR, DEPOSITO)
 def herramientas(request):
     hoy = timezone.localdate()
     obligatorios = list(Elemento.objects.filter(obligatorio_tecnicos=True))
@@ -418,7 +420,7 @@ def finanzas(request):
 
 
 # ---------------------------------------------------------------- 8. stock
-@requiere_rol(*TODOS)
+@requiere_rol(GERENCIA, SUPERVISOR, DEPOSITO)
 def stock(request):
     hoy = timezone.localdate()
     sd = stock_diario(hoy)

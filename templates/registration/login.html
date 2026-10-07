@@ -1,21 +1,16 @@
-{% extends "base.html" %}{% load static ui %}
+{% extends "registration/cuenta_base.html" %}{% load ui %}
 {% block titulo %}Ingresar · Virguel{% endblock %}
-{% block cuerpo %}
-<div class="login-wrap"><main class="login">
-  <div class="marca-login"><img src="{% static 'img/icono.svg' %}" alt=""><div><b>Virguel</b><small>Control de personal y operación</small></div></div>
-  <div class="card">
-    <h1 style="font-size:1.2rem;margin-bottom:1.1rem">Ingresar</h1>
-    <form method="post">{% csrf_token %}
-      {% if form.errors %}<p class="estado critico" style="margin-bottom:1rem">Usuario o contraseña incorrectos</p>{% endif %}
-      <label for="id_username">Usuario</label>
-      <input id="id_username" name="username" autocomplete="username" autocapitalize="none" autofocus required>
-      <label for="id_password">Contraseña</label>
-      <input id="id_password" name="password" type="password" autocomplete="current-password" required>
-      <input type="hidden" name="next" value="{{ next }}">
-      <button class="btn">Ingresar {% icono 'flecha-der' %}</button>
-    </form>
-  </div>
-  <div class="pie"><span class="muted" style="font-size:.84rem">Técnicos y supervisores: app del celular · Gerencia: tablero</span>
-    <button class="icono-btn" type="button" data-tema-actual>{% icono 'auto' %}</button></div>
-</main></div>
+{% block tarjeta %}
+<h1 style="font-size:1.2rem;margin-bottom:1.1rem">Ingresar</h1>
+<form method="post">{% csrf_token %}
+  {% for e in form.non_field_errors %}<p class="estado critico" style="margin-bottom:1rem;white-space:normal;border-radius:10px;padding:.5rem .7rem">{{ e }}</p>{% endfor %}
+  <label for="id_username">Usuario, legajo o DNI</label>
+  <input id="id_username" name="username" value="{{ form.username.value|default:'' }}" autocomplete="username" autocapitalize="none" autofocus required>
+  <label for="id_password">Contraseña</label>
+  <input id="id_password" name="password" type="password" autocomplete="current-password" required>
+  <input type="hidden" name="next" value="{{ next }}">
+  <button class="btn">Ingresar {% icono 'flecha-der' %}</button>
+</form>
+<p style="margin:1rem 0 0;font-size:.88rem"><a href="{% url 'password_reset' %}">¿Olvidaste tu clave?</a></p>
 {% endblock %}
+{% block pie %}Técnicos y supervisores: app del celular · Gerencia: tablero{% endblock %}

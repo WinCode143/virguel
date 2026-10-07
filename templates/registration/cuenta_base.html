@@ -1,0 +1,9 @@
+{% extends "base.html" %}{% load static ui %}
+{% block cuerpo %}
+<div class="login-wrap"><main class="login" style="max-width:{% block ancho %}420px{% endblock %}">
+  <div class="marca-login"><img src="{% static 'img/icono.svg' %}" alt=""><div><b>Virguel</b><small>Control de personal y operación</small></div></div>
+  <div class="card">{% block tarjeta %}{% endblock %}</div>
+  <div class="pie"><span class="muted" style="font-size:.84rem">{% block pie %}{% endblock %}</span>
+    <button class="icono-btn" type="button" data-tema-actual>{% icono 'auto' %}</button></div>
+</main></div>
+{% endblock %}

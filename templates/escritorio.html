@@ -4,12 +4,21 @@
   <aside class="sidebar" id="sidebar" aria-label="Menú principal">
     <a class="marca" href="{% url 'tablero:inicio' %}"><img class="logo" src="{% static 'img/icono.svg' %}" alt=""><span><b>Virguel</b><small>Control de personal y operación</small></span></a>
     <nav class="nav">
+      {% if es_deposito %}
+      <div class="nav-grupo">
+        {% nav 'tablero:pedidos' 'Pedidos de partes' 'carrito' %}
+        {% nav 'tablero:stock_tecnicos' 'Partes en técnicos' 'llave' %}
+        {% nav 'tablero:stock' 'Stock y demanda' 'caja' %}
+        {% nav 'tablero:herramientas' 'Herramientas y EPP' 'casco' %}
+        <a class="nav-item" href="{% url 'admin:index' %}">{% icono 'ajustes' %}<span>Carga de datos</span></a>
+      </div>
+      {% else %}
       <div class="nav-grupo">
         {% nav 'tablero:inicio' 'Resumen' 'home' %}
         {% nav 'tablero:alertas' 'Alertas' 'alerta' alertas_criticas %}
       </div>
 
-      <details class="nav-grupo" {% grupo_abierto 'personal:hoy' 'personal:asistencia' 'personal:legajos' 'personal:legajo' 'personal:documentos' 'personal:dotacion' 'personal:parte' %}>
+      <details class="nav-grupo" {% grupo_abierto 'personal:hoy' 'personal:asistencia' 'personal:legajos' 'personal:legajo' 'personal:documentos' 'personal:dotacion' 'personal:parte' 'personal:usuarios' 'personal:usuario' %}>
         <summary>Personal {% icono 'abajo' %}</summary>
         {% nav 'personal:hoy' 'Asistencia de hoy' 'reloj' %}
         {% nav 'personal:asistencia' 'Presentismo y ausencias' 'calendario' %}
@@ -17,6 +26,7 @@
         {% nav 'personal:documentos' 'Documentación' 'documento' %}
         {% if es_gerencia %}{% nav 'personal:dotacion' 'Dotación y rotación' 'personas' %}{% endif %}
         {% nav 'personal:parte' 'Parte diario (mail)' 'correo' %}
+        {% if es_supervisor %}{% nav 'personal:usuarios' 'Accesos de mi equipo' 'llave' %}{% endif %}
       </details>
 
       <details class="nav-grupo" {% grupo_abierto 'tablero:prod_general' 'tablero:prod_tecnicos' 'tablero:prod_supervisores' 'tablero:prod_ficha' %}>
@@ -58,12 +68,14 @@
       </details>
 
       {% if es_gerencia %}
-      <details class="nav-grupo" {% grupo_abierto 'tablero:importar' 'tablero:powerbi' %}>
+      <details class="nav-grupo" {% grupo_abierto 'tablero:importar' 'tablero:powerbi' 'personal:usuarios' 'personal:usuario' 'personal:accesos' %}>
         <summary>Administración {% icono 'abajo' %}</summary>
+        {% nav 'personal:usuarios' 'Usuarios y accesos' 'llave' %}
         {% nav 'tablero:importar' 'Importar Excel / CSV' 'subir' %}
         {% nav 'tablero:powerbi' 'Power BI y exportar' 'base' %}
         <a class="nav-item" href="{% url 'admin:index' %}">{% icono 'ajustes' %}<span>Carga de datos</span></a>
       </details>
+      {% endif %}
       {% endif %}
       {% if es_supervisor %}
       <div class="nav-grupo"><a class="nav-item" href="{% url 'movil:inicio' %}">{% icono 'telefono' %}<span>Abrir la app de campo</span></a></div>
@@ -92,7 +104,7 @@
       <a class="icono-btn" href="{% url 'tablero:alertas' %}" aria-label="Alertas ({{ alertas_abiertas|default:0 }})" title="Alertas">{% icono 'campana' %}{% if alertas_criticas %}<span class="badge">{{ alertas_criticas }}</span>{% endif %}</a>
       <div class="usuario">
         <span class="avatar" aria-hidden="true">{% firstof request.user.first_name|slice:":1" request.user.username|slice:":1" %}{{ request.user.last_name|slice:":1" }}</span>
-        <span class="quien">{{ request.user.get_full_name|default:request.user.username }}<small>{% if es_gerencia %}Gerencia{% elif es_supervisor %}Supervisor{% endif %}</small></span>
+        <span class="quien">{{ request.user.get_full_name|default:request.user.username }}<small>{% if es_gerencia %}Gerencia{% elif es_supervisor %}Supervisor{% elif es_deposito %}Depósito{% endif %} · <a href="{% url 'cambiar_clave' %}">cambiar clave</a></small></span>
         <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="icono-btn" aria-label="Salir" title="Salir">{% icono 'salir' %}</button></form>
       </div>
     </header>
