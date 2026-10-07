@@ -1,3 +1,4 @@
+from datetime import time
 from decimal import Decimal
 
 from django.conf import settings
@@ -12,6 +13,19 @@ class Parametros(models.Model):
     Todos los cálculos del sistema leen de aquí, así gerencia puede ajustar
     supuestos (p. ej. 50% vs 60% de decodificadores) sin tocar código.
     """
+
+    # ---- Control de personal
+    tolerancia_tarde_minutos = models.PositiveIntegerField(
+        "Tolerancia de llegada tarde (minutos)", default=10)
+    horas_jornada = models.DecimalField("Horas de una jornada normal (incluye almuerzo)", max_digits=4,
+                                        decimal_places=1, default=Decimal("9"),
+                                        help_text="Lo que exceda esto entre entrada y salida cuenta como hora extra.")
+    destinatarios_parte = models.TextField(
+        "Mails que reciben el parte diario completo", blank=True,
+        help_text="Uno por línea. Los supervisores reciben además el parte de su equipo en su propio mail.")
+    usar_hectareas = models.BooleanField(
+        "Medir hectáreas cubiertas", default=False,
+        help_text="Opcional. Si está apagado, la capacidad se calcula sólo por clientes por técnico.")
 
     dias_max_stock = models.PositiveIntegerField(
         "Días máximos de stock parado", default=60,
@@ -92,7 +106,13 @@ class Persona(models.Model):
     email = models.EmailField(blank=True)
     fecha_ingreso = models.DateField(default=timezone.localdate)
     fecha_egreso = models.DateField(null=True, blank=True)
+    motivo_egreso = models.CharField(max_length=20, blank=True, choices=[
+        ("renuncia", "Renuncia"), ("despido", "Despido"), ("despido_causa", "Despido con causa"),
+        ("fin_contrato", "Fin de contrato"), ("jubilacion", "Jubilación"), ("otro", "Otro")])
     activo = models.BooleanField(default=True)
+    hora_entrada = models.TimeField("Horario de entrada", default=time(8, 0))
+    hora_salida = models.TimeField("Horario de salida", default=time(17, 0))
+    trabaja_sabados = models.BooleanField(default=True)
     usuario = models.OneToOneField(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="persona")
 
@@ -164,6 +184,7 @@ class Alerta(models.Model):
         CRITICA = "critica", "Crítica"
 
     class Modulo(models.TextChoices):
+        PERSONAL = "personal", "Personal / asistencia"
         STOCK = "stock", "Inventario / stock"
         FLOTA = "flota", "Flota"
         EPP = "epp", "Herramientas / EPP"

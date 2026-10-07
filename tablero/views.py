@@ -131,6 +131,23 @@ def inicio(request):
         "g_prod": g_prod, "g_diag": g_diag, "prob": probabilidad_decodificador(hoy), "p": Parametros.actual(),
     }
     ctx["alertas"] = sorted(Alerta.objects.filter(resuelta=False), key=lambda a: (a.nivel != "critica", -a.id))[:8]
+    # Control de personal: foto de hoy y presentismo del mes
+    from personal.indicadores import estado_del_dia, resumen
+    from personal.views import personal_visible
+    personas = personal_visible(request)
+    estado = estado_del_dia(hoy, personas)
+    res_mes = resumen(hoy.replace(day=1), hoy, personas)
+    pres = sum(r.presentes for r in res_mes)
+    base = sum(r.esperados - r.no_computables for r in res_mes)
+    ctx.update({
+        "per_total": sum(1 for e in estado if e.laborable or e.asistencia),
+        "per_presentes": sum(1 for e in estado if e.asistencia),
+        "per_sin_aviso": sum(1 for e in estado if e.situacion[1] == "Sin fichar y sin aviso"),
+        "per_tarde": sum(1 for e in estado if e.asistencia and e.asistencia.minutos_tarde),
+        "per_con_aviso": sum(1 for e in estado if not e.asistencia and e.novedad),
+        "per_presentismo_mes": pres / base if base else None,
+        "per_injustificadas_mes": sum(r.injustificadas for r in res_mes),
+    })
     return render(request, "tablero/inicio.html", ctx)
 
 
@@ -173,7 +190,7 @@ def operacion(request):
            "jornadas_calle": jornadas_calle, "ots_por_jornada": comp / jornadas_calle if jornadas_calle else 0,
            "retrabajos": ots.filter(es_retrabajo=True).count(),
            "ha_prom": (sum(ha.values()) / jornadas_calle) if jornadas_calle else 0,
-           "filas": filas}
+           "filas": filas, "p": Parametros.actual()}
     return render(request, "tablero/operacion.html", ctx)
 
 

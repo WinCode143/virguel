@@ -77,8 +77,15 @@ class StockTests(TestCase):
 
 
 class PlanificacionTests(TestCase):
+    def test_capacidad_sin_hectareas_es_tecnicos_por_clientes(self):
+        cap = capacidad(10, prob_min=0.5, prob_max=0.6)
+        self.assertEqual((cap.clientes_min, cap.clientes_max), (60, 60))
+        self.assertEqual((cap.deco_min, cap.deco_max), (30, 36))
+
     def test_capacidad_hectareas_y_clientes(self):
-        Parametros.actual()  # 5-6 ha por cuadrilla, 2 técnicos por cuadrilla, 6 clientes/técnico
+        par = Parametros.actual()  # 5-6 ha por cuadrilla, 2 técnicos por cuadrilla, 6 clientes/técnico
+        par.usar_hectareas = True
+        par.save()
         cap = capacidad(10, densidad=1.0, prob_min=0.5, prob_max=0.6)
         self.assertEqual(cap.cuadrillas, 5)
         self.assertEqual((cap.ha_min, cap.ha_max), (25, 30))
@@ -86,6 +93,9 @@ class PlanificacionTests(TestCase):
         self.assertEqual((cap.deco_min, cap.deco_max), (12.5, 18))
 
     def test_capacidad_limitada_por_tope_de_visitas(self):
+        par = Parametros.actual()
+        par.usar_hectareas = True
+        par.save()
         cap = capacidad(10, densidad=5.0)
         self.assertEqual(cap.clientes_max, 60)  # 10 técnicos x 6 visitas
 
@@ -381,3 +391,94 @@ class AsignacionTests(TestCase):
         self.assertEqual(nuevas, {"R": 6, "L": 2, "O": 4})  # los 4 que sobran van al sur
         self.assertEqual(len(prop["otra_zona"]), 4)
         self.assertEqual(prop["sin_asignar"], [])
+
+
+class ControlPersonalTests(TestCase):
+    def setUp(self):
+        from datetime import time
+        Parametros.actual()
+        self.sup = persona("S1", rol="supervisor", usuario=User.objects.create_user("sup", password="x"))
+        self.t = persona("T1", supervisor=self.sup, usuario=User.objects.create_user("tec", password="x"),
+                         fecha_ingreso=HOY - timedelta(days=400))
+        self.t.hora_entrada, self.t.hora_salida, self.t.trabaja_sabados = time(8, 0), time(17, 0), False
+        self.t.save()
+
+    def momento(self, d, h, m=0):
+        from datetime import datetime
+        return timezone.make_aware(datetime(d.year, d.month, d.day, h, m))
+
+    def lunes_pasado(self):
+        return HOY - timedelta(days=HOY.weekday() + 7)
+
+    def test_llegada_tarde_y_horas_extra(self):
+        from personal.models import Asistencia
+        d = self.lunes_pasado()
+        a = Asistencia.objects.create(persona=self.t, fecha=d, entrada=self.momento(d, 8, 25), salida=self.momento(d, 19, 25))
+        self.assertEqual(a.minutos_tarde, 25)
+        self.assertEqual(a.horas_trabajadas, Decimal("11.00"))
+        self.assertEqual(a.horas_extra, Decimal("2.00"))  # jornada normal de 9 h
+        b = Asistencia.objects.create(persona=self.t, fecha=d + timedelta(days=1), entrada=self.momento(d, 8, 9))
+        self.assertEqual(b.minutos_tarde, 0)  # dentro de la tolerancia de 10 min
+
+    def test_resumen_distingue_justificadas_injustificadas_y_vacaciones(self):
+        from personal.indicadores import resumen
+        from personal.models import Asistencia, Feriado, Novedad
+        lunes = self.lunes_pasado()
+        # semana lun–vie: lunes trabajó, martes enfermo, miércoles feriado, jueves vacaciones, viernes falta sin aviso
+        Asistencia.objects.create(persona=self.t, fecha=lunes, entrada=self.momento(lunes, 8))
+        Novedad.objects.create(persona=self.t, tipo="enfermedad", desde=lunes + timedelta(days=1),
+                               hasta=lunes + timedelta(days=1), estado="aprobada")
+        Feriado.objects.create(fecha=lunes + timedelta(days=2), nombre="Feriado")
+        Novedad.objects.create(persona=self.t, tipo="vacaciones", desde=lunes + timedelta(days=3),
+                               hasta=lunes + timedelta(days=3), estado="aprobada")
+        r = resumen(lunes, lunes + timedelta(days=4), [self.t])[0]
+        self.assertEqual((r.esperados, r.presentes, r.justificadas, r.injustificadas, r.no_computables),
+                         (4, 1, 2, 1, 1))
+        self.assertAlmostEqual(r.presentismo, 1 / 3)  # 1 presente de 3 días computables
+
+    def test_sin_control_de_asistencia_no_hay_faltas(self):
+        from personal.indicadores import resumen
+        r = resumen(HOY - timedelta(days=30), HOY, [self.t])[0]
+        self.assertEqual((r.esperados, r.injustificadas), (0, 0))
+
+    def test_fichar_desde_el_celular_con_hora_del_celular(self):
+        from personal.models import Asistencia
+        self.client.login(username="tec", password="x")
+        hace_un_rato = timezone.now() - timedelta(hours=2)
+        self.client.post("/app/jornada/iniciar/", {"lat": "-34.6", "lng": "-58.4",
+                                                   "_momento_cliente": hace_un_rato.isoformat()})
+        a = Asistencia.objects.get(persona=self.t)
+        self.assertEqual(a.entrada, hace_un_rato)
+        self.assertTrue(Jornada.objects.filter(tecnico=self.t, en_calle=True).exists())
+        self.client.post("/app/jornada/finalizar/", {})
+        a.refresh_from_db()
+        self.assertIsNotNone(a.salida)
+
+    def test_supervisor_aprueba_solo_avisos_de_su_equipo(self):
+        from personal.models import Novedad
+        ajeno = persona("T2")
+        n1 = Novedad.objects.create(persona=self.t, tipo="enfermedad")
+        n2 = Novedad.objects.create(persona=ajeno, tipo="enfermedad")
+        self.client.login(username="sup", password="x")
+        self.client.post("/app/novedades/", {"novedad": n1.id, "accion": "aprobar"})
+        self.assertEqual(self.client.post("/app/novedades/", {"novedad": n2.id, "accion": "aprobar"}).status_code, 404)
+        n1.refresh_from_db(); n2.refresh_from_db()
+        self.assertEqual((n1.estado, n2.estado), ("aprobada", "pendiente"))
+        self.assertEqual(self.client.get(f"/personal/legajos/{ajeno.id}/").status_code, 404)
+        self.assertEqual(self.client.get(f"/personal/legajos/{self.t.id}/").status_code, 200)
+
+    def test_tecnico_avisa_ausencia_con_certificado(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from personal.models import Novedad
+        self.client.login(username="tec", password="x")
+        r = self.client.post("/app/ausencia/", {"tipo": "enfermedad", "desde": HOY.isoformat(), "hasta": HOY.isoformat(),
+                                                "certificado": SimpleUploadedFile("c.jpg", b"img", content_type="image/jpeg")})
+        self.assertEqual(r.status_code, 302)
+        n = Novedad.objects.get(persona=self.t)
+        self.assertEqual(n.estado, "pendiente")
+        self.assertTrue(n.certificado.name.endswith(".jpg"))
+        n.certificado.delete()
+        # no puede autoasignarse una "suspensión" o "injustificada"
+        r = self.client.post("/app/ausencia/", {"tipo": "injustificada", "desde": HOY.isoformat(), "hasta": HOY.isoformat()})
+        self.assertEqual(r.status_code, 200)

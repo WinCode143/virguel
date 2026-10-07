@@ -1,0 +1,25 @@
+PARTE DIARIO {{ fecha|date:"d/m/Y" }}{% if supervisor %} — Equipo de {{ supervisor.nombre_completo }}{% endif %}
+
+PERSONAL
+- Presentes: {{ presentes }} de {{ dotacion }}
+- Sin fichar y sin aviso: {{ sin_aviso|length }}{% for e in sin_aviso %}
+    · {{ e.persona.nombre_completo }} ({{ e.persona.telefono|default:"sin teléfono" }}){% endfor %}
+- Llegaron tarde (más de {{ tolerancia }} min): {{ tarde|length }}{% for e in tarde %}
+    · {{ e.persona.nombre_completo }}: {{ e.asistencia.minutos_tarde }} min{% endfor %}
+- Ausentes con aviso: {{ con_aviso|length }}{% for e in con_aviso %}
+    · {{ e.persona.nombre_completo }}: {{ e.novedad.get_tipo_display }}{% endfor %}
+- Avisos de ausencia sin aprobar: {{ novedades_pend }}
+
+OPERACIÓN
+- Órdenes completadas: {{ completadas }} de {{ ejecutadas }} ejecutadas
+- Controles de supervisión: {{ informes }} ({{ desvios }} con desvío, {{ desvios_sin_accion }} sin acción)
+- Siniestros del día: {{ siniestros|length }}{% for s in siniestros %}
+    · {{ s.numero }} {{ s.get_tipo_display }} ({{ s.get_gravedad_display }}){% endfor %}
+{% if docs %}
+DOCUMENTACIÓN QUE VENCE EN 7 DÍAS{% for d in docs %}
+- {{ d.persona.nombre_completo }}: {{ d.tipo }} — {{ d.texto }}{% endfor %}
+{% endif %}{% if criticas %}
+ALERTAS CRÍTICAS{% for a in criticas %}
+- {{ a.titulo }}{% endfor %}
+{% endif %}
+Ver en el sistema: {{ url }}/personal/

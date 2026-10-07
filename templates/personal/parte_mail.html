@@ -1,0 +1,39 @@
+<!doctype html><html lang="es"><body style="margin:0;background:#f9f9f7;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#0b0b0b">
+<div style="max-width:640px;margin:0 auto;padding:20px 16px">
+<h1 style="font-size:20px;margin:0 0 4px">Parte diario · {{ fecha|date:"l d/m/Y" }}</h1>
+<p style="color:#52514e;margin:0 0 16px">{% if supervisor %}Equipo de {{ supervisor.nombre_completo }}{% else %}Resumen general{% endif %}</p>
+
+<table width="100%" cellpadding="0" cellspacing="8" style="border-collapse:separate"><tr>
+<td style="background:#fff;border:1px solid #e1e0d9;border-radius:8px;padding:12px"><div style="font-size:12px;color:#52514e">Presentes</div><div style="font-size:24px;font-weight:700">{{ presentes }}/{{ dotacion }}</div></td>
+<td style="background:#fff;border:1px solid #e1e0d9;border-radius:8px;padding:12px"><div style="font-size:12px;color:#52514e">Sin aviso</div><div style="font-size:24px;font-weight:700;color:{% if sin_aviso %}#b02a2a{% else %}#0b0b0b{% endif %}">{{ sin_aviso|length }}</div></td>
+<td style="background:#fff;border:1px solid #e1e0d9;border-radius:8px;padding:12px"><div style="font-size:12px;color:#52514e">Llegaron tarde</div><div style="font-size:24px;font-weight:700">{{ tarde|length }}</div></td>
+<td style="background:#fff;border:1px solid #e1e0d9;border-radius:8px;padding:12px"><div style="font-size:12px;color:#52514e">OT completadas</div><div style="font-size:24px;font-weight:700">{{ completadas }}</div></td>
+</tr></table>
+
+{% if sin_aviso %}<h2 style="font-size:15px;margin:18px 0 6px;color:#b02a2a">■ Sin fichar y sin aviso</h2>
+<ul style="margin:0;padding-left:18px">{% for e in sin_aviso %}<li>{{ e.persona.nombre_completo }} <span style="color:#898781">· {{ e.persona.telefono|default:"sin teléfono" }}{% if not supervisor and e.persona.supervisor %} · sup. {{ e.persona.supervisor.apellido }}{% endif %}</span></li>{% endfor %}</ul>{% endif %}
+
+{% if tarde %}<h2 style="font-size:15px;margin:18px 0 6px">◆ Llegadas tarde (más de {{ tolerancia }} min)</h2>
+<ul style="margin:0;padding-left:18px">{% for e in tarde %}<li>{{ e.persona.nombre_completo }}: {{ e.asistencia.minutos_tarde }} min</li>{% endfor %}</ul>{% endif %}
+
+{% if con_aviso %}<h2 style="font-size:15px;margin:18px 0 6px">Ausentes con aviso</h2>
+<ul style="margin:0;padding-left:18px">{% for e in con_aviso %}<li>{{ e.persona.nombre_completo }}: {{ e.novedad.get_tipo_display }}{% if e.novedad.estado == 'pendiente' %} <b>(sin aprobar)</b>{% endif %}</li>{% endfor %}</ul>{% endif %}
+
+<h2 style="font-size:15px;margin:18px 0 6px">Operación y supervisión</h2>
+<ul style="margin:0;padding-left:18px">
+<li>Órdenes: {{ completadas }} completadas de {{ ejecutadas }} ejecutadas{% if efectividad is not None %} ({% widthratio completadas ejecutadas 100 %} %){% endif %}</li>
+<li>Controles en calle: {{ informes }} · desvíos: {{ desvios }}{% if desvios_sin_accion %} · <b style="color:#b02a2a">{{ desvios_sin_accion }} sin acción</b>{% endif %}</li>
+<li>Siniestros: {{ siniestros|length }}{% for s in siniestros %} · {{ s.numero }} {{ s.get_tipo_display }} ({{ s.get_gravedad_display }}){% endfor %}</li>
+{% if novedades_pend %}<li>Avisos de ausencia sin aprobar: {{ novedades_pend }}</li>{% endif %}
+{% if sin_salida %}<li>Fichadas sin salida: {{ sin_salida|length }}</li>{% endif %}
+</ul>
+
+{% if docs %}<h2 style="font-size:15px;margin:18px 0 6px">Documentación que vence en 7 días</h2>
+<ul style="margin:0;padding-left:18px">{% for d in docs %}<li>{{ d.persona.nombre_completo }}: {{ d.tipo }} — {{ d.texto }}</li>{% endfor %}</ul>{% endif %}
+
+{% if criticas %}<h2 style="font-size:15px;margin:18px 0 6px;color:#b02a2a">Alertas críticas abiertas</h2>
+<ul style="margin:0;padding-left:18px">{% for a in criticas %}<li>{{ a.titulo }}</li>{% endfor %}</ul>{% endif %}
+
+<p style="margin:24px 0 0"><a href="{{ url }}/personal/" style="background:#2a78d6;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600">Abrir el sistema</a></p>
+<p style="color:#898781;font-size:12px;margin-top:20px">Mail automático del ERP Virguel. Para dejar de recibirlo, pedí a administración que te quite de la lista.</p>
+</div></body></html>

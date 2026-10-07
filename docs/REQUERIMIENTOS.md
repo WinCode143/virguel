@@ -10,7 +10,26 @@ Restricciones del cliente:
 - Se menciona **Power BI** como herramienta de análisis: el sistema calcula los
   indicadores y además los expone para Power BI.
 
+> **Aclaración del usuario (07/10/2026):** "no es un tema de hectáreas, es un sistema de
+> **control de personal**". El sistema se reorientó: el eje es la gente (asistencia,
+> ausencias, legajo, desempeño, sanciones y supervisión). Las hectáreas quedaron como
+> dato **opcional y desactivado** (Parámetros → "Medir hectáreas cubiertas").
+
 ---
+
+## 0. Control de personal (eje del sistema)
+| Necesidad | Implementación |
+|---|---|
+| Saber quién vino a trabajar, a qué hora y desde dónde | **Fichada de entrada y salida desde el celular** con ubicación GPS (`personal.Asistencia`). Si no hay señal, se guarda con la hora real y se envía después. |
+| Detectar llegadas tarde | Horario de entrada por persona + tolerancia (10 min, configurable). Minutos de tardanza por día. |
+| Ausencias: con aviso, sin aviso, licencias | `personal.Novedad`: enfermedad, accidente (ART), vacaciones, licencia especial, franco, ausencia injustificada, suspensión. El empleado avisa desde el celular con foto del certificado; el supervisor aprueba o rechaza. |
+| Ver en el momento quién falta | **Asistencia de hoy**: presentes, tarde, ausentes con aviso y **sin fichar y sin aviso** (para llamar). El supervisor lo ve en su celular para su equipo. |
+| Presentismo y ausentismo del período | Por persona: días esperados según su horario (sin feriados), trabajados, faltas justificadas e injustificadas, tardanzas, horas y horas extra. Exportable a CSV para liquidación. |
+| Legajo digital | Ficha única por persona: datos, horario, fichadas, novedades, documentación, evaluación, sanciones, capacitaciones, siniestros, EPP y vehículo. |
+| Documentación con vencimiento | Registro de conducir, apto médico, certificado de trabajo en altura, etc. (tipos configurables), con alertas de faltantes y vencidos. |
+| Dotación y rotación | Altas, bajas y motivos de egreso; rotación anual; antigüedad. |
+| Parte diario | **Mail automático cada noche**: a gerencia (general) y a cada supervisor (su equipo) con presentes, sin aviso, tardanzas, novedades, operación, siniestros, documentación por vencer y alertas críticas. |
+| La asistencia pesa en la evaluación | Las faltas sin justificar (2 puntos) y llegadas tarde (0,3) suman a la dimensión **disciplina** del diagnóstico de cada técnico. |
 
 ## 1. Operación y gestión de técnicos
 | Pedido | Implementación |
@@ -78,9 +97,19 @@ Restricciones del cliente:
 ---
 
 ## Puntos ambiguos a confirmar con el cliente
+
+**Nuevos (control de personal):**
+- Horarios reales de cada sector (se usó 08–17 para técnicos, 07:30–16:30 supervisores, 09–18 administración).
+- Tolerancia de llegada tarde (se usó 10 min) y si la tardanza descuenta del sueldo.
+- Si existe un **reloj de fichada** físico: en ese caso se puede importar en lugar de fichar con el celular.
+- Qué documentos son obligatorios por puesto y quién los controla.
+- Quiénes reciben el parte diario y a qué hora (se programó 21:00).
+
+**De la primera versión:**
 Se resolvieron con un supuesto razonable y **todos son configurables**, pero conviene validarlos:
 
-1. **"5 a 6 hectáreas por día"**: ¿por técnico, por cuadrilla o por todo el equipo? Se asumió **por cuadrilla de 2 técnicos** (parámetro `técnicos por cuadrilla`).
+1. ~~**"5 a 6 hectáreas por día"**~~: el usuario aclaró que no es el eje; quedó opcional y apagado.
+   Confirmar si se quiere medir en algún momento.
 2. **"6 clientes modernos"**: se interpretó como tope de clientes atendibles por técnico por día. "Moderno" quedó como un tipo de cliente (fibra/smart). ¿Es otra cosa?
 3. **Densidad de clientes por hectárea** por zona: no fue informada; hay valores de ejemplo por zona.
 4. **Decodificadores**: ¿la probabilidad es por cliente o por televisor? Se calculó **por cliente**; el cliente tiene el dato de cantidad de televisores para refinarlo.

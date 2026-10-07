@@ -2,11 +2,19 @@
 {% block titulo %}Resumen · Virguel{% endblock %}
 {% block encabezado %}<h1>Resumen operativo</h1><p class="sub">Datos del {{ dia|date:"l d/m/Y" }}{% if es_supervisor %} · sólo tu equipo{% endif %}</p>{% endblock %}
 {% block contenido %}
+<h2 style="margin:.25rem 0 .6rem">Personal hoy</h2>
+<div class="grid g4">
+  <div class="card kpi"><div class="etq">Presentes</div><div class="valor">{{ per_presentes }} / {{ per_total }}</div><div class="det"><a href="{% url 'personal:hoy' %}">ver quién está</a></div></div>
+  <div class="card kpi"><div class="etq">Sin fichar y sin aviso</div><div class="valor">{% if per_sin_aviso %}<span class="estado critico">{{ per_sin_aviso }}</span>{% else %}0{% endif %}</div><div class="det">{{ per_con_aviso }} ausente{{ per_con_aviso|pluralize }} con aviso</div></div>
+  <div class="card kpi"><div class="etq">Llegaron tarde hoy</div><div class="valor">{{ per_tarde }}</div><div class="det">fuera de la tolerancia</div></div>
+  <div class="card kpi"><div class="etq">Presentismo del mes</div><div class="valor">{{ per_presentismo_mes|pct:1 }}</div><div class="det">{{ per_injustificadas_mes }} falta{{ per_injustificadas_mes|pluralize }} sin justificar · <a href="{% url 'personal:asistencia' %}">detalle</a></div></div>
+</div>
+<h2 style="margin:1.25rem 0 .6rem">Operación</h2>
 <div class="grid g4">
   <div class="card kpi"><div class="etq">Técnicos en calle</div><div class="valor">{{ en_calle }}</div>
-    <div class="det">{{ cap.cuadrillas|num:1 }} cuadrillas · {{ cap.ha_min|num }}–{{ cap.ha_max|num }} ha/día</div></div>
+    <div class="det">{% if p.usar_hectareas %}{{ cap.cuadrillas|num:1 }} cuadrillas · {{ cap.ha_min|num }}–{{ cap.ha_max|num }} ha/día{% else %}<a href="{% url 'personal:hoy' %}">ver asistencia de hoy</a>{% endif %}</div></div>
   <div class="card kpi"><div class="etq">Órdenes completadas</div><div class="valor">{{ completadas_dia }}</div>
-    <div class="det">Capacidad estimada {{ cap.clientes_min|num }}–{{ cap.clientes_max|num }} clientes</div></div>
+    <div class="det">Capacidad estimada {% if cap.clientes_min == cap.clientes_max %}{{ cap.clientes_max|num }}{% else %}{{ cap.clientes_min|num }}–{{ cap.clientes_max|num }}{% endif %} clientes</div></div>
   <div class="card kpi"><div class="etq">Stock parado +{{ p.dias_max_stock|default:"60" }} días</div><div class="valor">{{ parado_valor|pesos }}</div>
     <div class="det">{{ parado_lotes }} lote{{ parado_lotes|pluralize }} · <a href="{% url 'tablero:stock' %}">ver stock</a></div></div>
   <div class="card kpi"><div class="etq">Prob. de pedido de decodificador</div><div class="valor">{{ prob.media|pct }}</div>
@@ -24,7 +32,7 @@
     <div class="det">{% if es_gerencia %}Nota de supervisores: {{ nota_sup|num:1 }} / 5{% else %}promedio de tu equipo{% endif %}</div></div>
 </div>
 <div class="grid g2">
-  {% include "tablero/_grafico.html" with id="g-prod" datos=g_prod titulo="Órdenes completadas vs. capacidad estimada (30 días)" nota="Capacidad = técnicos en calle × hectáreas × densidad de clientes, con tope de visitas por técnico." %}
+  {% include "tablero/_grafico.html" with id="g-prod" datos=g_prod titulo="Órdenes completadas vs. capacidad estimada (30 días)" nota="Capacidad = técnicos en calle × clientes que puede atender cada técnico por día (parámetro)." %}
   {% include "tablero/_grafico.html" with id="g-diag" datos=g_diag titulo="Diagnóstico de técnicos" nota="Ventana de evaluación configurable (por defecto 90 días)." %}
 </div>
 <div class="card">

@@ -10,9 +10,10 @@ admin.site.index_title = "Administración de datos"
 @admin.register(Parametros)
 class ParametrosAdmin(admin.ModelAdmin):
     fieldsets = [
+        ("Control de personal", {"fields": ["tolerancia_tarde_minutos", "horas_jornada", "destinatarios_parte"]}),
         ("Stock", {"fields": ["dias_max_stock", "dias_aviso_stock", "dias_cobertura_stock_min"]}),
-        ("Capacidad", {"fields": ["hectareas_dia_min", "hectareas_dia_max", "tecnicos_por_cuadrilla",
-                                  "clientes_por_tecnico_dia"]}),
+        ("Capacidad", {"fields": ["clientes_por_tecnico_dia", "usar_hectareas", "hectareas_dia_min",
+                                  "hectareas_dia_max", "tecnicos_por_cuadrilla"]}),
         ("Decodificadores", {"fields": ["prob_decodificador_min", "prob_decodificador_max"]}),
         ("Evaluación", {"fields": ["dias_ventana_evaluacion"]}),
     ]
@@ -31,10 +32,16 @@ class ZonaAdmin(admin.ModelAdmin):
 
 @admin.register(Persona)
 class PersonaAdmin(admin.ModelAdmin):
-    list_display = ["legajo", "apellido", "nombre", "rol", "supervisor", "zona", "fecha_ingreso", "activo"]
+    list_display = ["legajo", "apellido", "nombre", "rol", "supervisor", "zona", "hora_entrada", "fecha_ingreso", "activo"]
     list_filter = ["rol", "activo", "zona", "supervisor"]
     search_fields = ["legajo", "apellido", "nombre", "dni"]
     autocomplete_fields = ["supervisor", "usuario"]
+    fieldsets = [
+        (None, {"fields": ["legajo", "nombre", "apellido", "dni", "rol", "supervisor", "zona", "usuario"]}),
+        ("Contacto", {"fields": ["telefono", "email"]}),
+        ("Horario", {"fields": ["hora_entrada", "hora_salida", "trabaja_sabados"]}),
+        ("Relación laboral", {"fields": ["fecha_ingreso", "activo", "fecha_egreso", "motivo_egreso"]}),
+    ]
 
 
 @admin.register(Cliente)

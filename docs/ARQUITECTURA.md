@@ -22,6 +22,7 @@
 
 | App | Contenido |
 |---|---|
+| `personal` | **Control de personal**: fichadas (asistencia), novedades/licencias, feriados, documentos del legajo. `indicadores.py`: presentismo, ausentismo, estado del día, dotación/rotación. `parte.py`: parte diario por mail. |
 | `core` | Parámetros del sistema, zonas, personas (técnicos/supervisores), clientes, alertas, roles. |
 | `operaciones` | Tipos de tarea, jornadas (personal en calle), órdenes de trabajo. |
 | `inventario` | Materiales, lotes de ingreso (FIFO), salidas, materiales por tipo de tarea, demanda comercial. `services.py`: FIFO, antigüedad, stock diario, previsión. |
@@ -72,6 +73,18 @@ egreso (clave única `origen`). Al borrarlo, se borra el egreso.
 
 **Alertas** (`tablero/automatizacion.py` + `core/services.SincronizadorAlertas`):
 cada ejecución recalcula las condiciones; abre, actualiza o cierra alertas sin duplicar.
+
+**Presentismo** (`personal/indicadores.py`): días esperados = laborables según el horario de
+cada persona (lun–vie, + sábado si corresponde), sin feriados, entre su ingreso y su egreso, y
+desde que el sistema empezó a registrar asistencia. Presente = fichó o tuvo jornada en calle.
+Día sin presencia: justificada si hay novedad justificada; si no, injustificada. Vacaciones y
+francos no cuentan para el presentismo. El día en curso no cuenta como falta.
+
+**Parte diario por mail**: configurar SMTP en `.env` (`EMAIL_HOST`, `EMAIL_PORT`,
+`EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`, `URL_SISTEMA`). Sirve Gmail
+(con "contraseña de aplicación"), Outlook/Office 365 o el correo de la empresa. Sin SMTP los
+mails se guardan como archivos en `media/mails/`. Se envía con la tarea diaria o con
+`manage.py enviar_parte`.
 
 ## Seguridad y privacidad
 - Acceso por rol (`core/roles.py`): técnico, supervisor, gerencia. El supervisor ve sólo su equipo.

@@ -1,0 +1,31 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}{{ p.nombre_completo }} · Legajo{% endblock %}
+{% block encabezado %}<h1>{{ p.apellido }}, {{ p.nombre }}</h1>
+<p class="sub">Legajo {{ p.legajo }} · {{ p.get_rol_display }} · DNI {{ p.dni|default:"—" }} · Ingreso {{ p.fecha_ingreso|date:"d/m/Y" }} ({{ antiguedad }} año{{ antiguedad|pluralize }}){% if p.supervisor %} · Supervisor: {{ p.supervisor.nombre_completo }}{% endif %}{% if not p.activo %} · <b>Egresó el {{ p.fecha_egreso|date:"d/m/Y" }} ({{ p.get_motivo_egreso_display }})</b>{% endif %}</p>{% endblock %}
+{% block contenido %}
+<div class="grid g4">
+  <div class="card kpi"><div class="etq">Presentismo del mes</div><div class="valor"><span class="estado {{ mes.estado }}">{{ mes.presentismo|pct:1 }}</span></div><div class="det">{{ mes.presentes }} de {{ mes.esperados }} días · {{ mes.tardanzas }} tarde</div></div>
+  <div class="card kpi"><div class="etq">Últimos 90 días</div><div class="valor">{{ trimestre.presentismo|pct:1 }}</div><div class="det">{{ trimestre.injustificadas }} falta{{ trimestre.injustificadas|pluralize }} sin justificar · {{ trimestre.horas_extra|num:1 }} h extra</div></div>
+  {% if ev %}<div class="card kpi"><div class="etq">Evaluación (90 días)</div><div style="margin:.4rem 0"><span class="estado {{ ev.color }}">{{ ev.diagnostico }}</span></div><div class="det">Riesgo {{ ev.riesgo|num }}/100 · <a href="{% url 'tablero:tecnico' p.id %}">ver desempeño</a></div></div>
+  <div class="card kpi"><div class="etq">Productividad</div><div class="valor">{{ ev.productividad|num:2 }}</div><div class="det">OT por día · {{ ev.indice_productividad|pct }} de la mediana</div></div>
+  {% else %}<div class="card kpi"><div class="etq">Horario</div><div class="valor">{{ p.hora_entrada|time:"H:i" }}–{{ p.hora_salida|time:"H:i" }}</div><div class="det">{% if p.trabaja_sabados %}lunes a sábado{% else %}lunes a viernes{% endif %}</div></div>
+  <div class="card kpi"><div class="etq">Contacto</div><div style="margin-top:.4rem">{{ p.telefono|default:"—" }}<br>{{ p.email|default:"" }}</div></div>{% endif %}
+</div>
+<div class="grid g2">
+  <div class="card"><h2>Últimas fichadas</h2><table><thead><tr><th>Fecha</th><th class="num">Entrada</th><th class="num">Salida</th><th class="num">Horas</th><th></th></tr></thead><tbody>{% for a in fichadas %}<tr><td>{{ a.fecha|date:"D d/m" }}</td><td class="num">{{ a.entrada|time:"H:i" }}</td><td class="num">{{ a.salida|time:"H:i"|default:"—" }}</td><td class="num">{{ a.horas_trabajadas }}</td><td>{% if a.minutos_tarde %}<span class="estado aviso">{{ a.minutos_tarde }}′ tarde</span>{% endif %}</td></tr>{% empty %}<tr><td class="muted">Sin fichadas.</td></tr>{% endfor %}</tbody></table></div>
+  <div class="card"><h2>Novedades y licencias</h2><table><tbody>{% for n in novedades %}<tr><td>{{ n.desde|date:"d/m/Y" }}{% if n.dias > 1 %} – {{ n.hasta|date:"d/m" }}{% endif %}</td><td>{{ n.get_tipo_display }}</td><td><span class="estado {% if n.estado == 'aprobada' %}ok{% elif n.estado == 'rechazada' %}critico{% else %}aviso{% endif %}">{{ n.get_estado_display }}</span></td><td>{% if n.certificado %}<a href="{{ n.certificado.url }}" target="_blank">certificado</a>{% endif %}</td></tr>{% empty %}<tr><td class="muted">Sin novedades.</td></tr>{% endfor %}</tbody></table>
+  {% if es_gerencia %}<p><a href="{% url 'admin:personal_novedad_add' %}?persona={{ p.id }}">Cargar novedad</a></p>{% endif %}</div>
+  <div class="card"><h2>Documentación</h2><table><tbody>{% for d in documentos %}<tr><td>{{ d.tipo }}</td><td>{{ d.numero }}</td><td>{% if d.vencimiento %}<span class="estado {{ d.estado }}">vence {{ d.vencimiento|date:"d/m/Y" }}</span>{% else %}sin vencimiento{% endif %}</td><td>{% if d.archivo %}<a href="{{ d.archivo.url }}" target="_blank">ver</a>{% endif %}</td></tr>{% endfor %}
+  {% for f in faltantes %}<tr><td>{{ f.tipo }}</td><td></td><td><span class="estado critico">Falta</span></td><td></td></tr>{% endfor %}
+  {% if not documentos and not faltantes %}<tr><td class="muted">Sin documentos cargados.</td></tr>{% endif %}</tbody></table>
+  {% if es_gerencia %}<p><a href="{% url 'admin:personal_documentopersonal_add' %}?persona={{ p.id }}">Agregar documento</a></p>{% endif %}</div>
+  <div class="card"><h2>Sanciones y acciones correctivas</h2><table><tbody>{% for a in acciones %}<tr><td>{{ a.fecha|date:"d/m/Y" }}</td><td>{{ a.get_tipo_display }}</td><td class="num">{% if a.monto %}{{ a.monto|pesos }}{% endif %}</td><td class="muted">{{ a.aplicada_por.apellido|default:"" }}</td></tr>{% empty %}<tr><td class="muted">Ninguna.</td></tr>{% endfor %}</tbody></table></div>
+  <div class="card"><h2>Capacitaciones</h2><table><tbody>{% for c in capacitaciones %}<tr><td>{{ c.capacitacion.fecha|date:"d/m/Y" }}</td><td>{{ c.capacitacion.curso }}</td><td>{% if c.aprobado %}Aprobado{% else %}No aprobado{% endif %}</td></tr>{% empty %}<tr><td class="muted">Ninguna.</td></tr>{% endfor %}</tbody></table></div>
+  <div class="card"><h2>Siniestros</h2><table><tbody>{% for s in siniestros %}<tr><td>{{ s.fecha|date:"d/m/Y" }}</td><td>{{ s.get_tipo_display }}</td><td>{{ s.get_gravedad_display }}</td></tr>{% empty %}<tr><td class="muted">Ninguno.</td></tr>{% endfor %}</tbody></table></div>
+  <div class="card"><h2>EPP, herramientas y vehículo</h2><table><tbody>{% for a in asignaciones %}<tr><td>{{ a.elemento }}</td><td>{% if a.vencida %}<span class="estado critico">Vencido</span>{% elif a.fecha_vencimiento %}vence {{ a.fecha_vencimiento|date:"d/m/Y" }}{% endif %}</td></tr>{% endfor %}
+  {% for v in vehiculos %}<tr><td>Vehículo {{ v.patente }}</td><td>{{ v.marca }} {{ v.modelo }}</td></tr>{% endfor %}
+  {% if not asignaciones and not vehiculos %}<tr><td class="muted">Nada asignado.</td></tr>{% endif %}</tbody></table></div>
+  {% if a_cargo %}<div class="card"><h2>Equipo a cargo ({{ a_cargo|length }})</h2><table><tbody>{% for t in a_cargo %}<tr><td><a href="{% url 'personal:legajo' t.id %}">{{ t.apellido }}, {{ t.nombre }}</a></td><td>{{ t.legajo }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+</div>
+{% if es_gerencia %}<p><a class="btn sec" href="{% url 'admin:core_persona_change' p.id %}">Editar datos</a></p>{% endif %}
+{% endblock %}

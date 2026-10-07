@@ -7,6 +7,13 @@
     <nav class="nav">
       <a href="{% url 'tablero:inicio' %}" class="{% if u == 'inicio' %}activo{% endif %}">Resumen</a>
       <a href="{% url 'tablero:alertas' %}" class="{% if u == 'alertas' %}activo{% endif %}">Alertas {% if alertas_criticas %}<span class="badge">{{ alertas_criticas }}</span>{% endif %}</a>
+      <div class="grupo">Personal</div>
+      <a href="{% url 'personal:hoy' %}" class="{% if request.resolver_match.app_name == 'personal' and u == 'hoy' %}activo{% endif %}">Asistencia de hoy</a>
+      <a href="{% url 'personal:asistencia' %}" class="{% if u == 'asistencia' %}activo{% endif %}">Presentismo y ausencias</a>
+      <a href="{% url 'personal:legajos' %}" class="{% if u == 'legajos' or u == 'legajo' %}activo{% endif %}">Legajos</a>
+      <a href="{% url 'personal:parte' %}" class="{% if u == 'parte' %}activo{% endif %}">Parte diario (mail)</a>
+      <a href="{% url 'personal:documentos' %}" class="{% if u == 'documentos' %}activo{% endif %}">Documentación</a>
+      {% if es_gerencia %}<a href="{% url 'personal:dotacion' %}" class="{% if u == 'dotacion' %}activo{% endif %}">Dotación y rotación</a>{% endif %}
       <div class="grupo">Operación</div>
       <a href="{% url 'tablero:operacion' %}" class="{% if u == 'operacion' %}activo{% endif %}">1 · Operación diaria</a>
       <a href="{% url 'tablero:asignacion' %}" class="{% if u == 'asignacion' %}activo{% endif %}">1 · Asignar órdenes</a>

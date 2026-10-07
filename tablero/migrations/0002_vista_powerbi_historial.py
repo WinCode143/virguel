@@ -15,6 +15,6 @@ LEFT JOIN core_zona z ON z.id = p.zona_id;
 
 
 class Migration(migrations.Migration):
-    dependencies = [("tablero", "0001_vistas_powerbi"), ("capacitacion", "__latest__")]
+    dependencies = [("tablero", "0001_vistas_powerbi"), ("capacitacion", "0002_evaluacionhistorica")]
     operations = [migrations.RunSQL(SQL,
                                     "DROP VIEW IF EXISTS powerbi.evaluacion_historica;")]

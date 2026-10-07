@@ -96,6 +96,7 @@ class Command(BaseCommand):
             self.herramientas()
             self.capacitaciones()
             self.operacion()
+            self.asistencia()
             self.supervision()
             self.siniestros()
             self.demanda()
@@ -106,7 +107,10 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------
     def borrar(self):
         from capacitacion.models import EvaluacionHistorica
+        from personal.models import Asistencia, DocumentoPersonal, Feriado, Novedad, TipoDocumento
         EvaluacionHistorica.objects.all().delete()
+        for m in (Asistencia, Novedad, DocumentoPersonal, TipoDocumento, Feriado):
+            m.objects.all().delete()
         for m in (Egreso, CostoFijo, Alerta, AccionCorrectiva, InformeControl, EncuestaSupervisor, TareaSupervisor,
                   Siniestro, Salida, LoteIngreso, DemandaComercial, RecetaMaterial, Participacion, Capacitacion,
                   EvaluacionCompetencia, Curso, Competencia, Asignacion, Elemento, Jornada, OrdenTrabajo,
@@ -118,7 +122,21 @@ class Command(BaseCommand):
         User.objects.filter(username="admin").delete()
 
     def maestros(self):
-        Parametros.actual()
+        par = Parametros.actual()
+        par.destinatarios_parte = "gerencia@virguel.demo"
+        par.save()
+        from personal.models import Feriado
+        feriados = [("01-01", "Año Nuevo"), ("03-24", "Día de la Memoria"), ("04-02", "Malvinas"),
+                    ("05-01", "Día del Trabajador"), ("05-25", "Revolución de Mayo"), ("06-20", "Día de la Bandera"),
+                    ("07-09", "Día de la Independencia"), ("08-17", "Paso a la Inmortalidad de San Martín"),
+                    ("10-12", "Diversidad Cultural"), ("11-20", "Soberanía Nacional"), ("12-08", "Inmaculada Concepción"),
+                    ("12-25", "Navidad")]
+        self.feriados = set()
+        for anio in {self.inicio.year, self.hoy.year}:
+            for md, nombre in feriados:
+                f = timezone.datetime.strptime(f"{anio}-{md}", "%Y-%m-%d").date()
+                Feriado.objects.get_or_create(fecha=f, defaults={"nombre": nombre})
+                self.feriados.add(f)
         self.zonas = [Zona.objects.create(nombre=n, densidad_clientes_ha=Decimal(d)) for n, d in
                       [("Norte", "1.6"), ("Sur", "1.2"), ("Centro", "2.4"), ("Oeste", "1.0")]]
         tipos = [("INST-FO", "Instalación fibra óptica", 75, True), ("INST-TV", "Instalación TV", 60, True),
@@ -183,6 +201,9 @@ class Command(BaseCommand):
             u = User.objects.create(username=f"s{i:03d}", password=hash_, first_name=n, last_name=a)
             u.groups.add(Group.objects.get(name="Supervisores"))
             p = Persona.objects.create(legajo=f"S{i:03d}", nombre=n, apellido=a, rol="supervisor",
+                                       email=f"supervisor{i}@virguel.demo",
+                                       hora_entrada=timezone.datetime(2000, 1, 1, 7, 30).time(),
+                                       hora_salida=timezone.datetime(2000, 1, 1, 16, 30).time(),
                                        zona=self.zonas[(i - 1) % len(self.zonas)], usuario=u,
                                        fecha_ingreso=self.hoy - timedelta(days=r.randint(700, 3000)))
             p.perfil = perfil
@@ -211,6 +232,112 @@ class Command(BaseCommand):
                 self.fecha_cap[t.id] = self.hoy - timedelta(days=r.randint(45, 60))
             elif t.perfil == "riesgo":
                 self.fecha_cap[t.id] = self.hoy - timedelta(days=r.randint(50, 70))
+
+    def asistencia(self):
+        """Fichadas y novedades derivadas de las jornadas simuladas + supervisores y administración."""
+        from datetime import datetime, time as hora
+
+        from personal.models import Asistencia, DocumentoPersonal, Novedad, TipoDocumento
+        r = self.r
+        tz = timezone.get_current_timezone()
+        tarde_prob = {"bueno": .04, "capacitar": .06, "riesgo": .22, "nuevo": .08, "mejora": .05}
+        injust_prob = {"bueno": .08, "capacitar": .1, "riesgo": .55, "nuevo": .15, "mejora": .1}
+
+        def fichada(p, fecha, prob_tarde, salida=True):
+            base = datetime.combine(fecha, p.hora_entrada, tz)
+            if r.random() < prob_tarde:
+                entrada = base + timedelta(minutes=r.randint(12, 70))
+            else:
+                entrada = base - timedelta(minutes=r.randint(0, 15)) + timedelta(minutes=r.choice([0, 0, 0, 5, 8]))
+            fin = datetime.combine(fecha, p.hora_salida, tz)
+            sal = fin + timedelta(minutes=r.randint(-10, 25)) + (timedelta(hours=r.randint(1, 3)) if r.random() < .12 else timedelta())
+            lat, lng = Decimal(str(round(-34.6 + r.uniform(-.2, .2), 6))), Decimal(str(round(-58.4 + r.uniform(-.2, .2), 6)))
+            a = Asistencia(persona=p, fecha=fecha, entrada=entrada, salida=sal if salida else None,
+                           lat_entrada=lat, lng_entrada=lng, lat_salida=lat if salida else None,
+                           lng_salida=lng if salida else None)
+            a.calcular(self.param)
+            return a
+
+        self.param = Parametros.actual()
+        tec = {t.id: t for t in self.tecs}
+        # 2 técnicos que hoy no ficharon y no avisaron (para ver el control en vivo)
+        hoy_jor = list(Jornada.objects.filter(fecha=self.hoy, en_calle=True).values_list("id", "tecnico_id"))
+        faltan_hoy = {tid for _, tid in r.sample(hoy_jor, 2)} if len(hoy_jor) > 2 else set()
+        Jornada.objects.filter(fecha=self.hoy, tecnico_id__in=faltan_hoy).delete()
+        OrdenTrabajo.objects.filter(tecnico_id__in=faltan_hoy, fecha_programada=self.hoy,
+                                    estado="completada").update(estado="asignada", fecha_ejecucion=None)
+        asis, novs = [], []
+        for j in Jornada.objects.all().only("tecnico_id", "fecha", "en_calle", "motivo_ausencia"):
+            t = tec[j.tecnico_id]
+            if j.en_calle:
+                asis.append(fichada(t, j.fecha, tarde_prob[t.perfil], salida=j.fecha != self.hoy))
+            else:
+                if r.random() < injust_prob[t.perfil]:
+                    tipo, estado = "injustificada", "aprobada"
+                else:
+                    tipo = {"Enfermedad": "enfermedad", "Licencia": "licencia", "Franco": "franco"}.get(j.motivo_ausencia, "licencia")
+                    estado = "pendiente" if j.fecha >= self.hoy - timedelta(days=2) else "aprobada"
+                novs.append(Novedad(persona=t, tipo=tipo, desde=j.fecha, hasta=j.fecha, estado=estado,
+                                    certificado="certificados/demo.jpg" if tipo == "enfermedad" and r.random() < .7 else "",
+                                    cargada_por=t, observaciones="" if tipo != "enfermedad" else "Reposo médico"))
+        # vacaciones: un par de técnicos de vacaciones esta semana
+        for t in r.sample(self.tecs, 2):
+            novs.append(Novedad(persona=t, tipo="vacaciones", desde=self.hoy - timedelta(days=2),
+                                hasta=self.hoy + timedelta(days=8), estado="aprobada", cargada_por=t))
+            Jornada.objects.filter(tecnico=t, fecha__gte=self.hoy - timedelta(days=2)).delete()
+            Asistencia.objects.filter(persona=t, fecha__gte=self.hoy - timedelta(days=2)).delete()
+            asis = [a for a in asis if not (a.persona_id == t.id and a.fecha >= self.hoy - timedelta(days=2))]
+        # supervisores y personal administrativo
+        admins = []
+        for i in range(1, 5):
+            n, a = r.choice(NOMBRES), r.choice(APELLIDOS)
+            admins.append(Persona.objects.create(
+                legajo=f"A{i:03d}", nombre=n, apellido=a, rol="administrativo", trabaja_sabados=False,
+                hora_entrada=hora(9, 0), hora_salida=hora(18, 0),
+                fecha_ingreso=self.hoy - timedelta(days=r.randint(300, 3000))))
+        for d in range((self.hoy - self.inicio).days + 1):
+            f = self.inicio + timedelta(days=d)
+            if f.weekday() == 6 or f in self.feriados:
+                continue
+            for p in self.sups + admins:
+                if f.weekday() == 5 and not p.trabaja_sabados:
+                    continue
+                if r.random() < .04:
+                    novs.append(Novedad(persona=p, tipo=r.choice(["enfermedad", "licencia", "franco"]), desde=f,
+                                        hasta=f, estado="aprobada", cargada_por=p))
+                    continue
+                asis.append(fichada(p, f, .05 if p.rol == "administrativo" else .03, salida=f != self.hoy))
+        Asistencia.objects.bulk_create(asis, batch_size=5000)
+        Novedad.objects.bulk_create(novs, batch_size=2000)
+        # egresos del último año (rotación)
+        motivos = ["renuncia", "renuncia", "renuncia", "despido", "fin_contrato", "despido_causa"]
+        for i, m in enumerate(motivos, 1):
+            ingreso = self.hoy - timedelta(days=r.randint(200, 1200))
+            Persona.objects.create(legajo=f"E{i:03d}", nombre=r.choice(NOMBRES), apellido=r.choice(APELLIDOS),
+                                   rol="tecnico", activo=False, fecha_ingreso=ingreso, motivo_egreso=m,
+                                   fecha_egreso=self.hoy - timedelta(days=r.randint(10, 350)))
+        # documentación con vencimiento
+        tipos = [TipoDocumento.objects.create(nombre="Registro de conducir", obligatorio_tecnicos=True,
+                                              obligatorio_supervisores=True, dias_aviso=30),
+                 TipoDocumento.objects.create(nombre="Apto médico anual", obligatorio_tecnicos=True,
+                                              obligatorio_supervisores=True, dias_aviso=30),
+                 TipoDocumento.objects.create(nombre="Certificado de trabajo en altura", obligatorio_tecnicos=True,
+                                              dias_aviso=45),
+                 TipoDocumento.objects.create(nombre="DNI", dias_aviso=0)]
+        docs = []
+        for p in self.tecs + self.sups:
+            malo = getattr(p, "perfil", "bueno") == "riesgo"
+            for t in tipos[:3]:
+                if t.nombre.startswith("Certificado") and p.rol != "tecnico":
+                    continue
+                if r.random() < (.25 if malo else .03):
+                    continue  # nunca lo presentó
+                venc = self.hoy + timedelta(days=r.randint(-40, 20) if (malo or r.random() < .08) else r.randint(25, 700))
+                docs.append(DocumentoPersonal(persona=p, tipo=t, numero=str(r.randint(10000000, 45000000)),
+                                              vencimiento=venc, emision=venc - timedelta(days=365)))
+            docs.append(DocumentoPersonal(persona=p, tipo=tipos[3], numero=str(r.randint(20000000, 45000000))))
+        DocumentoPersonal.objects.bulk_create(docs)
+        self.stdout.write(f"  {len(asis)} fichadas, {len(novs)} novedades, {len(docs)} documentos")
 
     def flota(self):
         r = self.r
@@ -328,7 +455,7 @@ class Command(BaseCommand):
         dias = (self.hoy - self.inicio).days
         for d in range(dias + 1):
             fecha = self.inicio + timedelta(days=d)
-            if fecha.weekday() == 6:  # domingo
+            if fecha.weekday() == 6 or fecha in self.feriados:  # domingo o feriado
                 continue
             es_hoy = fecha == self.hoy
             for t in self.tecs:

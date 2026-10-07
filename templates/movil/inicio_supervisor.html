@@ -1,5 +1,11 @@
 {% extends "movil/base_movil.html" %}
 {% block contenido %}
+{% include "movil/_fichada.html" %}
+{% if faltan or tarde or novedades_pendientes %}<div class="card" style="border-color:var({% if faltan %}--critico{% else %}--aviso{% endif %})"><h2>Asistencia del equipo hoy</h2>
+{% for e in faltan %}<div><span class="estado critico">{{ e.persona.nombre_completo }}</span> <span class="muted">— {{ e.situacion.1 }}</span></div>{% endfor %}
+{% for e in tarde %}<div><span class="estado aviso">{{ e.persona.nombre_completo }}</span> <span class="muted">— {{ e.situacion.1 }}</span></div>{% endfor %}
+{% if novedades_pendientes %}<p style="margin:.6rem 0 0"><a href="{% url 'movil:novedades' %}">{{ novedades_pendientes }} aviso{{ novedades_pendientes|pluralize }} de ausencia para aprobar →</a></p>{% endif %}
+</div>{% endif %}
 <div class="grid g2" style="grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:.8rem">
   <div class="card kpi" style="margin:0"><div class="etq">En calle</div><div class="valor">{{ en_calle }}/{{ equipo }}</div></div>
   <div class="card kpi" style="margin:0"><div class="etq">Informes hoy</div><div class="valor">{{ informes_hoy }}</div><div class="det">objetivo: 4</div></div>

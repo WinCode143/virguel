@@ -79,10 +79,10 @@ class Capacidad:
 
 def capacidad(tecnicos: int, ha_dia_min=None, ha_dia_max=None, densidad=None,
               prob_min=None, prob_max=None, prob_estimada=None) -> Capacidad:
-    """Cuántas hectáreas, clientes y decodificadores se cubren en un día.
+    """Cuántos clientes y decodificadores se cubren en un día.
 
-    Los clientes atendibles son el mínimo entre lo que permite el área
-    (hectáreas x densidad de clientes) y el tope de visitas por técnico."""
+    Por defecto: técnicos x clientes por técnico. Si se activa "medir hectáreas",
+    además se limita por el área (hectáreas x densidad de clientes)."""
     p = Parametros.actual()
     ha_dia_min = float(ha_dia_min if ha_dia_min is not None else p.hectareas_dia_min)
     ha_dia_max = float(ha_dia_max if ha_dia_max is not None else p.hectareas_dia_max)
@@ -95,7 +95,10 @@ def capacidad(tecnicos: int, ha_dia_min=None, ha_dia_max=None, densidad=None,
     ha_min, ha_max = cuadrillas * ha_dia_min, cuadrillas * ha_dia_max
     tope = tecnicos * float(p.clientes_por_tecnico_dia)
     c_area_min, c_area_max = ha_min * densidad, ha_max * densidad
-    c_min, c_max = min(c_area_min, tope), min(c_area_max, tope)
+    if p.usar_hectareas:
+        c_min, c_max = min(c_area_min, tope), min(c_area_max, tope)
+    else:  # sin hectáreas: la capacidad es directamente técnicos x clientes por técnico
+        c_min = c_max = tope
     medio = (c_min + c_max) / 2
     return Capacidad(
         tecnicos=tecnicos, cuadrillas=cuadrillas, ha_min=ha_min, ha_max=ha_max, densidad=densidad,

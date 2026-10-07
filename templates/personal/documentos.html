@@ -1,0 +1,12 @@
+{% extends "escritorio.html" %}
+{% block titulo %}Documentación · Virguel{% endblock %}
+{% block encabezado %}<h1>Documentación del personal</h1><p class="sub">Documentos obligatorios que faltan o vencen (registro de conducir, apto médico, etc.). Los tipos obligatorios se configuran en la carga de datos.</p>{% endblock %}
+{% block contenido %}
+<div class="grid g2">
+<div class="card"><h2>Faltantes y vencidos ({{ filas|length }})</h2><div class="tabla-scroll" style="max-height:520px;overflow-y:auto"><table><thead><tr><th>Persona</th><th>Documento</th><th>Situación</th></tr></thead>
+<tbody>{% for f in filas %}<tr><td><a href="{% url 'personal:legajo' f.persona.id %}">{{ f.persona.apellido }}, {{ f.persona.nombre }}</a></td><td>{{ f.tipo }}</td><td><span class="estado {{ f.estado }}">{{ f.texto }}</span></td></tr>{% empty %}<tr><td class="muted">Todo en regla.</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="card"><h2>Próximos vencimientos</h2><div class="tabla-scroll" style="max-height:520px;overflow-y:auto"><table><thead><tr><th>Vence</th><th>Persona</th><th>Documento</th></tr></thead>
+<tbody>{% for d in proximos %}<tr><td><span class="estado {{ d.estado }}">{{ d.vencimiento|date:"d/m/Y" }}</span></td><td>{{ d.persona.apellido }}, {{ d.persona.nombre }}</td><td>{{ d.tipo }}</td></tr>{% endfor %}</tbody></table></div></div>
+</div>
+{% if es_gerencia %}<p><a class="btn sec" href="{% url 'admin:personal_documentopersonal_add' %}">Cargar documento</a> <a class="btn sec" href="{% url 'admin:personal_tipodocumento_changelist' %}">Tipos de documento</a></p>{% endif %}
+{% endblock %}

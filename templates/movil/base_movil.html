@@ -19,11 +19,12 @@
   <a href="{% url 'movil:inicio' %}" class="{% if tab == 'inicio' %}activo{% endif %}"><span class="ico">⌂</span>Inicio</a>
   {% if es_supervisor %}
   <a href="{% url 'movil:informe' %}" class="{% if tab == 'control' %}activo{% endif %}"><span class="ico">✓</span>Control</a>
-  <a href="{% url 'movil:indicadores' %}" class="{% if tab == 'yo' %}activo{% endif %}"><span class="ico">★</span>Mis indicadores</a>
-  <a href="{% url 'tablero:inicio' %}"><span class="ico">▦</span>Tablero</a>
+  <a href="{% url 'movil:novedades' %}" class="{% if tab == 'asistencia' %}activo{% endif %}"><span class="ico">☰</span>Ausencias</a>
+  <a href="{% url 'movil:indicadores' %}" class="{% if tab == 'yo' %}activo{% endif %}"><span class="ico">★</span>Indicadores</a>
   {% else %}
+  <a href="{% url 'movil:asistencia' %}" class="{% if tab == 'asistencia' %}activo{% endif %}"><span class="ico">◷</span>Asistencia</a>
   <a href="{% url 'movil:epp' %}" class="{% if tab == 'epp' %}activo{% endif %}"><span class="ico">⛑</span>Mi EPP</a>
-  <a href="{% url 'movil:desempeno' %}" class="{% if tab == 'yo' %}activo{% endif %}"><span class="ico">★</span>Mi desempeño</a>
+  <a href="{% url 'movil:desempeno' %}" class="{% if tab == 'yo' %}activo{% endif %}"><span class="ico">★</span>Desempeño</a>
   {% endif %}
   <a href="{% url 'movil:incidente' %}"><span class="ico">⚠</span>Incidente</a>
 </nav>

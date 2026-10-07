@@ -1,0 +1,17 @@
+{% extends "movil/base_movil.html" %}{% load formato %}
+{% block titulo_movil %}Mi asistencia{% endblock %}
+{% block contenido %}
+<a class="btn" style="display:block;margin-bottom:.8rem" href="{% url 'movil:novedad' %}">Avisar ausencia / pedir licencia</a>
+<div class="card"><h2>Este mes (desde el {{ desde|date:"d/m" }})</h2><table><tbody>
+<tr><td>Presentismo</td><td class="num"><span class="estado {{ r.estado }}">{{ r.presentismo|pct }}</span></td></tr>
+<tr><td>Días trabajados</td><td class="num">{{ r.presentes }} de {{ r.esperados }}</td></tr>
+<tr><td>Faltas justificadas</td><td class="num">{{ r.justificadas }}</td></tr>
+<tr><td>Faltas sin justificar</td><td class="num">{% if r.injustificadas %}<span class="estado critico">{{ r.injustificadas }}</span>{% else %}0{% endif %}</td></tr>
+<tr><td>Llegadas tarde</td><td class="num">{{ r.tardanzas }}</td></tr>
+<tr><td>Horas trabajadas</td><td class="num">{{ r.horas|num:1 }} ({{ r.horas_extra|num:1 }} extra)</td></tr>
+</tbody></table></div>
+<div class="card"><h2>Mis avisos</h2><ul class="lista-ot">{% for n in novedades %}<li><div>{{ n.get_tipo_display }}<br><span class="muted" style="font-size:.85rem">{{ n.desde|date:"d/m" }}–{{ n.hasta|date:"d/m" }}</span></div>
+<span class="estado {% if n.estado == 'aprobada' %}ok{% elif n.estado == 'rechazada' %}critico{% else %}aviso{% endif %}">{{ n.get_estado_display }}</span></li>{% empty %}<li class="muted">Sin avisos.</li>{% endfor %}</ul></div>
+<div class="card"><h2>Últimas fichadas</h2><table><tbody>{% for a in fichadas %}<tr><td>{{ a.fecha|date:"D d/m" }}</td><td class="num">{{ a.entrada|time:"H:i" }} – {{ a.salida|time:"H:i"|default:"…" }}</td>
+<td>{% if a.minutos_tarde %}<span class="estado aviso">{{ a.minutos_tarde }}′ tarde</span>{% endif %}</td></tr>{% empty %}<tr><td class="muted">Sin fichadas.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

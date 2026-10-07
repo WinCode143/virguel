@@ -17,12 +17,48 @@ class InicioJornadaForm(forms.Form):
     vehiculo = forms.ModelChoiceField(Vehiculo.objects.filter(estado="operativo"), required=False,
                                       label="Vehículo (si usás uno)")
     km_inicio = forms.IntegerField(required=False, min_value=0, label="Km al salir")
+    lat = forms.DecimalField(required=False, widget=forms.HiddenInput, max_digits=9, decimal_places=6)
+    lng = forms.DecimalField(required=False, widget=forms.HiddenInput, max_digits=9, decimal_places=6)
 
 
 class FinJornadaForm(forms.Form):
     km_fin = forms.IntegerField(required=False, min_value=0, label="Km al volver")
-    hectareas_cubiertas = forms.DecimalField(min_value=0, max_digits=6, decimal_places=2,
+    hectareas_cubiertas = forms.DecimalField(min_value=0, max_digits=6, decimal_places=2, required=False,
                                              label="Hectáreas recorridas hoy (aprox.)")
+    lat = forms.DecimalField(required=False, widget=forms.HiddenInput, max_digits=9, decimal_places=6)
+    lng = forms.DecimalField(required=False, widget=forms.HiddenInput, max_digits=9, decimal_places=6)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from core.models import Parametros
+        if not Parametros.actual().usar_hectareas:
+            del self.fields["hectareas_cubiertas"]
+
+
+class NovedadForm(forms.ModelForm):
+    """Aviso de ausencia o pedido de licencia desde el celular."""
+
+    class Meta:
+        from personal.models import Novedad
+        model = Novedad
+        fields = ["tipo", "desde", "hasta", "certificado", "observaciones"]
+        labels = {"certificado": "Foto del certificado (si tenés)", "observaciones": "Detalle"}
+        widgets = {"desde": forms.DateInput(attrs={"type": "date"}), "hasta": forms.DateInput(attrs={"type": "date"}),
+                   "certificado": forms.ClearableFileInput(attrs={"accept": "image/*,application/pdf"}),
+                   "observaciones": forms.Textarea(attrs={"rows": 3})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from personal.models import Novedad
+        # el empleado sólo puede avisar estos tipos; injustificada/suspensión las carga la empresa
+        self.fields["tipo"].choices = [c for c in Novedad.Tipo.choices
+                                       if c[0] in ("enfermedad", "accidente", "licencia", "vacaciones", "franco")]
+
+    def clean(self):
+        d = super().clean()
+        if d.get("desde") and d.get("hasta") and d["hasta"] < d["desde"]:
+            self.add_error("hasta", "La fecha final no puede ser anterior a la inicial.")
+        return d
 
 
 class CerrarOrdenForm(forms.Form):

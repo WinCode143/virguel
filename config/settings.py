@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     "django.contrib.humanize",
     # Módulos del ERP
     "core",
+    "personal",
     "operaciones",
     "inventario",
     "supervision",
@@ -114,6 +115,21 @@ LOGIN_REDIRECT_URL = "raiz"
 LOGOUT_REDIRECT_URL = "login"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# ---- Mail (parte diario). Sin EMAIL_HOST los mails se guardan como archivos en media/mails/
+if os.environ.get("EMAIL_HOST"):
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = os.environ["EMAIL_HOST"]
+    EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+    EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+    EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+    EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "1") == "1"
+    EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "0") == "1"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.filebased.EmailBackend"
+    EMAIL_FILE_PATH = BASE_DIR / "media" / "mails"
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "Virguel ERP <no-responder@virguel.local>")
+URL_SISTEMA = os.environ.get("URL_SISTEMA", "http://localhost:8000")
 
 # Límite de subida (fotos de informes, archivos de importación)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 15 * 1024 * 1024

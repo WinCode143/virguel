@@ -1,0 +1,12 @@
+{% extends "escritorio.html" %}
+{% block titulo %}Legajos · Virguel{% endblock %}
+{% block encabezado %}<h1>Legajos</h1><p class="sub">Ficha completa de cada persona: datos, asistencia, licencias, documentación, desempeño, sanciones, capacitación y equipo asignado.</p>{% endblock %}
+{% block contenido %}
+<form class="filtros" method="get"><label>Buscar<input name="q" value="{{ q }}" placeholder="Apellido, nombre, legajo o DNI"></label>
+<label>Ver<select name="inactivos"><option value="">Activos</option><option value="1" {% if request.GET.inactivos == '1' %}selected{% endif %}>Incluir egresados</option></select></label><button class="btn sec">Buscar</button>
+{% if es_gerencia %}<a class="btn sec" href="{% url 'admin:core_persona_add' %}">Nueva persona</a>{% endif %}</form>
+<div class="card"><div class="tabla-scroll"><table><thead><tr><th>Legajo</th><th>Apellido y nombre</th><th>Rol</th><th>Supervisor</th><th>Zona</th><th>Horario</th><th>Ingreso</th><th>Estado</th></tr></thead>
+<tbody>{% for p in personas %}<tr><td>{{ p.legajo }}</td><td><a href="{% url 'personal:legajo' p.id %}">{{ p.apellido }}, {{ p.nombre }}</a></td><td>{{ p.get_rol_display }}</td><td>{{ p.supervisor.apellido|default:"—" }}</td><td>{{ p.zona|default:"—" }}</td>
+<td>{{ p.hora_entrada|time:"H:i" }}–{{ p.hora_salida|time:"H:i" }}</td><td>{{ p.fecha_ingreso|date:"d/m/Y" }}</td><td>{% if p.activo %}<span class="estado ok">Activo</span>{% else %}<span class="estado info">Egresó {{ p.fecha_egreso|date:"d/m/Y" }}</span>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="8" class="muted">Sin resultados.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

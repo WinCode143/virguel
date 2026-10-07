@@ -1,22 +1,23 @@
 {% extends "escritorio.html" %}{% load formato l10n %}
 {% block titulo %}Planificación · Virguel{% endblock %}
-{% block encabezado %}<h1>9 · Planificación, capacidad y probabilidades</h1><p class="sub">Simulador: cambiá los supuestos y mirá cuántas hectáreas, clientes y decodificadores implica.</p>{% endblock %}
+{% block encabezado %}<h1>9 · Planificación, capacidad y probabilidades</h1><p class="sub">Simulador: cambiá la cantidad de técnicos y los supuestos y mirá cuántos clientes, técnicos y decodificadores hacen falta.</p>{% endblock %}
 {% block contenido %}
 <form class="card filtros" method="get" style="margin-bottom:1rem">
   <label>Técnicos en calle<input type="number" name="tecnicos" min="0" value="{{ e.tecnicos }}" style="width:7rem"></label>
-  <label>Ha/día por cuadrilla (mín.)<input type="number" step="0.1" name="ha_min" value="{{ e.ha_min|unlocalize }}" style="width:7rem"></label>
+  {% if p.usar_hectareas %}<label>Ha/día por cuadrilla (mín.)<input type="number" step="0.1" name="ha_min" value="{{ e.ha_min|unlocalize }}" style="width:7rem"></label>
   <label>Ha/día por cuadrilla (máx.)<input type="number" step="0.1" name="ha_max" value="{{ e.ha_max|unlocalize }}" style="width:7rem"></label>
-  <label>Zona (densidad)<select name="zona"><option value="">Promedio de zonas</option>{% for z in zonas %}<option value="{{ z.id }}" {% if zona and zona.id == z.id %}selected{% endif %}>{{ z.nombre }} ({{ z.densidad_clientes_ha }} cl/ha)</option>{% endfor %}</select></label>
+  <label>Zona (densidad)<select name="zona"><option value="">Promedio de zonas</option>{% for z in zonas %}<option value="{{ z.id }}" {% if zona and zona.id == z.id %}selected{% endif %}>{{ z.nombre }} ({{ z.densidad_clientes_ha }} cl/ha)</option>{% endfor %}</select></label>{% endif %}
   <label>% decodificador bajo<input type="number" step="1" name="prob_min" value="{% widthratio e.prob_min 1 100 %}" style="width:6rem"></label>
   <label>% decodificador alto<input type="number" step="1" name="prob_max" value="{% widthratio e.prob_max 1 100 %}" style="width:6rem"></label>
   <label>Horizonte (días)<input type="number" name="dias" min="1" max="60" value="{{ dias }}" style="width:6rem"></label>
   <button class="btn">Calcular</button>
 </form>
 <div class="grid g4">
-  <div class="card kpi"><div class="etq">Hectáreas por día</div><div class="valor">{{ cap.ha_min|num }}–{{ cap.ha_max|num }}</div>
+  {% if p.usar_hectareas %}<div class="card kpi"><div class="etq">Hectáreas por día</div><div class="valor">{{ cap.ha_min|num }}–{{ cap.ha_max|num }}</div>
     <div class="det">{{ cap.cuadrillas|num:1 }} cuadrillas de {{ p.tecnicos_por_cuadrilla }}{% if ha_real %} · real: {{ ha_real|num:1 }} ha/cuadrilla{% endif %}</div></div>
+  {% else %}<div class="card kpi"><div class="etq">Técnicos disponibles</div><div class="valor">{{ e.tecnicos }}</div><div class="det">en calle el {{ dia|date:"d/m" }} · cada uno atiende hasta {{ p.clientes_por_tecnico_dia|num }} clientes</div></div>{% endif %}
   <div class="card kpi"><div class="etq">Clientes atendibles por día</div><div class="valor">{{ cap.clientes_min|num }}–{{ cap.clientes_max|num }}</div>
-    <div class="det">por área {{ cap.clientes_por_area_min|num }}–{{ cap.clientes_por_area_max|num }} · tope visitas {{ cap.clientes_por_tope|num }}</div></div>
+    <div class="det">{% if p.usar_hectareas %}por área {{ cap.clientes_por_area_min|num }}–{{ cap.clientes_por_area_max|num }} · {% endif %}tope visitas {{ cap.clientes_por_tope|num }}</div></div>
   <div class="card kpi"><div class="etq">Decodificadores por día</div><div class="valor">{{ cap.deco_min|num }}–{{ cap.deco_max|num }}</div>
     <div class="det">con prob. estimada: {{ cap.deco_estimado|num }}</div></div>
   <div class="card kpi"><div class="etq">Días con capacidad insuficiente</div><div class="valor">{{ deficit|length }} / {{ dias }}</div><div class="det">según demanda comercial cargada</div></div>

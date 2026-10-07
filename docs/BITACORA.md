@@ -133,3 +133,50 @@ services vencidos, siniestros y demanda comercial con un pico de campaña.
   de 30 días, mín. 2, tope 6), primero en su zona y después en otras, priorizando retrabajos
   y atrasadas. Excluye ausentes. Gerencia o el supervisor (sólo su equipo) revisan y confirman.
   Las que no entran quedan listadas: indica falta de capacidad. Test agregado (30 tests).
+
+---
+
+## 2026-10-07 — Sesión 1, tercera parte: reorientación a CONTROL DE PERSONAL
+
+**Aclaración del usuario:** "no es un tema de hectáreas, es un sistema de control de personal".
+También preguntó qué existe: app móvil (sí, PWA), sitio web (sí), dashboards (sí) y
+**mails con partes (no existía → se agregó)**.
+
+### Hecho
+- Nueva app **`personal`**: `Asistencia` (fichada entrada/salida con GPS, minutos tarde,
+  horas y horas extra), `Novedad` (enfermedad, ART, vacaciones, licencia, franco,
+  injustificada, suspensión; con certificado y aprobación), `Feriado`, `TipoDocumento` y
+  `DocumentoPersonal` (vencimientos).
+- Persona: horario de entrada/salida, trabaja sábados, motivo de egreso. Parámetros:
+  tolerancia de llegada tarde, horas de jornada, mails del parte, **hectáreas opcionales (apagado)**.
+- **App móvil**: fichar entrada/salida (técnicos y supervisores) con ubicación y hora real del
+  celular (sirve sin señal); "Mi asistencia"; avisar ausencia con foto del certificado;
+  el supervisor aprueba avisos y ve en vivo quién falta de su equipo.
+- **Escritorio**: Asistencia de hoy, Presentismo y ausencias (CSV para liquidación), Legajos
+  (ficha integral), Documentación, Dotación y rotación, Parte diario. El Resumen arranca con
+  los indicadores de personal.
+- **Parte diario por mail** (`personal/parte.py`, `manage.py enviar_parte`): HTML + texto,
+  general para gerencia y por equipo para cada supervisor; se envía con la tarea de la noche.
+  Funciona con cualquier SMTP (Gmail, Outlook, correo propio).
+- Alertas de personal: 3+ faltas sin justificar en 30 días, 6+ llegadas tarde, avisos sin
+  aprobar hace 2+ días, documentación obligatoria faltante o vencida.
+- La asistencia **suma a la disciplina** en el diagnóstico de técnicos.
+- Power BI: vistas `powerbi.personal`, `powerbi.asistencia`, `powerbi.novedades`.
+- Datos demo: 5.000+ fichadas con tardanzas según perfil, 330 novedades, feriados,
+  administrativos, egresos del último año y documentación con vencimientos.
+
+### Decisiones
+| Decisión | Motivo |
+|---|---|
+| Presente = fichó **o** tuvo jornada en calle | Evita marcar faltas falsas si un técnico trabajó pero olvidó fichar. |
+| No se cuentan faltas antes de que el sistema registre asistencia, ni el día en curso | Detectado por los tests: sin esto, al arrancar todos figuraban "ausentes sin aviso". |
+| El empleado sólo puede avisar ausencias justificables | "Injustificada" y "suspensión" las carga la empresa. |
+| Fichada con la hora del celular (máx. 7 días atrás) | Sin señal la fichada llega tarde, pero debe registrar la hora real. |
+| Vista previa del parte en un iframe del mismo origen | La protección anti-clickjacking (DENY) lo dejaba en blanco; se habilitó sólo `SAMEORIGIN` para esa vista. |
+| Dependencias de migraciones fijas | Las vistas de Power BI dependían de "__latest__" y se rompieron al agregar migraciones nuevas. |
+
+### Calidad
+- Tests: **37**, todos pasan (nuevos: tardanza y horas extra, presentismo con feriado/vacaciones/
+  enfermedad/falta, sin control no hay faltas, fichada con hora del celular, permisos del
+  supervisor sobre avisos y legajos, aviso con certificado, capacidad sin hectáreas).
+- Revisión visual de todas las pantallas nuevas (escritorio y celular).

@@ -32,6 +32,8 @@ from .models import Participacion
 # Charla y recapacitación son formativas: casi no penalizan. Las sanciones sí.
 PESO_ACCION = {"apercibimiento": 2, "multa": 3, "suspension": 5, "recapacitacion": 0.5, "charla": 0}
 PESO_SINIESTRO = {"leve": 1, "grave": 3, "critica": 6}
+PESO_INJUSTIFICADA = 2      # cada falta sin aviso ni justificación
+PESO_TARDANZA = 0.3         # cada llegada tarde (fuera de la tolerancia)
 
 
 class Diagnostico:
@@ -66,6 +68,9 @@ class EvaluacionTecnico:
     puntos_siniestros: float = 0.0
     epp_faltantes: int = 0
     capacitaciones: int = 0
+    injustificadas: int = 0
+    tardanzas: int = 0
+    presentismo: float | None = None
     capacitado_en_produccion: bool = False
     antiguedad_dias: int = 0
     score_productividad: float = 0.0
@@ -163,6 +168,13 @@ def evaluar_tecnicos(hasta: date | None = None, dias: int | None = None, tecnico
     for tid in ids:
         evs[tid].epp_faltantes = len(obligatorios - vigentes[tid])
 
+    # Asistencia: faltas injustificadas y llegadas tarde suman a disciplina
+    from personal.indicadores import resumen as resumen_asistencia
+    for r in resumen_asistencia(desde, hasta, tecnicos):
+        e = evs[r.persona.id]
+        e.injustificadas, e.tardanzas, e.presentismo = r.injustificadas, r.tardanzas, r.presentismo
+        e.puntos_disciplina += r.injustificadas * PESO_INJUSTIFICADA + r.tardanzas * PESO_TARDANZA
+
     # Capacitación recibida en la ventana
     for pid, en_prod in Participacion.objects.filter(
             persona_id__in=ids, asistio=True, capacitacion__fecha__range=(desde, hasta)
@@ -222,6 +234,10 @@ def _puntuar(e: EvaluacionTecnico, mediana: float, dias: int = 90):
     baja_prod = e.score_productividad < 55
     nuevo = e.antiguedad_dias < 60
 
+    if e.injustificadas >= 2:
+        e.motivos.append(f"{e.injustificadas} faltas sin justificar")
+    if e.tardanzas >= 5:
+        e.motivos.append(f"{e.tardanzas} llegadas tarde")
     if baja_prod:
         e.motivos.append(f"Productividad al {e.indice_productividad:.0%} de la mediana del equipo")
     for k in malas:

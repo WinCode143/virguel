@@ -1,0 +1,25 @@
+{# Tarjeta de fichada: entrada / salida. Requiere asistencia, inicio_form, fin_form #}
+<div class="card">
+{% if not asistencia %}
+  <h2>Fichar entrada</h2>
+  <form method="post" action="{% url 'movil:jornada' 'iniciar' %}" class="form-movil" data-offline="/app/" data-gps>{% csrf_token %}
+    {% if not es_supervisor %}{{ inicio_form.vehiculo.label_tag }}{{ inicio_form.vehiculo }}
+    {{ inicio_form.km_inicio.label_tag }}{{ inicio_form.km_inicio }}{% endif %}
+    {{ inicio_form.lat }}{{ inicio_form.lng }}
+    <p class="muted gps-estado" style="font-size:.82rem;margin:.6rem 0 0">Obteniendo ubicación…</p>
+    <button class="btn">Fichar entrada</button></form>
+{% elif not asistencia.salida %}
+  <h2>Trabajando desde las {{ asistencia.entrada|time:"H:i" }}</h2>
+  {% if asistencia.minutos_tarde %}<p style="margin:.2rem 0"><span class="estado aviso">Llegaste {{ asistencia.minutos_tarde }} min tarde</span></p>{% endif %}
+  {% if hechas is not None and not es_supervisor %}<p class="muted" style="margin:.2rem 0 0">{{ hechas }} orden{{ hechas|pluralize:"es" }} completada{{ hechas|pluralize }} hoy{% if jornada.vehiculo %} · {{ jornada.vehiculo.patente }}{% endif %}</p>{% endif %}
+  <details style="margin-top:.5rem"><summary class="muted">Fichar salida</summary>
+  <form method="post" action="{% url 'movil:jornada' 'finalizar' %}" class="form-movil" data-offline="/app/" data-gps>{% csrf_token %}
+    {% if jornada.vehiculo %}{{ fin_form.km_fin.label_tag }}{{ fin_form.km_fin }}{% endif %}
+    {% if fin_form.hectareas_cubiertas %}{{ fin_form.hectareas_cubiertas.label_tag }}{{ fin_form.hectareas_cubiertas }}{% endif %}
+    {{ fin_form.lat }}{{ fin_form.lng }}
+    <p class="muted gps-estado" style="font-size:.82rem;margin:.6rem 0 0">Obteniendo ubicación…</p>
+    <button class="btn sec">Fichar salida</button></form></details>
+{% else %}
+  <h2>Jornada terminada</h2><p class="muted" style="margin:0">{{ asistencia.entrada|time:"H:i" }} a {{ asistencia.salida|time:"H:i" }} · {{ asistencia.horas_trabajadas }} h{% if asistencia.horas_extra %} ({{ asistencia.horas_extra }} extra){% endif %}</p>
+{% endif %}
+</div>

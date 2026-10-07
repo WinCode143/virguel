@@ -1,0 +1,22 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Asistencia de hoy · Virguel{% endblock %}
+{% block encabezado %}<h1>Asistencia {% if es_hoy %}de hoy{% else %}del {{ fecha|date:"d/m/Y" }}{% endif %}</h1><p class="sub">Quién fichó, quién llegó tarde y quién falta{% if es_supervisor %} en tu equipo{% endif %}. Se actualiza con cada fichada del celular.</p>{% endblock %}
+{% block contenido %}
+<form class="filtros" method="get">
+  <label>Fecha<input type="date" name="fecha" value="{{ fecha|date:'Y-m-d' }}" onchange="this.form.submit()"></label>
+  {% if supervisores %}<label>Equipo<select name="supervisor" onchange="this.form.submit()"><option value="">Todos</option>{% for s in supervisores %}<option value="{{ s.id }}" {% if sup == s.id|stringformat:"s" %}selected{% endif %}>{{ s.apellido }}</option>{% endfor %}</select></label>{% endif %}
+</form>
+<div class="grid g4">
+  <div class="card kpi"><div class="etq">Presentes</div><div class="valor">{{ presentes }} / {{ total }}</div><div class="det">personas que debían trabajar</div></div>
+  <div class="card kpi"><div class="etq">Llegaron tarde</div><div class="valor">{{ tarde }}</div><div class="det">después del horario + tolerancia</div></div>
+  <div class="card kpi"><div class="etq">Ausentes con aviso</div><div class="valor">{{ con_aviso }}</div><div class="det">licencias y novedades</div></div>
+  <div class="card kpi"><div class="etq">Sin fichar y sin aviso</div><div class="valor">{% if sin_aviso %}<span class="estado critico">{{ sin_aviso }}</span>{% else %}0{% endif %}</div><div class="det">requieren llamado del supervisor</div></div>
+</div>
+{% include "tablero/_grafico.html" with id="g-pres" datos=g titulo="Presentismo diario (últimos 30 días)" nota="Presentes ÷ personas que debían trabajar ese día según su horario." %}
+<div class="card"><h2>Detalle por persona</h2><div class="tabla-scroll" style="max-height:560px;overflow-y:auto"><table>
+<thead><tr><th>Persona</th><th>Supervisor</th><th>Horario</th><th>Entrada</th><th>Salida</th><th>Situación</th></tr></thead>
+<tbody>{% for f in filas %}<tr><td style="white-space:nowrap"><a href="{% url 'personal:legajo' f.persona.id %}">{{ f.persona.apellido }}, {{ f.persona.nombre }}</a> <span class="muted" style="font-size:.78rem">{{ f.persona.get_rol_display }}</span></td>
+<td>{{ f.persona.supervisor.apellido|default:"—" }}</td><td class="num">{{ f.persona.hora_entrada|time:"H:i" }}</td>
+<td class="num">{{ f.asistencia.entrada|time:"H:i"|default:"—" }}</td><td class="num">{{ f.asistencia.salida|time:"H:i"|default:"—" }}</td>
+<td><span class="estado {{ f.situacion.0 }}">{{ f.situacion.1 }}</span></td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

@@ -102,8 +102,8 @@ BORRAR = "DROP SCHEMA IF EXISTS powerbi CASCADE;"
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("core", "__latest__"), ("operaciones", "__latest__"), ("inventario", "__latest__"),
-        ("supervision", "__latest__"), ("incidentes", "__latest__"), ("finanzas", "__latest__"),
-        ("flota", "__latest__"), ("herramientas", "__latest__"),
+        ("core", "0002_parametros_tecnicos_por_cuadrilla"), ("operaciones", "0001_initial"),
+        ("inventario", "0001_initial"), ("supervision", "0001_initial"), ("incidentes", "0001_initial"),
+        ("finanzas", "0001_initial"), ("flota", "0001_initial"), ("herramientas", "0001_initial"),
     ]
     operations = [migrations.RunSQL(CREAR, BORRAR)]

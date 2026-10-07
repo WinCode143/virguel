@@ -1,8 +1,9 @@
 # Virguel — ERP operativo y tablero de control
 
-Sistema centralizado para medir y proyectar la operación de calle: técnicos,
-supervisores, incidentes, EPP, capacitación, flota, finanzas (egresos),
-inventario y planificación de capacidad.
+Sistema de **control de personal** y gestión operativa: asistencia con fichada desde el
+celular, ausencias y licencias, legajo digital, parte diario por mail, desempeño de técnicos
+y supervisores, incidentes, EPP, capacitación, flota, finanzas (egresos), inventario y
+planificación.
 
 - **Gerencia / administración** → aplicación de escritorio (`/tablero/`) y carga de datos (`/admin/`).
 - **Supervisores** → app móvil (`/app/`) + tableros de su equipo en la PC.
@@ -39,11 +40,14 @@ Abrir http://localhost:8000. Usuarios de demostración (contraseña `virguel2026
 | `s001` … `s005` | Supervisores (`s004`: mal trato en encuestas; `s005`: casi no controla) |
 | `t001` … `t036` | Técnicos |
 
+Sin servidor de mail configurado, los partes diarios quedan como archivos en `media/mails/`.
+
 ## Comandos
 
 | Comando | Qué hace |
 |---|---|
 | `manage.py tareas_diarias` | Genera encuestas del día, cierra objetivos vencidos y recalcula todas las alertas. Programarlo cada noche (ver ARQUITECTURA). |
+| `manage.py enviar_parte` | Envía el parte diario por mail (también lo hace `tareas_diarias`). |
 | `manage.py generar_demo --reset` | **Borra** los datos operativos y genera 150 días de datos de prueba. |
 | `manage.py crear_lector_powerbi --password …` | Usuario PostgreSQL de sólo lectura para Power BI. |
 | `manage.py test tests` | Tests automáticos de las reglas de negocio. |

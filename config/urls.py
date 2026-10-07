@@ -14,6 +14,7 @@ urlpatterns = [
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("admin/", admin.site.urls),
     path("tablero/", include("tablero.urls")),
+    path("personal/", include("personal.urls")),
     path("app/", include("movil.urls")),
     path("encuesta/<uuid:token>/", encuesta, name="encuesta"),
     path("api/powerbi/<slug:dataset>.csv", exportar_csv, name="exportar_csv"),

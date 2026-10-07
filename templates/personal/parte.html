@@ -1,0 +1,13 @@
+{% extends "escritorio.html" %}
+{% block titulo %}Parte diario · Virguel{% endblock %}
+{% block encabezado %}<h1>Parte diario por mail</h1><p class="sub">Se envía solo todas las noches (con la tarea diaria) a gerencia y a cada supervisor con el resumen de su equipo. Abajo, exactamente lo que llega.</p>{% endblock %}
+{% block contenido %}
+<form class="filtros" method="get"><label>Fecha<input type="date" name="fecha" value="{{ fecha|date:'Y-m-d' }}" onchange="this.form.submit()"></label></form>
+{% if es_gerencia %}<div class="grid g3">
+  <div class="card kpi"><div class="etq">Gerencia recibe en</div><div style="margin-top:.4rem">{% for d in destinatarios %}{{ d }}<br>{% empty %}<span class="estado aviso">Sin mails cargados</span>{% endfor %}</div><div class="det"><a href="{% url 'admin:core_parametros_change' 1 %}">editar en Parámetros</a></div></div>
+  <div class="card kpi"><div class="etq">Supervisores con mail</div><div class="valor">{{ supervisores_con_mail }}</div><div class="det">reciben el parte de su equipo</div></div>
+  <div class="card kpi"><div class="etq">Servidor de correo</div><div style="margin-top:.4rem">{% if smtp %}<span class="estado ok">Configurado</span>{% else %}<span class="estado aviso">Sin configurar</span><div class="det">Los mails se guardan como archivos en <code>media/mails/</code>. Ver docs/ARQUITECTURA.md.</div>{% endif %}</div></div>
+</div>
+<form method="post" class="card" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">{% csrf_token %}<span><b>Asunto:</b> {{ asunto }}</span><button class="btn">Enviar ahora</button></form>{% endif %}
+<div class="card" style="padding:0;overflow:hidden"><iframe src="?fecha={{ fecha|date:'Y-m-d' }}&solo=mail" title="Vista previa del parte" style="width:100%;height:900px;border:0;background:#f9f9f7"></iframe></div>
+{% endblock %}

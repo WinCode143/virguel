@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from capacitacion.evaluacion import Diagnostico, evaluar_tecnicos, guardar_historial
 from capacitacion.models import EvaluacionHistorica
-from core.models import Alerta
+from core.models import Alerta, Persona
 from core.services import SincronizadorAlertas
 from flota.models import Vehiculo, proximos_services
 from herramientas.models import Asignacion, Elemento
@@ -132,16 +132,40 @@ def alertas_incidentes(hoy):
                      "Revisar causas raíz y capacitación del personal involucrado.", C, url)
 
 
-def ejecutar(hoy=None, log=print):
+def alertas_personal(hoy):
+    from personal.indicadores import documentos_faltantes_o_vencidos, resumen
+    from personal.models import Novedad
+    with SincronizadorAlertas(Alerta.Modulo.PERSONAL) as s:
+        url = reverse("personal:asistencia")
+        activos = Persona.objects.filter(activo=True).exclude(rol="gerencia")
+        for r in resumen(hoy - timedelta(days=29), hoy, activos):
+            if r.injustificadas >= 3:
+                s.alerta(f"faltas-{r.persona.id}", f"{r.persona.nombre_completo}: {r.injustificadas} faltas sin justificar en 30 días",
+                         "Evaluar sanción según reglamento interno.", C, url)
+            elif r.tardanzas >= 6:
+                s.alerta(f"tarde-{r.persona.id}", f"{r.persona.nombre_completo}: {r.tardanzas} llegadas tarde en 30 días", "", A, url)
+        for n in Novedad.objects.filter(estado="pendiente", creada__lte=timezone.now() - timedelta(days=2)).select_related("persona"):
+            s.alerta(f"novedad-{n.id}", f"Aviso de {n.persona.nombre_completo} ({n.get_tipo_display()}) sin aprobar hace más de 2 días",
+                     "", A, reverse("personal:legajo", args=[n.persona_id]))
+        for d in documentos_faltantes_o_vencidos(activos):
+            if d["estado"] == "critico":
+                s.alerta(f"doc-{d['persona'].id}-{d['tipo'].id}", f"{d['persona'].nombre_completo}: {d['tipo']} — {d['texto'].lower()}",
+                         "", C, reverse("personal:documentos"))
+
+
+def ejecutar(hoy=None, log=print, enviar_parte=True):
     hoy = hoy or timezone.localdate()
     log(f"Encuestas generadas: {generar_encuestas(hoy)}")
     log(f"Tareas de supervisor vencidas cerradas: {cerrar_tareas_vencidas(hoy)}")
     ultima = EvaluacionHistorica.objects.order_by("-fecha").values_list("fecha", flat=True).first()
     if ultima is None or (hoy - ultima).days >= 7:
         log(f"Historial semanal de evaluación guardado: {guardar_historial(hoy)} técnicos")
-    for nombre, f in (("stock", alertas_stock), ("flota", alertas_flota), ("EPP", alertas_epp),
+    for nombre, f in (("personal", alertas_personal), ("stock", alertas_stock), ("flota", alertas_flota), ("EPP", alertas_epp),
                       ("personas", alertas_personas), ("incidentes", alertas_incidentes)):
         f(hoy)
         log(f"Alertas de {nombre} actualizadas")
     abiertas = Alerta.objects.filter(resuelta=False).values("nivel").annotate(n=Count("id"))
     log("Alertas abiertas: " + ", ".join(f"{r['nivel']}={r['n']}" for r in abiertas))
+    if enviar_parte:
+        from personal.parte import enviar
+        enviar(hoy, log=log)

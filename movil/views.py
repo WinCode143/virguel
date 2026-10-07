@@ -21,7 +21,7 @@ from supervision.evaluacion import evaluar_supervisores
 from supervision.models import EncuestaSupervisor, InformeControl, TareaSupervisor
 
 from .forms import (AccionForm, CerrarOrdenForm, EncuestaForm, FinJornadaForm, InformeForm, InicioJornadaForm,
-                    SiniestroMovilForm)
+                    NovedadForm, SiniestroMovilForm)
 
 MOVIL = (TECNICO, SUPERVISOR)
 
@@ -50,7 +50,9 @@ def inicio(request):
     if rol_de(request.user) == SUPERVISOR:
         return _inicio_supervisor(request, p)
     hoy = timezone.localdate()
+    from personal.models import Asistencia
     jornada = Jornada.objects.filter(tecnico=p, fecha=hoy).first()
+    asistencia = Asistencia.objects.filter(persona=p, fecha=hoy).first()
     ots = OrdenTrabajo.objects.filter(tecnico=p, fecha_programada__lte=hoy).filter(
         estado__in=["pendiente", "asignada"]).select_related("tipo", "cliente").order_by("fecha_programada")[:30]
     hechas = OrdenTrabajo.objects.filter(tecnico=p, fecha_ejecucion=hoy, estado="completada").count()
@@ -59,14 +61,18 @@ def inicio(request):
     epp_vencido = Asignacion.objects.filter(persona=p, estado="en_uso", fecha_vencimiento__lt=hoy).count()
     epp_sin_firmar = Asignacion.objects.filter(persona=p, estado="en_uso", conformidad_firmada=False).count()
     return render(request, "movil/inicio_tecnico.html", {
-        "p": p, "jornada": jornada, "ots": ots, "hechas": hechas, "encuesta": encuesta,
+        "p": p, "jornada": jornada, "asistencia": asistencia, "ots": ots, "hechas": hechas, "encuesta": encuesta,
         "epp_vencido": epp_vencido, "epp_sin_firmar": epp_sin_firmar, "tab": "inicio",
         "inicio_form": InicioJornadaForm(), "fin_form": FinJornadaForm()})
 
 
 def _inicio_supervisor(request, p):
+    from personal.indicadores import estado_del_dia
+    from personal.models import Asistencia, Novedad
     hoy = timezone.localdate()
     equipo = p.a_cargo.filter(activo=True, rol="tecnico")
+    estado_equipo = estado_del_dia(hoy, equipo)
+    faltan = [e for e in estado_equipo if e.situacion[0] == "critico"]
     en_calle = Jornada.objects.filter(fecha=hoy, en_calle=True, tecnico__in=equipo).count()
     ots_hoy = OrdenTrabajo.objects.filter(tecnico__in=equipo, fecha_programada=hoy)
     resumen = {r["estado"]: r["n"] for r in ots_hoy.values("estado").annotate(n=Count("id"))}
@@ -77,39 +83,129 @@ def _inicio_supervisor(request, p):
                           .annotate(n=Count("acciones")).filter(n=0).select_related("tecnico")[:10])
     return render(request, "movil/inicio_supervisor.html", {
         "p": p, "equipo": equipo.count(), "en_calle": en_calle, "resumen": resumen, "total_ots": ots_hoy.count(),
-        "informes_hoy": informes_hoy, "tareas": tareas, "desvios_sin_accion": desvios_sin_accion, "tab": "inicio"})
+        "informes_hoy": informes_hoy, "tareas": tareas, "desvios_sin_accion": desvios_sin_accion, "tab": "inicio",
+        "asistencia": Asistencia.objects.filter(persona=p, fecha=hoy).first(), "faltan": faltan,
+        "tarde": [e for e in estado_equipo if e.situacion[0] == "aviso"],
+        "novedades_pendientes": Novedad.objects.filter(persona__supervisor=p, estado="pendiente").count(),
+        "inicio_form": InicioJornadaForm(), "fin_form": FinJornadaForm()})
 
 
 # ---------------------------------------------------------------- técnico
-@requiere_rol(TECNICO)
+def momento_operacion(request):
+    """Momento real de la fichada según el celular (llega más tarde si no había señal).
+    Se acepta hasta 7 días hacia atrás y no en el futuro; si no, se usa ahora."""
+    from datetime import datetime
+    ahora = timezone.now()
+    try:
+        m = datetime.fromisoformat(request.POST.get("_momento_cliente", "").replace("Z", "+00:00"))
+    except ValueError:
+        return ahora
+    if timezone.is_naive(m):
+        return ahora
+    return m if ahora - timedelta(days=7) <= m <= ahora + timedelta(minutes=5) else ahora
+
+
+@requiere_rol(*MOVIL)
 def jornada(request, accion):
+    """Fichada de entrada/salida (todos) + jornada en calle con vehículo (técnicos)."""
+    from personal.models import Asistencia
     p = _persona(request)
     if request.method != "POST":
         return redirect("movil:inicio")
-    hoy = fecha_operacion(request)
+    momento = momento_operacion(request)
+    hoy = timezone.localtime(momento).date()
+    es_tecnico = p.rol == "tecnico"
     if accion == "iniciar":
         f = InicioJornadaForm(request.POST)
         if f.is_valid():
-            j, _ = Jornada.objects.update_or_create(fecha=hoy, tecnico=p, defaults={
-                "en_calle": True, "zona": p.zona, "vehiculo": f.cleaned_data["vehiculo"],
-                "km_inicio": f.cleaned_data["km_inicio"]})
-            messages.success(request, "Jornada iniciada. ¡Buen día!")
+            a, creada = Asistencia.objects.get_or_create(persona=p, fecha=hoy, defaults={
+                "entrada": momento, "lat_entrada": f.cleaned_data["lat"], "lng_entrada": f.cleaned_data["lng"]})
+            if es_tecnico:
+                Jornada.objects.update_or_create(fecha=hoy, tecnico=p, defaults={
+                    "en_calle": True, "zona": p.zona, "vehiculo": f.cleaned_data["vehiculo"],
+                    "km_inicio": f.cleaned_data["km_inicio"]})
+            if not creada:
+                messages.info(request, f"Ya habías fichado la entrada a las {timezone.localtime(a.entrada):%H:%M}.")
+            elif a.minutos_tarde:
+                messages.warning(request, f"Entrada registrada a las {timezone.localtime(a.entrada):%H:%M} "
+                                          f"({a.minutos_tarde} min tarde).")
+            else:
+                messages.success(request, f"Entrada registrada a las {timezone.localtime(a.entrada):%H:%M}. ¡Buen día!")
     elif accion == "finalizar":
         f = FinJornadaForm(request.POST)
-        j = Jornada.objects.filter(fecha=hoy, tecnico=p).first()
-        if j and f.is_valid():
-            j.km_fin = f.cleaned_data["km_fin"]
-            j.hectareas_cubiertas = f.cleaned_data["hectareas_cubiertas"]
-            j.save()
-            if j.vehiculo and j.km_fin and j.km_fin > j.vehiculo.km_actual:
-                j.vehiculo.km_actual = j.km_fin
-                j.vehiculo.save(update_fields=["km_actual"])
-            messages.success(request, "Jornada finalizada. No olvides responder la encuesta del día.")
+        a = Asistencia.objects.filter(persona=p, fecha=hoy).first()
+        if a and f.is_valid():
+            a.salida, a.lat_salida, a.lng_salida = momento, f.cleaned_data["lat"], f.cleaned_data["lng"]
+            a.save()
+            j = Jornada.objects.filter(fecha=hoy, tecnico=p).first() if es_tecnico else None
+            if j:
+                j.km_fin = f.cleaned_data["km_fin"]
+                if f.cleaned_data.get("hectareas_cubiertas") is not None:
+                    j.hectareas_cubiertas = f.cleaned_data["hectareas_cubiertas"]
+                j.horas_trabajadas = a.horas_trabajadas
+                j.save()
+                if j.vehiculo and j.km_fin and j.km_fin > j.vehiculo.km_actual:
+                    j.vehiculo.km_actual = j.km_fin
+                    j.vehiculo.save(update_fields=["km_actual"])
+            messages.success(request, f"Salida registrada a las {timezone.localtime(momento):%H:%M} "
+                                      f"({a.horas_trabajadas:g} h)." + (" No olvides la encuesta del día." if es_tecnico else ""))
             # La encuesta se genera al cerrar la jornada (además del proceso nocturno)
-            if p.supervisor_id:
+            if es_tecnico and p.supervisor_id:
                 EncuestaSupervisor.objects.get_or_create(fecha=hoy, tecnico=p,
                                                          defaults={"supervisor_id": p.supervisor_id})
+        elif not a:
+            messages.error(request, "No hay fichada de entrada de hoy.")
     return redirect("movil:inicio")
+
+
+@requiere_rol(*MOVIL)
+def novedad(request):
+    """Avisar una ausencia o pedir una licencia."""
+    p = _persona(request)
+    if request.method == "POST":
+        f = NovedadForm(request.POST, request.FILES)
+        if f.is_valid():
+            n = f.save(commit=False)
+            n.persona, n.cargada_por = p, p
+            n.save()
+            messages.success(request, "Aviso enviado. Tu supervisor lo va a revisar.")
+            return redirect("movil:asistencia")
+    else:
+        f = NovedadForm()
+    return render(request, "movil/form.html", {
+        "form": f, "titulo": "Avisar ausencia / pedir licencia", "tab": "asistencia",
+        "ayuda": "Avisá lo antes posible. Si tenés certificado, sacale una foto."})
+
+
+@requiere_rol(*MOVIL)
+def mi_asistencia(request):
+    from personal.indicadores import resumen
+    from personal.models import Asistencia, Novedad
+    p = _persona(request)
+    hoy = timezone.localdate()
+    desde = hoy.replace(day=1)
+    r = resumen(desde, hoy, [p])[0]
+    return render(request, "movil/asistencia.html", {
+        "r": r, "desde": desde, "tab": "asistencia",
+        "fichadas": Asistencia.objects.filter(persona=p, fecha__gte=hoy - timedelta(days=14)),
+        "novedades": Novedad.objects.filter(persona=p).order_by("-desde")[:10]})
+
+
+@requiere_rol(SUPERVISOR)
+def novedades_equipo(request):
+    """El supervisor aprueba o rechaza los avisos de su equipo."""
+    from personal.models import Novedad
+    p = _persona(request)
+    if request.method == "POST":
+        n = get_object_or_404(Novedad, pk=request.POST.get("novedad"), persona__supervisor=p)
+        n.estado = Novedad.Estado.APROBADA if request.POST.get("accion") == "aprobar" else Novedad.Estado.RECHAZADA
+        n.save(update_fields=["estado"])
+        messages.success(request, f"Novedad {n.get_estado_display().lower()}.")
+        return redirect("movil:novedades")
+    return render(request, "movil/novedades.html", {
+        "pendientes": Novedad.objects.filter(persona__supervisor=p, estado="pendiente").select_related("persona"),
+        "recientes": Novedad.objects.filter(persona__supervisor=p).exclude(estado="pendiente")
+        .select_related("persona")[:15], "tab": "asistencia"})
 
 
 @requiere_rol(TECNICO)

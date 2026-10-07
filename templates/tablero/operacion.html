@@ -12,14 +12,15 @@
 <div class="grid g4">
   <div class="card kpi"><div class="etq">OT completadas</div><div class="valor">{{ comp|num }}</div><div class="det">de {{ total|num }} ejecutadas · {{ efectividad|num }}% efectividad</div></div>
   <div class="card kpi"><div class="etq">OT por técnico-día</div><div class="valor">{{ ots_por_jornada|num:2 }}</div><div class="det">{{ jornadas_calle|num }} jornadas en calle</div></div>
-  <div class="card kpi"><div class="etq">Hectáreas por técnico-día</div><div class="valor">{{ ha_prom|num:2 }}</div><div class="det">promedio relevado</div></div>
+  {% if p.usar_hectareas %}<div class="card kpi"><div class="etq">Hectáreas por técnico-día</div><div class="valor">{{ ha_prom|num:2 }}</div><div class="det">promedio relevado</div></div>
+  {% else %}<div class="card kpi"><div class="etq">Efectividad</div><div class="valor">{{ efectividad|num }}%</div><div class="det">completadas ÷ ejecutadas</div></div>{% endif %}
   <div class="card kpi"><div class="etq">Retrabajos</div><div class="valor">{{ retrabajos|num }}</div><div class="det">visitas para corregir trabajos previos</div></div>
 </div>
 {% include "tablero/_grafico.html" with id="g-estado" datos=g_estado titulo="Órdenes ejecutadas por día y resultado" %}
-<div class="grid g2">
+{% if p.usar_hectareas %}<div class="grid g2">
   {% include "tablero/_grafico.html" with id="g-calle" datos=g_calle titulo="Personal técnico en calle" %}
   {% include "tablero/_grafico.html" with id="g-ha" datos=g_ha titulo="Hectáreas cubiertas por día" %}
-</div>
+</div>{% else %}{% include "tablero/_grafico.html" with id="g-calle" datos=g_calle titulo="Personal técnico en calle" %}{% endif %}
 <div class="grid g2">
   <div class="card"><h2>Por tipo de tarea</h2><div class="tabla-scroll"><table>
     <thead><tr><th>Tipo</th><th class="num">Completadas</th><th class="num">Min. reales</th><th class="num">Min. estándar</th></tr></thead>

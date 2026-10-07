@@ -1,0 +1,20 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Dotación · Virguel{% endblock %}
+{% block encabezado %}<h1>Dotación y rotación</h1><p class="sub">Cuánta gente hay, cuánta entra y sale, y por qué se va.</p>{% endblock %}
+{% block contenido %}
+<div class="grid g4">
+  <div class="card kpi"><div class="etq">Dotación activa</div><div class="valor">{{ activos }}</div><div class="det">{{ por_rol.tecnico|default:0 }} técnicos · {{ por_rol.supervisor|default:0 }} supervisores · {{ por_rol.administrativo|default:0 }} administrativos</div></div>
+  <div class="card kpi"><div class="etq">Rotación anual</div><div class="valor">{{ rotacion_anual|pct:1 }}</div><div class="det">bajas de 12 meses ÷ dotación promedio</div></div>
+  <div class="card kpi"><div class="etq">Antigüedad promedio</div><div class="valor">{{ antiguedad_prom|num:1 }} años</div></div>
+  <div class="card kpi"><div class="etq">Documentación con problemas</div><div class="valor">{{ documentos|length }}</div><div class="det"><a href="{% url 'personal:documentos' %}">ver detalle</a></div></div>
+</div>
+<div class="grid g2">
+  {% include "tablero/_grafico.html" with id="g-dot" datos=g_dot titulo="Dotación a fin de mes" %}
+  {% include "tablero/_grafico.html" with id="g-mov" datos=g_mov titulo="Altas y bajas por mes" %}
+</div>
+<div class="grid g2">
+  {% include "tablero/_grafico.html" with id="g-ant" datos=g_ant titulo="Antigüedad del personal activo" %}
+  <div class="card"><h2>Motivos de egreso (12 meses)</h2><table><tbody>{% for b in bajas %}<tr><td>{{ b.motivo }}</td><td class="num">{{ b.n }}</td></tr>{% empty %}<tr><td class="muted">Sin egresos.</td></tr>{% endfor %}</tbody></table>
+  <h3 style="margin-top:1rem">Últimos egresos</h3><table><tbody>{% for p in egresos %}<tr><td><a href="{% url 'personal:legajo' p.id %}">{{ p.apellido }}, {{ p.nombre }}</a></td><td>{{ p.get_rol_display }}</td><td>{{ p.fecha_egreso|date:"d/m/Y" }}</td><td>{{ p.get_motivo_egreso_display }}</td></tr>{% empty %}<tr><td class="muted">—</td></tr>{% endfor %}</tbody></table></div>
+</div>
+{% endblock %}

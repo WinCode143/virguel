@@ -85,6 +85,7 @@
     // fecha local en que se cargó: si se envía más tarde, el servidor la respeta
     const d = new Date();
     fd.append("_fecha_cliente", `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+    fd.append("_momento_cliente", d.toISOString());  // hora exacta de la fichada
     if (ev.submitter && ev.submitter.name) fd.append(ev.submitter.name, ev.submitter.value);
     const url = form.action || location.href;
     try {
@@ -100,6 +101,23 @@
     }
   });
 
+  // Formularios con [data-gps]: completar ubicación en los campos ocultos lat/lng
+  function ubicar() {
+    const forms = document.querySelectorAll("form[data-gps]");
+    if (!forms.length || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition((pos) => {
+      forms.forEach((f) => {
+        const lat = f.querySelector("[name=lat]"), lng = f.querySelector("[name=lng]");
+        if (lat) lat.value = pos.coords.latitude.toFixed(6);
+        if (lng) lng.value = pos.coords.longitude.toFixed(6);
+        const nota = f.querySelector(".gps-estado");
+        if (nota) nota.textContent = "Ubicación lista ✓";
+      });
+    }, () => forms.forEach((f) => { const n = f.querySelector(".gps-estado"); if (n) n.textContent = "Sin ubicación (revisá permisos)"; }),
+    { timeout: 10000, enableHighAccuracy: true });
+  }
+
   window.addEventListener("online", sincronizar);
+  document.addEventListener("DOMContentLoaded", ubicar);
   document.addEventListener("DOMContentLoaded", () => { aviso(); sincronizar(); });
 })();

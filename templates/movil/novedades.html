@@ -1,0 +1,15 @@
+{% extends "movil/base_movil.html" %}
+{% block titulo_movil %}Ausencias del equipo{% endblock %}
+{% block contenido %}
+<a class="btn sec" style="display:block;margin-bottom:.8rem" href="{% url 'movil:novedad' %}">Avisar una ausencia mía</a>
+<div class="card"><h2>Para aprobar ({{ pendientes|length }})</h2>
+{% for n in pendientes %}<div style="border-bottom:1px solid var(--grid);padding:.6rem 0">
+  <b>{{ n.persona.nombre_completo }}</b> · {{ n.get_tipo_display }}<br>
+  <span class="muted" style="font-size:.85rem">{{ n.desde|date:"d/m" }} a {{ n.hasta|date:"d/m" }} ({{ n.dias }} día{{ n.dias|pluralize }}){% if n.observaciones %} · {{ n.observaciones }}{% endif %}</span>
+  {% if n.certificado %}<br><a href="{{ n.certificado.url }}" target="_blank">Ver certificado</a>{% else %}<br><span class="muted" style="font-size:.85rem">Sin certificado</span>{% endif %}
+  <form method="post" style="display:flex;gap:.5rem;margin-top:.5rem">{% csrf_token %}<input type="hidden" name="novedad" value="{{ n.id }}">
+    <button class="btn" name="accion" value="aprobar">Aprobar</button><button class="btn sec" name="accion" value="rechazar">Rechazar</button></form>
+</div>{% empty %}<p class="muted">No hay avisos pendientes.</p>{% endfor %}</div>
+<div class="card"><h2>Recientes</h2><ul class="lista-ot">{% for n in recientes %}<li><div>{{ n.persona.nombre_completo }}<br><span class="muted" style="font-size:.85rem">{{ n.get_tipo_display }} · {{ n.desde|date:"d/m" }}–{{ n.hasta|date:"d/m" }}</span></div>
+<span class="estado {% if n.estado == 'aprobada' %}ok{% else %}critico{% endif %}">{{ n.get_estado_display }}</span></li>{% empty %}<li class="muted">—</li>{% endfor %}</ul></div>
+{% endblock %}

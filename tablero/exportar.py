@@ -58,6 +58,9 @@ def _supervisores():
 
 
 DATASETS = {
+    "personal": ("Padrón de personal", _sql("SELECT * FROM powerbi.personal")),
+    "asistencia": ("Asistencia (fichadas)", _sql("SELECT * FROM powerbi.asistencia")),
+    "novedades": ("Novedades y licencias", _sql("SELECT * FROM powerbi.novedades")),
     "ordenes": ("Órdenes de trabajo", _sql("SELECT * FROM powerbi.ordenes")),
     "jornadas": ("Jornadas (personal en calle)", _sql("SELECT * FROM powerbi.jornadas")),
     "stock_lotes": ("Stock por lote con antigüedad", _sql("SELECT * FROM powerbi.stock_lotes")),

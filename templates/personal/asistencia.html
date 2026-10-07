@@ -1,0 +1,32 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Presentismo · Virguel{% endblock %}
+{% block encabezado %}<h1>Presentismo y ausencias</h1><p class="sub">{{ desde|date:"d/m/Y" }} – {{ hasta|date:"d/m/Y" }}. Días esperados según el horario de cada persona, sin feriados.</p>{% endblock %}
+{% block contenido %}
+<form class="filtros" method="get">
+  <label>Desde<input type="date" name="desde" value="{{ desde|date:'Y-m-d' }}"></label>
+  <label>Hasta<input type="date" name="hasta" value="{{ hasta|date:'Y-m-d' }}"></label>
+  <label>Rol<select name="rol"><option value="">Todos</option><option value="tecnico" {% if rol == 'tecnico' %}selected{% endif %}>Técnicos</option><option value="supervisor" {% if rol == 'supervisor' %}selected{% endif %}>Supervisores</option><option value="administrativo" {% if rol == 'administrativo' %}selected{% endif %}>Administrativos</option></select></label>
+  <button class="btn sec">Aplicar</button>
+  <a class="btn sec" href="?desde={{ desde|date:'Y-m-d' }}&hasta={{ hasta|date:'Y-m-d' }}&rol={{ rol|default:'' }}&formato=csv">Descargar para liquidación (CSV)</a>
+</form>
+<div class="grid g4">
+  <div class="card kpi"><div class="etq">Presentismo</div><div class="valor">{{ presentismo|pct:1 }}</div><div class="det">{{ tot.presentes|num }} días trabajados de {{ tot.esperados|num }}</div></div>
+  <div class="card kpi"><div class="etq">Faltas sin justificar</div><div class="valor">{{ tot.injustificadas|num }}</div><div class="det">días</div></div>
+  <div class="card kpi"><div class="etq">Llegadas tarde</div><div class="valor">{{ tot.tardanzas|num }}</div></div>
+  <div class="card kpi"><div class="etq">Horas extra</div><div class="valor">{{ tot.horas_extra|num }}</div><div class="det">sobre la jornada normal</div></div>
+</div>
+{% if pendientes %}<div class="card" style="border-color:var(--aviso)"><h2>Avisos de ausencia sin aprobar ({{ pendientes|length }})</h2>
+<table><tbody>{% for n in pendientes %}<tr><td>{{ n.persona.nombre_completo }}</td><td>{{ n.get_tipo_display }}</td><td>{{ n.desde|date:"d/m" }}–{{ n.hasta|date:"d/m" }}</td><td>{% if n.certificado %}<a href="{{ n.certificado.url }}" target="_blank">certificado</a>{% else %}<span class="muted">sin certificado</span>{% endif %}</td><td><a href="{% url 'admin:personal_novedad_change' n.id %}">revisar</a></td></tr>{% endfor %}</tbody></table></div>{% endif %}
+<div class="grid g2">
+  {% include "tablero/_grafico.html" with id="g-mot" datos=g_motivos titulo="Días de ausencia por motivo" %}
+  <div class="card"><h2>Más llegadas tarde</h2><table><thead><tr><th>Persona</th><th class="num">Veces</th></tr></thead>
+  <tbody>{% for t in tardanzas %}<tr><td><a href="{% url 'personal:legajo' t.persona__id %}">{{ t.persona__apellido }}, {{ t.persona__nombre }}</a></td><td class="num">{{ t.veces }}</td></tr>{% empty %}<tr><td class="muted">Nadie llegó tarde.</td></tr>{% endfor %}</tbody></table></div>
+</div>
+<div class="card"><div class="tabla-scroll"><table>
+<thead><tr><th>Persona</th><th>Estado</th><th class="num">Presentismo</th><th class="num">Esperados</th><th class="num">Trabajados</th><th class="num">Justificadas</th><th class="num">Sin justificar</th><th class="num">Vac./francos</th><th class="num">Tarde</th><th class="num">Horas</th><th class="num">Extra</th></tr></thead>
+<tbody>{% for r in filas %}<tr><td><a href="{% url 'personal:legajo' r.persona.id %}">{{ r.persona.apellido }}, {{ r.persona.nombre }}</a> <span class="muted" style="font-size:.78rem">{{ r.persona.get_rol_display }}</span></td>
+<td><span class="estado {{ r.estado }}">{% if r.estado == 'ok' %}Bien{% elif r.estado == 'aviso' %}Atención{% elif r.estado == 'critico' %}Grave{% else %}—{% endif %}</span></td>
+<td class="num">{{ r.presentismo|pct:1 }}</td><td class="num">{{ r.esperados }}</td><td class="num">{{ r.presentes }}</td><td class="num">{{ r.justificadas }}</td>
+<td class="num">{{ r.injustificadas }}</td><td class="num">{{ r.no_computables }}</td><td class="num">{{ r.tardanzas }}</td><td class="num">{{ r.horas|num }}</td><td class="num">{{ r.horas_extra|num:1 }}</td></tr>{% endfor %}</tbody></table></div>
+<p class="muted" style="font-size:.8rem;margin-bottom:0">Grave: 3 o más faltas sin justificar o presentismo menor a 85 %. Atención: alguna falta sin justificar, presentismo menor a 93 % o 5 o más llegadas tarde.</p></div>
+{% endblock %}
