@@ -100,10 +100,13 @@ class Command(BaseCommand):
             self.siniestros()
             self.demanda()
             self.finanzas()
+            self.historial()
         self.stdout.write(self.style.SUCCESS("Datos de demostración generados. Contraseña de todos: virguel2026"))
 
     # ------------------------------------------------------------------
     def borrar(self):
+        from capacitacion.models import EvaluacionHistorica
+        EvaluacionHistorica.objects.all().delete()
         for m in (Egreso, CostoFijo, Alerta, AccionCorrectiva, InformeControl, EncuestaSupervisor, TareaSupervisor,
                   Siniestro, Salida, LoteIngreso, DemandaComercial, RecetaMaterial, Participacion, Capacitacion,
                   EvaluacionCompetencia, Curso, Competencia, Asignacion, Elemento, Jornada, OrdenTrabajo,
@@ -632,6 +635,18 @@ class Command(BaseCommand):
                     dem.append(DemandaComercial(fecha=f, zona=r.choice(self.zonas), tipo_tarea=self.tipos[cod],
                                                 cantidad_clientes=cant))
         DemandaComercial.objects.bulk_create(dem)
+
+    def historial(self):
+        """Fotos semanales de la evaluación (lunes) para ver la evolución a largo plazo."""
+        from capacitacion.evaluacion import guardar_historial
+        f = self.inicio + timedelta(days=60)
+        f += timedelta(days=(7 - f.weekday()) % 7)
+        n = 0
+        while f <= self.hoy:
+            guardar_historial(f)
+            n += 1
+            f += timedelta(days=7)
+        self.stdout.write(f"  {n} semanas de historial de evaluación")
 
     def finanzas(self):
         cats = {c: CategoriaEgreso.objects.get_or_create(codigo=c, defaults={"nombre": n})[0] for c, n in

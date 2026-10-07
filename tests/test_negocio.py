@@ -161,6 +161,12 @@ class EvaluacionTecnicosTests(TestCase):
         self.assertGreater(e.tendencia, 10)
         self.assertIn(e.diagnostico, (Diagnostico.MEJORANDO, Diagnostico.ADECUADO))
 
+    def test_evaluar_una_sola_persona_usa_mediana_de_todo_el_plantel(self):
+        sola = evaluar_tecnicos(HOY, dias=40, tecnicos=[self.malo])[0]
+        self.assertAlmostEqual(sola.indice_productividad, self.diag()["MALO"].indice_productividad)
+        self.assertLess(sola.indice_productividad, 0.7)
+        self.assertEqual(sola.diagnostico, Diagnostico.RIESGO)
+
     def test_ingresante_en_curva_de_aprendizaje(self):
         self.lento.fecha_ingreso = HOY - timedelta(days=30)
         self.lento.save()

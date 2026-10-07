@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Capacitacion, Competencia, Curso, EvaluacionCompetencia, Participacion
+from .models import Capacitacion, Competencia, Curso, EvaluacionCompetencia, EvaluacionHistorica, Participacion
 
 
 @admin.register(Competencia)
@@ -36,3 +36,14 @@ class EvaluacionAdmin(admin.ModelAdmin):
     list_display = ["fecha", "persona", "competencia", "nivel", "evaluador"]
     list_filter = ["competencia", "nivel"]
     autocomplete_fields = ["persona", "evaluador"]
+
+
+@admin.register(EvaluacionHistorica)
+class HistorialAdmin(admin.ModelAdmin):
+    list_display = ["fecha", "persona", "productividad", "riesgo", "diagnostico"]
+    list_filter = ["diagnostico", "fecha"]
+    search_fields = ["persona__apellido", "persona__legajo"]
+    date_hierarchy = "fecha"
+
+    def has_add_permission(self, request):
+        return False  # lo genera la tarea diaria

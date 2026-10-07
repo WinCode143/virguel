@@ -73,3 +73,27 @@ class EvaluacionCompetencia(models.Model):
         ordering = ["-fecha"]
         verbose_name = "Evaluación de competencia"
         verbose_name_plural = "Evaluaciones de competencias"
+
+
+class EvaluacionHistorica(models.Model):
+    """Foto semanal de la evaluación automática de cada técnico (capacidad a largo plazo)."""
+
+    fecha = models.DateField(db_index=True)
+    persona = models.ForeignKey(Persona, on_delete=models.CASCADE, related_name="historial_evaluacion")
+    productividad = models.DecimalField(max_digits=6, decimal_places=2)
+    indice_productividad = models.DecimalField(max_digits=6, decimal_places=3)
+    score_productividad = models.DecimalField(max_digits=5, decimal_places=1)
+    score_calidad = models.DecimalField(max_digits=5, decimal_places=1)
+    score_disciplina = models.DecimalField(max_digits=5, decimal_places=1)
+    score_seguridad = models.DecimalField(max_digits=5, decimal_places=1)
+    riesgo = models.DecimalField(max_digits=5, decimal_places=1)
+    diagnostico = models.CharField(max_length=60)
+
+    class Meta:
+        ordering = ["-fecha"]
+        unique_together = [("fecha", "persona")]
+        verbose_name = "Evaluación histórica (semanal)"
+        verbose_name_plural = "Evaluaciones históricas (semanales)"
+
+    def __str__(self):
+        return f"{self.fecha} {self.persona}: {self.diagnostico}"

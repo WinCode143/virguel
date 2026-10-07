@@ -5,7 +5,8 @@ from django.db.models import Count
 from django.urls import reverse
 from django.utils import timezone
 
-from capacitacion.evaluacion import Diagnostico, evaluar_tecnicos
+from capacitacion.evaluacion import Diagnostico, evaluar_tecnicos, guardar_historial
+from capacitacion.models import EvaluacionHistorica
 from core.models import Alerta
 from core.services import SincronizadorAlertas
 from flota.models import Vehiculo, proximos_services
@@ -135,6 +136,9 @@ def ejecutar(hoy=None, log=print):
     hoy = hoy or timezone.localdate()
     log(f"Encuestas generadas: {generar_encuestas(hoy)}")
     log(f"Tareas de supervisor vencidas cerradas: {cerrar_tareas_vencidas(hoy)}")
+    ultima = EvaluacionHistorica.objects.order_by("-fecha").values_list("fecha", flat=True).first()
+    if ultima is None or (hoy - ultima).days >= 7:
+        log(f"Historial semanal de evaluación guardado: {guardar_historial(hoy)} técnicos")
     for nombre, f in (("stock", alertas_stock), ("flota", alertas_flota), ("EPP", alertas_epp),
                       ("personas", alertas_personas), ("incidentes", alertas_incidentes)):
         f(hoy)

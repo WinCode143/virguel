@@ -155,7 +155,8 @@ def evaluar_tecnicos(hasta: date | None = None, dias: int | None = None, tecnico
     obligatorios = set(Elemento.objects.filter(obligatorio_tecnicos=True).values_list("id", flat=True))
     vigentes = defaultdict(set)
     for pid, eid in Asignacion.objects.filter(
-            persona_id__in=ids, estado=Asignacion.Estado.EN_USO, elemento_id__in=obligatorios
+            persona_id__in=ids, estado=Asignacion.Estado.EN_USO, elemento_id__in=obligatorios,
+            fecha_entrega__lte=hasta,
     ).filter(Q(fecha_vencimiento__isnull=True) | Q(fecha_vencimiento__gte=hasta)).values_list(
             "persona_id", "elemento_id"):
         vigentes[pid].add(eid)
@@ -175,12 +176,24 @@ def evaluar_tecnicos(hasta: date | None = None, dias: int | None = None, tecnico
         e.tendencia = _tendencia(serie[e.tecnico.id], desde, hasta)
         if tiempos[e.tecnico.id]:
             e.eficiencia_tiempo = sum(tiempos[e.tecnico.id]) / len(tiempos[e.tecnico.id])
-    con_datos = [e.productividad for e in evs.values() if e.dias_calle >= 5]
-    mediana = median(con_datos) if con_datos else 0
+    mediana = mediana_plantel(desde, hasta)
 
     for e in evs.values():
         _puntuar(e, mediana, dias)
     return sorted(evs.values(), key=lambda e: -e.riesgo)
+
+
+def mediana_plantel(desde: date, hasta: date) -> float:
+    """Productividad mediana (OT completadas por día en calle) de TODO el plantel
+    activo. Es la referencia aunque se evalúe a una sola persona o a un equipo."""
+    dias = dict(Jornada.objects.filter(fecha__range=(desde, hasta), en_calle=True,
+                                       tecnico__activo=True, tecnico__rol=Persona.Rol.TECNICO)
+                .values_list("tecnico_id").annotate(n=Count("id")))
+    ots = dict(OrdenTrabajo.objects.filter(fecha_ejecucion__range=(desde, hasta),
+                                           estado=OrdenTrabajo.Estado.COMPLETADA, tecnico_id__in=dias)
+               .values_list("tecnico_id").annotate(n=Count("id")))
+    valores = [ots.get(t, 0) / n for t, n in dias.items() if n >= 5]
+    return median(valores) if valores else 0
 
 
 def _puntuar(e: EvaluacionTecnico, mediana: float, dias: int = 90):
@@ -229,3 +242,27 @@ def _puntuar(e: EvaluacionTecnico, mediana: float, dias: int = 90):
         e.diagnostico = Diagnostico.OBSERVACION
     else:
         e.diagnostico = Diagnostico.ADECUADO
+
+
+def guardar_historial(fecha: date | None = None) -> int:
+    """Guarda la evaluación de todos los técnicos activos a la fecha indicada."""
+    from decimal import Decimal
+
+    from .models import EvaluacionHistorica
+
+    fecha = fecha or timezone.localdate()
+    tecnicos = Persona.objects.filter(rol=Persona.Rol.TECNICO, activo=True, fecha_ingreso__lte=fecha)
+    n = 0
+    for e in evaluar_tecnicos(fecha, tecnicos=tecnicos):
+        if not e.dias_calle:
+            continue
+        EvaluacionHistorica.objects.update_or_create(fecha=fecha, persona=e.tecnico, defaults={
+            "productividad": Decimal(f"{e.productividad:.2f}"),
+            "indice_productividad": Decimal(f"{e.indice_productividad:.3f}"),
+            "score_productividad": Decimal(f"{e.score_productividad:.1f}"),
+            "score_calidad": Decimal(f"{e.score_calidad:.1f}"),
+            "score_disciplina": Decimal(f"{e.score_disciplina:.1f}"),
+            "score_seguridad": Decimal(f"{e.score_seguridad:.1f}"),
+            "riesgo": Decimal(f"{e.riesgo:.1f}"), "diagnostico": e.diagnostico})
+        n += 1
+    return n

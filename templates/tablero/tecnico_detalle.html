@@ -10,6 +10,11 @@
   <div class="card kpi"><div class="etq">Calidad</div><div class="valor">{{ ev.score_calidad|num }}/100</div><div class="det">{{ ev.retrabajos_causados }} retrabajos · {{ ev.fallidas }} fallidas · controles {{ ev.puntaje_controles|num:1 }}/5</div></div>
 </div>
 {% include "tablero/_grafico.html" with id="g-tec" datos=g titulo="Órdenes completadas por día en calle (semanal) vs. promedio del equipo" nota="Capacidad a largo plazo: lo que importa es hacia dónde va la curva, no un día aislado." %}
+{% if g_hist %}<div class="grid g2">
+  {% include "tablero/_grafico.html" with id="g-hist" datos=g_hist titulo="Evolución del riesgo (foto semanal)" %}
+  <div class="card"><h2>Últimas evaluaciones semanales</h2><table><thead><tr><th>Semana</th><th class="num">OT/día</th><th class="num">Riesgo</th><th>Diagnóstico</th></tr></thead>
+  <tbody>{% for h in hist %}<tr><td>{{ h.fecha|date:"d/m/Y" }}</td><td class="num">{{ h.productividad|num:2 }}</td><td class="num">{{ h.riesgo|num }}</td><td style="font-size:.85rem">{{ h.diagnostico }}</td></tr>{% endfor %}</tbody></table></div>
+</div>{% endif %}
 <div class="grid g2">
   <div class="card"><h2>Acciones correctivas</h2><table><tbody>{% for a in acciones %}<tr><td>{{ a.fecha|date:"d/m/Y" }}</td><td>{{ a.get_tipo_display }}</td><td>{{ a.descripcion|truncatechars:60 }}</td><td class="num">{% if a.monto %}{{ a.monto|pesos }}{% endif %}</td></tr>{% empty %}<tr><td class="muted">Ninguna.</td></tr>{% endfor %}</tbody></table></div>
   <div class="card"><h2>Siniestros</h2><table><tbody>{% for s in siniestros %}<tr><td>{{ s.fecha|date:"d/m/Y" }}</td><td>{{ s.get_tipo_display }}</td><td>{{ s.get_gravedad_display }}</td><td class="num">{{ s.costo_real|default:s.costo_estimado|pesos }}</td></tr>{% empty %}<tr><td class="muted">Ninguno.</td></tr>{% endfor %}</tbody></table></div>

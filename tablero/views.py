@@ -13,7 +13,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from capacitacion.evaluacion import Diagnostico, evaluar_tecnicos
-from capacitacion.models import Participacion
+from capacitacion.models import EvaluacionHistorica, Participacion
 from core.models import Alerta, Parametros, Persona, Zona
 from core.roles import GERENCIA, SUPERVISOR, TECNICO, persona_de, requiere_rol, rol_de
 from finanzas.models import CostoFijo, Egreso
@@ -185,8 +185,15 @@ def tecnicos(request):
     filtro = request.GET.get("diagnostico")
     if filtro:
         evs = [e for e in evs if e.diagnostico == filtro]
+    # riesgo de hace ~4 semanas (última foto semanal anterior a esa fecha)
+    previa = (EvaluacionHistorica.objects.filter(fecha__lte=hoy - timedelta(days=28))
+              .order_by("-fecha").values_list("fecha", flat=True).first())
+    antes = dict(EvaluacionHistorica.objects.filter(fecha=previa).values_list("persona_id", "riesgo")) if previa else {}
+    for e in evs:
+        r = antes.get(e.tecnico.id)
+        e.delta_riesgo = (e.riesgo - float(r)) if r is not None else None
     return render(request, "tablero/tecnicos.html", {
-        "evs": evs, "filtro": filtro, "diagnosticos": list(Diagnostico.COLOR),
+        "evs": evs, "filtro": filtro, "diagnosticos": list(Diagnostico.COLOR), "previa": previa,
         "ventana": Parametros.actual().dias_ventana_evaluacion})
 
 
@@ -212,8 +219,11 @@ def tecnico_detalle(request, pk):
         {"nombre": t.nombre_completo, "datos": [propio.get(s) for s in semanas], "serie": 1},
         {"nombre": "Promedio del equipo", "datos": [equipo.get(s) for s in semanas], "serie": 2, "punteada": True},
     ])
+    hist = list(EvaluacionHistorica.objects.filter(persona=t).order_by("fecha"))
+    g_hist = grafico("line", [h.fecha.strftime("%d/%m") for h in hist], [
+        {"nombre": "Riesgo (0-100)", "datos": [h.riesgo for h in hist], "estado": "critico"}], max=100) if hist else None
     return render(request, "tablero/tecnico_detalle.html", {
-        "t": t, "ev": ev, "g": g, "capacitaciones": capac,
+        "t": t, "ev": ev, "g": g, "g_hist": g_hist, "hist": hist[-8:][::-1], "capacitaciones": capac,
         "acciones": t.acciones_correctivas.select_related("aplicada_por")[:20],
         "siniestros": t.siniestros.all()[:20],
         "informes": t.informes_recibidos.select_related("supervisor")[:15],

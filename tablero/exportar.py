@@ -70,6 +70,7 @@ DATASETS = {
     "egresos": ("Egresos", _sql("SELECT * FROM powerbi.egresos")),
     "services": ("Services de flota", _sql("SELECT * FROM powerbi.services")),
     "epp": ("Asignaciones de EPP / herramientas", _sql("SELECT * FROM powerbi.epp")),
+    "evaluacion_historica": ("Historial semanal de evaluación de técnicos", _sql("SELECT * FROM powerbi.evaluacion_historica")),
     "evaluacion_tecnicos": ("Evaluación de técnicos (calculada)", _tecnicos),
     "evaluacion_supervisores": ("Evaluación de supervisores (calculada)", _supervisores),
 }

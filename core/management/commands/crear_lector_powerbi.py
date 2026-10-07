@@ -28,6 +28,8 @@ class Command(BaseCommand):
                 sql.Identifier(connection.settings_dict["NAME"]), u))
             c.execute(sql.SQL("GRANT USAGE ON SCHEMA powerbi TO {}").format(u))
             c.execute(sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA powerbi TO {}").format(u))
+            # vistas que se agreguen en futuras versiones también quedan visibles
+            c.execute(sql.SQL("ALTER DEFAULT PRIVILEGES IN SCHEMA powerbi GRANT SELECT ON TABLES TO {}").format(u))
             # Las vistas leen tablas de 'public' con permisos del dueño: el lector no necesita acceso a 'public'.
             c.execute(sql.SQL("REVOKE ALL ON SCHEMA public FROM {}").format(u))
         self.stdout.write(self.style.SUCCESS(f"Usuario '{usuario}' listo: sólo lectura sobre el esquema powerbi."))

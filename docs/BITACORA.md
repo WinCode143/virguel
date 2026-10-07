@@ -118,3 +118,13 @@ services vencidos, siniestros y demanda comercial con un pico de campaña.
   diaria a las 21:00 y Caddy con HTTPS automático) + `deploy/backup.sh`. Imagen construida y
   probada con `DEBUG=0`.
 - Tests: 28, todos pasan.
+- **Historial semanal de evaluación** (`capacitacion.EvaluacionHistorica`): la tarea diaria
+  guarda una foto semanal del diagnóstico de cada técnico. La ficha muestra la evolución del
+  riesgo y el listado la variación del último mes ("Δ 4 sem."). Vista `powerbi.evaluacion_historica`.
+  Responde al pedido de medir "capacidad a largo plazo" y no sólo el momento.
+- **Bug corregido (detectado en la revisión visual):** al evaluar a una sola persona (ficha,
+  "Mi desempeño", vista de supervisor) la mediana de referencia se calculaba sólo con esa
+  persona, y cualquiera quedaba "al 100 % del equipo". Ahora la referencia es siempre todo el
+  plantel activo (`mediana_plantel`). Test agregado.
+- El usuario de Power BI recibe permisos por defecto sobre vistas futuras del esquema.
+- Tests: 29, todos pasan.
