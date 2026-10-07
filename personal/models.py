@@ -97,6 +97,7 @@ class Novedad(models.Model):
     cargada_por = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL,
                                     related_name="novedades_cargadas")
     creada = models.DateTimeField(auto_now_add=True)
+    resuelta = models.DateTimeField(null=True, blank=True, help_text="Cuándo se aprobó o rechazó.")
 
     class Meta:
         ordering = ["-desde"]

@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from capacitacion.evaluacion import Diagnostico, evaluar_tecnicos
 from capacitacion.models import Capacitacion, Curso, Participacion
-from core.models import Alerta, Parametros, Persona, Zona
+from core.models import Alerta, Cliente, Parametros, Persona, Zona
 from core.services import SincronizadorAlertas
 from finanzas.models import Egreso
 from flota.models import ServiceRealizado, TipoService, Vehiculo, proximos_services
@@ -603,3 +603,100 @@ class NotificacionesTests(TestCase):
         self.assertContains(self.client.get("/app/"), 'class="badge"')
         self.client.get("/app/notificaciones/")
         self.assertFalse(Notificacion.objects.filter(persona=t, leida=False).exists())
+
+
+class IndicadoresProductividadTests(TestCase):
+    """Cada indicador calcula lo que dice su definición (docs/METRICAS.md)."""
+
+    def setUp(self):
+        from datetime import datetime, time
+        from personal.models import Asistencia
+        self.sup = persona("S1", rol="supervisor")
+        self.t = persona("T1", supervisor=self.sup)
+        self.otro = persona("T2", supervisor=self.sup)
+        self.tipo = TipoTarea.objects.create(codigo="I", nombre="Inst", minutos_estandar=60)
+        self.dias = [HOY - timedelta(days=d) for d in range(1, 6)]
+        tz = timezone.get_current_timezone()
+        n = 0
+        for d in self.dias:
+            for t, cant in ((self.t, 4), (self.otro, 6)):
+                Jornada.objects.create(fecha=d, tecnico=t)
+                ent = timezone.make_aware(datetime.combine(d, time(8, 0)), tz)
+                Asistencia.objects.create(persona=t, fecha=d, entrada=ent, salida=ent + timedelta(hours=8))
+                for k in range(cant):
+                    n += 1
+                    OrdenTrabajo.objects.create(numero=f"o{n}", tipo=self.tipo, tecnico=t, estado="completada",
+                                                fecha_programada=d, fecha_ejecucion=d, minutos_reales=60)
+
+    def valores(self, tecnicos=None):
+        from tablero.metricas import valores_tecnicos
+        return valores_tecnicos(HOY - timedelta(days=29), HOY, tecnicos or [self.t, self.otro])
+
+    def test_puntos_lineales_entre_minimo_y_meta(self):
+        from core.models import Indicador
+        mayor = Indicador(meta=70, minimo=40, mayor_es_mejor=True)
+        menor = Indicador(meta=2, minimo=10, mayor_es_mejor=False)
+        self.assertEqual((mayor.puntos(70), mayor.puntos(40), mayor.puntos(55), mayor.puntos(90)), (100, 0, 50, 100))
+        self.assertEqual((menor.puntos(2), menor.puntos(10), menor.puntos(6), menor.puntos(0)), (100, 0, 50, 100))
+
+    def test_eficiencia_de_la_jornada_en_horas_estandar(self):
+        v = self.valores()
+        self.assertAlmostEqual(v[self.t.id]["eficiencia_jornada"], 50)      # 4 h estándar de 8 h fichadas
+        self.assertAlmostEqual(v[self.otro.id]["eficiencia_jornada"], 75)   # 6 de 8
+
+    def test_primera_visita_descuenta_retrabajos(self):
+        orig = OrdenTrabajo.objects.filter(tecnico=self.t).first()
+        OrdenTrabajo.objects.create(numero="rt", tipo=self.tipo, tecnico=self.otro, es_retrabajo=True,
+                                    orden_original=orig, estado="completada", fecha_programada=HOY, fecha_ejecucion=HOY)
+        self.assertAlmostEqual(self.valores([self.t])[self.t.id]["primera_visita"], 95)  # 1 de 20
+
+    def test_no_resueltas_evitables_ignora_causas_externas(self):
+        d = self.dias[0]
+        for k, motivo in enumerate(["cliente_ausente", "clima", "falta_material"]):
+            OrdenTrabajo.objects.create(numero=f"f{k}", tipo=self.tipo, tecnico=self.t, estado="fallida",
+                                        motivo_no_resuelto=motivo, fecha_programada=d, fecha_ejecucion=d)
+        self.assertAlmostEqual(self.valores([self.t])[self.t.id]["no_resueltas_evitables"], 100 / 23)  # 1 de 23
+
+    def test_cierre_en_sitio_por_distancia_gps(self):
+        c = Cliente.objects.create(numero="c1", nombre="X", latitud=Decimal("-34.600000"), longitud=Decimal("-58.400000"))
+        ots = list(OrdenTrabajo.objects.filter(tecnico=self.t)[:6])
+        for k, o in enumerate(ots):
+            o.cliente = c
+            o.lat_cierre = Decimal("-34.600500") if k < 5 else Decimal("-34.620000")  # ~55 m vs ~2,2 km
+            o.lng_cierre = Decimal("-58.400000")
+            o.save()
+        self.assertAlmostEqual(self.valores([self.t])[self.t.id]["cierre_en_sitio"], 500 / 6)
+
+    def test_consumo_vs_estandar(self):
+        from inventario.models import RecetaMaterial
+        m = Material.objects.create(codigo="C", nombre="Cable", costo_unitario=Decimal("10"))
+        RecetaMaterial.objects.create(tipo_tarea=self.tipo, material=m, cantidad=2)  # estándar $20 por orden
+        for o in OrdenTrabajo.objects.filter(tecnico=self.t):
+            Salida.objects.create(material=m, cantidad=3, costo_total=30, motivo="consumo", tecnico=self.t, orden=o)
+        self.assertAlmostEqual(self.valores([self.t])[self.t.id]["consumo_vs_estandar"], 150)
+
+    def test_indice_del_supervisor_y_tiempo_de_respuesta(self):
+        from personal.models import Novedad
+        from tablero.metricas import tableros_supervisores
+        n = Novedad.objects.create(persona=self.t, tipo="enfermedad", estado="aprobada")
+        n.resuelta = n.creada + timedelta(hours=6)
+        n.save()
+        tb = tableros_supervisores(supervisores=[self.sup])[0]
+        self.assertAlmostEqual(tb.get("tiempo_respuesta").valor, 6, places=3)
+        self.assertAlmostEqual(tb.get("eficiencia_equipo").valor, 62.5)
+        self.assertEqual(tb.get("cobertura_control").valor, 0)  # trabajaron y nadie los controló
+        self.assertIsNone(tb.get("respuesta_desvios").valor)    # menos de 3 desvíos: sin dato
+        self.assertIsNotNone(tb.indice)
+
+    def test_gerencia_puede_ajustar_metas(self):
+        from django.core.management import call_command
+
+        from core.models import Indicador
+        call_command("configurar_grupos", stdout=io.StringIO())
+        u = User.objects.create_user("ger", password="x", is_staff=True)
+        u.groups.add(Group.objects.get(name="Gerencia"))
+        self.client.login(username="ger", password="x")
+        i = Indicador.objects.get(codigo="eficiencia_jornada")
+        self.assertEqual(self.client.get(f"/admin/core/indicador/{i.id}/change/").status_code, 200)
+        self.assertEqual(self.client.get("/tablero/productividad/").status_code, 200)
+        self.assertEqual(self.client.get(f"/tablero/productividad/{self.t.id}/").status_code, 200)

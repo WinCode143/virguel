@@ -252,3 +252,45 @@ class SuscripcionPush(models.Model):
     class Meta:
         verbose_name = "Suscripción a notificaciones"
         verbose_name_plural = "Suscripciones a notificaciones"
+
+
+class Indicador(models.Model):
+    """Definición configurable de un indicador de productividad (meta, mínimo y peso).
+
+    El valor medido se convierte en puntos 0-100: el mínimo vale 0, la meta vale 100
+    (lineal entre ambos). El índice de cada persona es el promedio ponderado por `peso`
+    de los indicadores con datos."""
+
+    class Rol(models.TextChoices):
+        TECNICO = "tecnico", "Técnico"
+        SUPERVISOR = "supervisor", "Supervisor"
+
+    codigo = models.SlugField(max_length=40, unique=True)
+    rol = models.CharField(max_length=12, choices=Rol.choices)
+    nombre = models.CharField(max_length=80)
+    descripcion = models.TextField(help_text="Qué mide y cómo se calcula.")
+    unidad = models.CharField(max_length=20, default="%")
+    meta = models.DecimalField(max_digits=8, decimal_places=2)
+    minimo = models.DecimalField("Mínimo aceptable", max_digits=8, decimal_places=2,
+                                 help_text="Valor que vale 0 puntos (si 'mayor es mejor' está apagado, es el máximo tolerable).")
+    mayor_es_mejor = models.BooleanField(default=True)
+    peso = models.PositiveSmallIntegerField(default=10, help_text="Peso en el índice (0 = sólo informativo).")
+    orden = models.PositiveSmallIntegerField(default=0)
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["rol", "orden"]
+        verbose_name = "Indicador de productividad"
+        verbose_name_plural = "Indicadores de productividad"
+
+    def __str__(self):
+        return f"{self.get_rol_display()}: {self.nombre}"
+
+    def puntos(self, valor) -> float | None:
+        if valor is None:
+            return None
+        meta, minimo, v = float(self.meta), float(self.minimo), float(valor)
+        if meta == minimo:
+            return 100.0 if (v >= meta if self.mayor_es_mejor else v <= meta) else 0.0
+        frac = (v - minimo) / (meta - minimo)
+        return max(0.0, min(100.0, frac * 100))

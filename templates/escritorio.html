@@ -14,6 +14,10 @@
       <a href="{% url 'personal:parte' %}" class="{% if u == 'parte' %}activo{% endif %}">Parte diario (mail)</a>
       <a href="{% url 'personal:documentos' %}" class="{% if u == 'documentos' %}activo{% endif %}">Documentación</a>
       {% if es_gerencia %}<a href="{% url 'personal:dotacion' %}" class="{% if u == 'dotacion' %}activo{% endif %}">Dotación y rotación</a>{% endif %}
+      <div class="grupo">Productividad</div>
+      <a href="{% url 'tablero:prod_tecnicos' %}" class="{% if u == 'prod_tecnicos' %}activo{% endif %}">Índice de técnicos (IPT)</a>
+      {% if es_gerencia %}<a href="{% url 'tablero:prod_supervisores' %}" class="{% if u == 'prod_supervisores' %}activo{% endif %}">Índice de supervisores (IGS)</a>{% endif %}
+      {% if es_supervisor %}<a href="{% url 'tablero:prod_ficha' request.user.persona.id %}" class="{% if u == 'prod_ficha' %}activo{% endif %}">Mi índice (IGS)</a>{% endif %}
       <div class="grupo">Operación</div>
       <a href="{% url 'tablero:operacion' %}" class="{% if u == 'operacion' %}activo{% endif %}">1 · Operación diaria</a>
       <a href="{% url 'tablero:asignacion' %}" class="{% if u == 'asignacion' %}activo{% endif %}">1 · Asignar órdenes</a>

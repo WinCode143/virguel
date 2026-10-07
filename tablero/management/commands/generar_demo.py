@@ -97,10 +97,12 @@ class Command(BaseCommand):
             self.capacitaciones()
             self.operacion()
             self.asistencia()
+            self.cierres()
             self.supervision()
             self.siniestros()
             self.demanda()
             self.finanzas()
+            self.tiempos_respuesta()
             self.historial()
         self.stdout.write(self.style.SUCCESS("Datos de demostración generados. Contraseña de todos: virguel2026"))
 
@@ -185,8 +187,8 @@ class Command(BaseCommand):
     def personas(self):
         r = self.r
         hash_ = make_password("virguel2026")
-        for g in ("Gerencia", "Administración", "Supervisores", "Técnicos"):
-            Group.objects.get_or_create(name=g)
+        from django.core.management import call_command
+        call_command("configurar_grupos", stdout=self.stdout)
         User.objects.create(username="admin", password=hash_, is_superuser=True, is_staff=True,
                             first_name="Administrador")
         ger = User.objects.create(username="gerencia", password=hash_, is_staff=True, first_name="Gerencia")
@@ -344,6 +346,86 @@ class Command(BaseCommand):
             docs.append(DocumentoPersonal(persona=p, tipo=tipos[3], numero=str(r.randint(20000000, 45000000))))
         DocumentoPersonal.objects.bulk_create(docs)
         self.stdout.write(f"  {len(asis)} fichadas, {len(novs)} novedades, {len(docs)} documentos")
+
+    def cierres(self):
+        """Datos de cierre de los últimos 45 días (desde que se 'lanzó' el cierre completo en la app):
+        hora de inicio de cada trabajo, foto, conformidad, firma y ubicación GPS."""
+        from datetime import datetime
+
+        from personal.models import Asistencia
+        r = self.r
+        tz = timezone.get_current_timezone()
+        lanzamiento = self.hoy - timedelta(days=45)
+        prob_doc = {"bueno": .92, "capacitar": .88, "riesgo": .45, "nuevo": .8, "mejora": .9}
+        prob_sitio = {"bueno": .97, "capacitar": .95, "riesgo": .7, "nuevo": .95, "mejora": .96}
+        arranque = {"bueno": (10, 35), "capacitar": (20, 50), "riesgo": (40, 95), "nuevo": (20, 50), "mejora": (15, 40)}
+        # coordenadas de clientes alrededor del centro de su zona
+        centros = {z.id: (-34.6 + r.uniform(-.15, .15), -58.45 + r.uniform(-.15, .15)) for z in self.zonas}
+        clientes = list(Cliente.objects.all())
+        for c in clientes:
+            la, lo = centros.get(c.zona_id, (-34.6, -58.45))
+            c.latitud = Decimal(str(round(la + r.uniform(-.03, .03), 6)))
+            c.longitud = Decimal(str(round(lo + r.uniform(-.03, .03), 6)))
+        Cliente.objects.bulk_update(clientes, ["latitud", "longitud"], batch_size=2000)
+        coords = {c.id: (c.latitud, c.longitud) for c in clientes}
+        entradas = {(a.persona_id, a.fecha): a.entrada for a in Asistencia.objects.filter(fecha__gte=lanzamiento)}
+        perfil = {t.id: t.perfil for t in self.tecs}
+        cambiadas = []
+        ordenes = (OrdenTrabajo.objects.filter(fecha_ejecucion__gte=lanzamiento, estado="completada", es_retrabajo=False)
+                   .order_by("tecnico_id", "fecha_ejecucion", "id"))
+        cursor_key, cursor = None, None
+        for o in ordenes:
+            pf = perfil.get(o.tecnico_id, "bueno")
+            clave = (o.tecnico_id, o.fecha_ejecucion)
+            if clave != cursor_key:
+                cursor_key = clave
+                ent = entradas.get(clave) or datetime.combine(o.fecha_ejecucion, datetime.min.time(), tz) + timedelta(hours=8)
+                cursor = ent + timedelta(minutes=r.randint(*arranque[pf]))
+            o.inicio_trabajo = cursor
+            o.fin_trabajo = cursor + timedelta(minutes=o.minutos_reales or 45)
+            cursor = o.fin_trabajo + timedelta(minutes=r.randint(10, 30))
+            if r.random() < prob_doc[pf]:
+                o.foto_trabajo = "ordenes/demo.jpg"
+                o.conforme_nombre = f"{r.choice(NOMBRES)} {r.choice(APELLIDOS)}"
+                o.conforme_dni = str(r.randint(20000000, 45000000))
+                if r.random() < .7:
+                    o.firma = "firmas/demo.png"
+            if o.cliente_id in coords and r.random() < .95:
+                la, lo = coords[o.cliente_id]
+                lejos = r.random() > prob_sitio[pf]
+                d = .01 if lejos else .0008  # ~1 km vs ~90 m
+                o.lat_cierre = la + Decimal(str(round(r.uniform(-d, d), 6)))
+                o.lng_cierre = lo + Decimal(str(round(r.uniform(-d, d), 6)))
+            cambiadas.append(o)
+        OrdenTrabajo.objects.bulk_update(cambiadas, ["inicio_trabajo", "fin_trabajo", "foto_trabajo", "conforme_nombre",
+                                                     "conforme_dni", "firma", "lat_cierre", "lng_cierre"], batch_size=2000)
+        self.stdout.write(f"  {len(cambiadas)} cierres con datos completos (últimos 45 días)")
+
+    def tiempos_respuesta(self):
+        """Cuándo se cargó y cuándo resolvió el supervisor cada aviso y pedido."""
+        from datetime import datetime
+
+        from inventario.models import PedidoMaterial
+        from personal.models import Novedad
+        r = self.r
+        tz = timezone.get_current_timezone()
+        demora = {}  # supervisor -> (min, max) horas
+        for s_ in self.sups:
+            demora[s_.id] = (20, 70) if s_.perfil["informes"] < 2 else (1, 10)
+        novs = list(Novedad.objects.select_related("persona"))
+        for n in novs:
+            n.creada = datetime.combine(n.desde, datetime.min.time(), tz) + timedelta(hours=r.randint(6, 9))
+            if n.estado != "pendiente":
+                lo, hi = demora.get(n.persona.supervisor_id, (2, 12))
+                n.resuelta = n.creada + timedelta(hours=r.uniform(lo, hi))
+        Novedad.objects.bulk_update(novs, ["creada", "resuelta"], batch_size=2000)
+        peds = list(PedidoMaterial.objects.select_related("tecnico"))
+        for p in peds:
+            p.creado = timezone.now() - timedelta(hours=r.randint(2, 30))
+            if p.estado != "pendiente":
+                lo, hi = demora.get(p.tecnico.supervisor_id, (2, 12))
+                p.resuelto = p.creado + timedelta(hours=r.uniform(lo, min(hi, 20)))
+        PedidoMaterial.objects.bulk_update(peds, ["creado", "resuelto"])
 
     def flota(self):
         r = self.r
@@ -689,6 +771,7 @@ class Command(BaseCommand):
         for o, t, f, _ in self.ordenes_meta:
             ots_de[(t.id, f)].append(o)
         informes, acciones_pend, encuestas, tareas = [], [], [], []
+        corregido = {}  # técnico -> fecha de su última acción correctiva
         frases_ok = ["Instalación prolija, cableado bien sujeto y rotulado.", "Trabajo correcto, cliente conforme.",
                      "Uso correcto de EPP, escalera bien asegurada.", "Vehículo en orden, materiales completos."]
         frases_mal = ["Cableado sin grampas, riesgo de desprendimiento.", "No usaba arnés trabajando en altura.",
@@ -717,7 +800,12 @@ class Command(BaseCommand):
                                                       resultado=res, estado=estado))
                 for _ in range(poisson(r, pf["informes"])):
                     t = r.choice(equipo)
-                    desvio = r.random() < PERFILES[t.perfil]["desvio"]
+                    prob = PERFILES[t.perfil]["desvio"]
+                    # una corrección reciente reduce los desvíos (salvo en los técnicos de riesgo)
+                    ult = corregido.get(t.id)
+                    if ult and 0 < (fecha - ult).days <= 30 and t.perfil != "riesgo":
+                        prob *= 0.3
+                    desvio = r.random() < prob
                     puntaje = r.randint(1, 3) if desvio else r.randint(4, 5)
                     doc = r.random() < pf["doc"]
                     ots = ots_de.get((t.id, fecha))
@@ -736,7 +824,9 @@ class Command(BaseCommand):
                     if desvio and r.random() < pf["accion"] and fecha < self.hoy:
                         tipo = r.choices(["recapacitacion", "charla", "apercibimiento", "multa", "suspension"],
                                          [30, 30, 25, 12, 3] if t.perfil != "riesgo" else [15, 15, 40, 22, 8])[0]
-                        acciones_pend.append((inf, t, s, tipo, fecha + timedelta(days=r.choice([0, 1, 1, 1, 2, 3, 5]))))
+                        f_acc = fecha + timedelta(days=r.choice([0, 1, 1, 1, 2, 3, 5]))
+                        acciones_pend.append((inf, t, s, tipo, f_acc))
+                        corregido[t.id] = f_acc
                 for t in equipo:
                     if fecha == self.hoy:
                         continue

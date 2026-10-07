@@ -5,6 +5,15 @@
 <div class="barra" style="margin:.4rem 0"><span style="width:{{ hoy_hechas|ancho:meta }}%"></span></div>
 <div class="det">Tu meta diaria sale de tu propio promedio del último mes.</div></div></div>
 
+{% if tb %}<div class="card"><div class="kpi"><div class="etq">Mi índice de productividad (IPT)</div>
+<div class="valor"><span class="estado {{ tb.estado }}">{{ tb.indice|num:0 }} / 100</span></div>
+<div class="det">Puesto {{ posicion }} de {{ total }} en el plantel · últimos 30 días</div></div>
+<table style="margin-top:.6rem"><thead><tr><th>Indicador</th><th class="num">Yo</th><th class="num">Meta</th></tr></thead><tbody>
+{% for m in tb.mediciones %}{% if m.indicador.peso %}<tr><td style="font-size:.88rem">{{ m.indicador.nombre }}</td><td class="num">{% include "tablero/_indicador_valor.html" %}</td>
+<td class="num muted">{% if not m.indicador.mayor_es_mejor %}≤{% endif %}{{ m.indicador.meta|num:0 }}</td></tr>{% endif %}{% endfor %}</tbody></table>
+{% if tb.debiles %}<p style="font-size:.85rem;margin:.6rem 0 0"><b>Donde más podés sumar:</b> {% for m in tb.debiles %}{{ m.indicador.nombre|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+</div>{% endif %}
+
 <div class="card"><h2>Últimos 30 días</h2><table><thead><tr><th></th><th class="num">Yo</th><th class="num">Equipo</th></tr></thead><tbody>
 <tr><td>Órdenes por día</td><td class="num"><b>{{ por_dia|num:2 }}</b></td><td class="num">{{ eq_por_dia|num:2 }}</td></tr>
 <tr><td>Efectividad (resueltas)</td><td class="num"><b>{{ efectividad|pct }}</b></td><td class="num">{{ eq_efectividad|pct }}</td></tr>

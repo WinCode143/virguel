@@ -1,6 +1,12 @@
 {% extends "movil/base_movil.html" %}{% load formato %}
 {% block titulo_movil %}Mis indicadores (30 días){% endblock %}
 {% block contenido %}
+<div class="card"><div class="kpi"><div class="etq">Mi índice de gestión (IGS)</div>
+<div class="valor"><span class="estado {{ tb.estado }}">{{ tb.indice|num:0 }} / 100</span></div></div>
+<table style="margin-top:.6rem"><thead><tr><th>Indicador</th><th class="num">Valor</th><th class="num">Meta</th></tr></thead><tbody>
+{% for m in tb.mediciones %}{% if m.indicador.peso %}<tr><td style="font-size:.88rem">{{ m.indicador.nombre }}</td><td class="num">{% include "tablero/_indicador_valor.html" %}</td>
+<td class="num muted">{% if not m.indicador.mayor_es_mejor %}≤{% endif %}{{ m.indicador.meta|num:1 }}</td></tr>{% endif %}{% endfor %}</tbody></table>
+{% if tb.debiles %}<p style="font-size:.85rem;margin:.6rem 0 0"><b>A mejorar:</b> {% for m in tb.debiles %}{{ m.indicador.nombre|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}.</p>{% endif %}</div>
 {% if ev %}
 <div class="card kpi"><div class="etq">Puntaje general</div><div class="valor"><span class="estado {{ ev.color }}">{{ ev.score_total|num }}/100</span></div></div>
 <div class="card"><table><tbody>

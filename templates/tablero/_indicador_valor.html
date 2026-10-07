@@ -1,0 +1,1 @@
+{% load formato %}{% if m.valor is None %}<span class="muted">sin datos</span>{% else %}<span class="estado {{ m.estado }}">{{ m.valor|num:1 }}{% if m.indicador.unidad == '%' %}%{% else %} {{ m.indicador.unidad }}{% endif %}</span>{% endif %}

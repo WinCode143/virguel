@@ -1,0 +1,15 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Productividad de supervisores · Virguel{% endblock %}
+{% block encabezado %}<h1>Índice de Gestión del Supervisor (IGS)</h1><p class="sub">Últimos {{ dias }} días. Un supervisor se mide por los resultados de su equipo, cómo controla y corrige, el clima que genera y cómo gestiona. <a href="{% url 'admin:core_indicador_changelist' %}">Configurar metas y pesos</a></p>{% endblock %}
+{% block contenido %}
+<form class="filtros" method="get"><label>Período<select name="dias" onchange="this.form.submit()"><option value="30" {% if dias == 30 %}selected{% endif %}>30 días</option><option value="60" {% if dias == 60 %}selected{% endif %}>60 días</option><option value="90" {% if dias == 90 %}selected{% endif %}>90 días</option></select></label></form>
+<div class="grid g3">{% for tb in tbs %}<div class="card"><h2 style="display:flex;justify-content:space-between"><a href="{% url 'tablero:prod_ficha' tb.persona.id %}">{{ tb.persona.apellido }}, {{ tb.persona.nombre }}</a><span class="estado {{ tb.estado }}">IGS {{ tb.indice|num:0 }}</span></h2>
+{% if tb.fuertes %}<p style="margin:.2rem 0;font-size:.85rem"><b>Fuerte en:</b> {% for m in tb.fuertes %}{{ m.indicador.nombre|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+{% if tb.debiles %}<p style="margin:.2rem 0;font-size:.85rem"><b>A mejorar:</b> {% for m in tb.debiles %}{{ m.indicador.nombre|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+</div>{% endfor %}</div>
+<div class="card"><div class="tabla-scroll"><table>
+<thead><tr><th>Indicador</th><th class="num">Meta</th><th class="num">Peso</th>{% for tb in tbs %}<th class="num">{{ tb.persona.apellido }}</th>{% endfor %}</tr></thead>
+<tbody>{% for i in indicadores %}<tr><td title="{{ i.descripcion }}">{{ i.nombre }}{% if not i.peso %} <span class="muted">(info)</span>{% endif %}</td><td class="num muted">{% if not i.mayor_es_mejor %}≤{% endif %}{{ i.meta|num:1 }}{% if i.unidad != '%' %} {{ i.unidad }}{% endif %}</td><td class="num muted">{{ i.peso }}</td>
+{% for tb in tbs %}{% for m in tb.mediciones %}{% if m.indicador.id == i.id %}<td class="num">{% include "tablero/_indicador_valor.html" %}</td>{% endif %}{% endfor %}{% endfor %}</tr>{% endfor %}
+<tr><td><b>IGS</b></td><td></td><td></td>{% for tb in tbs %}<td class="num"><b>{{ tb.indice|num:0 }}</b></td>{% endfor %}</tr></tbody></table></div></div>
+{% endblock %}

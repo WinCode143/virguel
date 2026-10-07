@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Alerta, Cliente, Notificacion, Parametros, Persona, Zona
+from .models import Alerta, Cliente, Indicador, Notificacion, Parametros, Persona, Zona
 
 admin.site.site_header = "Virguel — ERP operativo"
 admin.site.site_title = "Virguel ERP"
@@ -64,3 +64,19 @@ class NotificacionAdmin(admin.ModelAdmin):
     list_display = ["creada", "persona", "titulo", "leida"]
     list_filter = ["leida"]
     search_fields = ["persona__apellido", "titulo"]
+
+
+@admin.register(Indicador)
+class IndicadorAdmin(admin.ModelAdmin):
+    list_display = ["nombre", "rol", "meta", "minimo", "unidad", "mayor_es_mejor", "peso", "activo"]
+    list_editable = ["meta", "minimo", "peso", "activo"]
+    list_filter = ["rol", "activo"]
+    readonly_fields = ["codigo"]
+    fields = ["codigo", "rol", "nombre", "descripcion", "unidad", "meta", "minimo", "mayor_es_mejor", "peso", "orden",
+              "activo"]
+
+    def has_add_permission(self, request):
+        return False  # los indicadores tienen un cálculo programado; aquí sólo se ajustan
+
+    def has_delete_permission(self, request, obj=None):
+        return False

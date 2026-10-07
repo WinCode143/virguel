@@ -176,6 +176,7 @@ class PedidoMaterial(models.Model):
     respuesta = models.CharField(max_length=200, blank=True)
     aprobado_por = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL,
                                      related_name="pedidos_aprobados")
+    resuelto = models.DateTimeField(null=True, blank=True, help_text="Cuándo el supervisor lo aprobó o rechazó.")
     entregado = models.DateTimeField(null=True, blank=True)
 
     class Meta:

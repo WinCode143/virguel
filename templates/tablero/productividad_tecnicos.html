@@ -1,0 +1,15 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Productividad de técnicos · Virguel{% endblock %}
+{% block encabezado %}<h1>Índice de Productividad del Técnico (IPT)</h1><p class="sub">Últimos {{ dias }} días{% if es_supervisor %} · tu equipo{% endif %}. Cada indicador se compara con su meta; el índice (0–100) es el promedio ponderado. Clic en un nombre para ver su ficha. <a href="{% url 'admin:core_indicador_changelist' %}">Configurar metas y pesos</a></p>{% endblock %}
+{% block contenido %}
+<form class="filtros" method="get"><label>Período<select name="dias" onchange="this.form.submit()">
+<option value="30" {% if dias == 30 %}selected{% endif %}>30 días</option><option value="60" {% if dias == 60 %}selected{% endif %}>60 días</option><option value="90" {% if dias == 90 %}selected{% endif %}>90 días</option></select></label></form>
+{% include "tablero/_grafico.html" with id="g-ipt" datos=g titulo="IPT por técnico" %}
+<div class="card"><div class="tabla-scroll"><table>
+<thead><tr><th>Técnico</th><th class="num">IPT</th>{% for i in indicadores %}{% if i.peso %}<th class="num" title="{{ i.descripcion }} · Meta {{ i.meta|num:0 }} · Peso {{ i.peso }}">{{ i.nombre }}</th>{% endif %}{% endfor %}</tr>
+<tr><td class="muted" style="font-size:.78rem">Meta →</td><td></td>{% for i in indicadores %}{% if i.peso %}<td class="num muted" style="font-size:.78rem">{% if not i.mayor_es_mejor %}≤{% endif %}{{ i.meta|num:0 }}{% if i.unidad != '%' %} {{ i.unidad }}{% endif %}</td>{% endif %}{% endfor %}</tr></thead>
+<tbody>{% for tb in tbs %}<tr><td style="white-space:nowrap"><a href="{% url 'tablero:prod_ficha' tb.persona.id %}">{{ tb.persona.apellido }}, {{ tb.persona.nombre }}</a></td>
+<td class="num"><span class="estado {{ tb.estado }}">{{ tb.indice|num:0 }}</span></td>
+{% for m in tb.mediciones %}{% if m.indicador.peso %}<td class="num">{% include "tablero/_indicador_valor.html" %}</td>{% endif %}{% endfor %}</tr>{% endfor %}</tbody></table></div>
+<p class="muted" style="font-size:.8rem;margin-bottom:0">Verde: cerca o por encima de la meta · amarillo: intermedio · rojo: cerca o por debajo del mínimo. El IPT mide productividad; el riesgo de desvinculación se ve en "Técnicos y riesgo".</p></div>
+{% endblock %}

@@ -223,3 +223,50 @@ rendimiento y **evaluación semanal del supervisor**.
   partes paradas FIFO, faltante para órdenes, devolución, evaluación semanal única y su efecto
   en el puntaje, notificaciones).
 - Nueva dependencia: **pywebpush**.
+
+---
+
+## 2026-10-07 — Sesión 1, quinta parte: métricas de productividad
+
+Pedido del usuario: "hay que inventar métricas para medir la productividad de los técnicos y
+los supervisores". Se diseñó un sistema de indicadores documentado en **`docs/METRICAS.md`**.
+
+### Hecho
+- Modelo **`core.Indicador`** (meta, mínimo, peso, unidad, sentido) editable en el admin;
+  catálogo inicial cargado por migración: 13 indicadores de técnico y 13 de supervisor.
+- Motor **`tablero/metricas.py`**: valores por persona y período, puntos 0–100 lineales
+  entre mínimo y meta, índice ponderado **IPT** (técnicos) e **IGS** (supervisores),
+  fortalezas/debilidades y mediana del grupo como referencia.
+- Indicadores clave nuevos: **eficiencia de la jornada en horas estándar**, **resuelto en
+  primera visita**, cumplimiento de agenda, no resueltas *evitables*, cierres documentados,
+  **cierres en el domicilio (GPS)**, consumo vs. estándar, demora en arrancar; para
+  supervisores: **cobertura de control**, **efectividad de las correcciones**, mejora del
+  equipo, **tiempo de respuesta** a avisos y pedidos.
+- Nuevos datos para medirlos: fecha de resolución de avisos y pedidos; coordenadas de clientes.
+- Pantallas: Índice de técnicos (ranking), Índice de supervisores (comparativo con fortalezas
+  y debilidades), ficha por persona con evolución semanal del índice. En la app: IPT en
+  "Mi rendimiento" y IGS en "Indicadores" del supervisor.
+- Datos demo: cierres con foto/firma/GPS e inicio de trabajo (últimos 45 días), tiempos de
+  respuesta por supervisor, efecto de las correcciones (excepto en técnicos de riesgo).
+
+### Decisiones y calibración
+| Decisión | Motivo |
+|---|---|
+| Productividad en horas estándar, no en cantidad de órdenes | Evita premiar trabajos fáciles. |
+| Separar no resueltas evitables de externas | No castigar al técnico por clientes ausentes o clima. |
+| Indicadores sin datos suficientes no cuentan | No castigar ni premiar por falta de información (p. ej. < 3 desvíos). |
+| Cobertura de control con peso 15 | En la primera calibración el supervisor ausente salía **primero**: casi no controlaba y por eso "resolvía" el 100 % de sus pocos desvíos. Con este ajuste queda último, como corresponde. |
+| Presentismo del equipo sólo informativo | Se superponía con faltas sin aviso (lo que sí depende del supervisor). |
+
+### Problema encontrado y corregido
+- **El usuario de gerencia no tenía permisos en la carga de datos (admin)**: cualquier link
+  "cargar/editar" le daba acceso denegado. Nuevo comando `manage.py configurar_grupos`
+  (Gerencia, Administración, Supervisores, Técnicos con sus permisos); se ejecuta al generar
+  datos demo y al arrancar en producción (Dockerfile).
+
+### Calidad
+- Tests: **54**, todos pasan (nuevos: puntos lineales, eficiencia en horas estándar, primera
+  visita, no resueltas evitables, GPS en sitio, consumo vs. estándar, índice del supervisor y
+  tiempo de respuesta, acceso de gerencia a la configuración de metas).
+- Pendiente con datos reales: calibrar tiempos estándar por tipo de trabajo y metas
+  (ver `docs/METRICAS.md`).

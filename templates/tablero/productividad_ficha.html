@@ -1,0 +1,19 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}{{ sigla }} {{ p.nombre_completo }} · Virguel{% endblock %}
+{% block encabezado %}<h1>{{ p.apellido }}, {{ p.nombre }} · {{ sigla }} {{ tb.indice|num:0 }}</h1><p class="sub">{{ p.get_rol_display }} · puesto {{ posicion }} de {{ total }} · últimos {{ dias }} días · <a href="{% url 'personal:legajo' p.id %}">ver legajo</a></p>{% endblock %}
+{% block contenido %}
+<div class="grid g3">
+  <div class="card kpi"><div class="etq">{{ sigla }}</div><div class="valor"><span class="estado {{ tb.estado }}">{{ tb.indice|num:0 }} / 100</span></div><div class="det">puesto {{ posicion }} de {{ total }}</div></div>
+  <div class="card kpi"><div class="etq">Fuerte en</div><div style="margin-top:.4rem;font-size:.9rem">{% for m in tb.fuertes %}{{ m.indicador.nombre }}<br>{% empty %}—{% endfor %}</div></div>
+  <div class="card kpi"><div class="etq">A mejorar</div><div style="margin-top:.4rem;font-size:.9rem">{% for m in tb.debiles %}{{ m.indicador.nombre }}<br>{% empty %}Nada por debajo de lo aceptable ✓{% endfor %}</div></div>
+</div>
+{% include "tablero/_grafico.html" with id="g-evol" datos=g titulo="Evolución del índice (ventana móvil, una foto por semana)" %}
+<div class="card"><div class="tabla-scroll"><table>
+<thead><tr><th>Indicador</th><th class="num">Valor</th><th class="num">Meta</th><th class="num">Mínimo</th><th class="num">Mediana del grupo</th><th>Puntos</th><th class="num">Peso</th></tr></thead>
+<tbody>{% for m in tb.mediciones %}<tr><td><b>{{ m.indicador.nombre }}</b><div class="muted" style="font-size:.78rem;max-width:460px">{{ m.indicador.descripcion }}</div></td>
+<td class="num">{% include "tablero/_indicador_valor.html" %}</td>
+<td class="num">{% if not m.indicador.mayor_es_mejor %}≤{% endif %}{{ m.indicador.meta|num:1 }}</td><td class="num muted">{{ m.indicador.minimo|num:1 }}</td>
+<td class="num">{{ ref|get:m.indicador.codigo|num:1 }}</td>
+<td style="min-width:120px">{% if m.puntos is not None %}<div class="barra"><span style="width:{{ m.puntos|ancho }}%"></span></div>{% endif %}</td>
+<td class="num muted">{{ m.indicador.peso|default:"info" }}</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

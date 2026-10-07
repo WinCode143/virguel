@@ -207,7 +207,8 @@ def novedades_equipo(request):
     if request.method == "POST":
         n = get_object_or_404(Novedad, pk=request.POST.get("novedad"), persona__supervisor=p)
         n.estado = Novedad.Estado.APROBADA if request.POST.get("accion") == "aprobar" else Novedad.Estado.RECHAZADA
-        n.save(update_fields=["estado"])
+        n.resuelta = timezone.now()
+        n.save(update_fields=["estado", "resuelta"])
         messages.success(request, f"Novedad {n.get_estado_display().lower()}.")
         return redirect("movil:novedades")
     return render(request, "movil/novedades.html", {
@@ -360,6 +361,7 @@ def pedidos_equipo(request):
         aprobar = request.POST.get("accion") == "aprobar"
         ped.estado = PedidoMaterial.Estado.APROBADO if aprobar else PedidoMaterial.Estado.RECHAZADO
         ped.aprobado_por, ped.respuesta = p, request.POST.get("respuesta", "")[:200]
+        ped.resuelto = timezone.now()
         ped.save()
         notificar(ped.tecnico, f"Tu pedido de partes fue {'aprobado' if aprobar else 'rechazado'}",
                   ped.respuesta or ("El depósito lo prepara." if aprobar else ""), "/app/stock/")
@@ -495,8 +497,12 @@ def mi_desempeno(request):
     for x in semanas:
         x["ancho_yo"] = f"{(x['yo'] or 0) / tope * 100:.0f}"
         x["ancho_eq"] = f"{(x['equipo'] or 0) / tope * 100:.0f}"
+    from tablero.metricas import referencia_equipo, tableros_tecnicos
+    todos = tableros_tecnicos()
+    tb = next((t for t in todos if t.persona.id == p.id), None)
     return render(request, "movil/desempeno.html", {
-        "ev": ev, "tab": "yo", "meta": meta,
+        "ev": ev, "tab": "yo", "meta": meta, "tb": tb, "ref": referencia_equipo(todos),
+        "posicion": [t.persona.id for t in todos].index(p.id) + 1 if tb else None, "total": len(todos),
         "hoy_hechas": OrdenTrabajo.objects.filter(tecnico=p, estado="completada", fecha_ejecucion=hoy).count(),
         "completadas": comp.count(), "ejecutadas": ejecutadas, "dias": dias,
         "por_dia": comp.count() / dias if dias else None, "eq_por_dia": eq_comp / eq_dias if eq_dias else None,
@@ -622,8 +628,10 @@ def tarea(request, pk):
 @requiere_rol(SUPERVISOR)
 def mis_indicadores(request):
     p = _persona(request)
+    from tablero.metricas import tableros_supervisores
     ev = next((e for e in evaluar_supervisores() if e.supervisor.id == p.id), None)
-    return render(request, "movil/indicadores_supervisor.html", {"ev": ev, "tab": "yo"})
+    tb = tableros_supervisores(supervisores=[p])[0]
+    return render(request, "movil/indicadores_supervisor.html", {"ev": ev, "tb": tb, "tab": "yo"})
 
 
 # ---------------------------------------------------------------- PWA

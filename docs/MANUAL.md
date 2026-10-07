@@ -68,6 +68,8 @@ En la PC (`/tablero/`): los mismos tableros que gerencia pero **sólo con su equ
 
 | Pantalla | Para qué |
 |---|---|
+| **Índice de técnicos (IPT)** | Ranking de productividad con cada indicador contra su meta. Clic → ficha con evolución. |
+| **Índice de supervisores (IGS)** | Comparativo de supervisores con fortalezas y aspectos a mejorar. |
 | **Asistencia de hoy** | Presentes, tarde, ausentes con aviso y sin aviso, por persona y por equipo. |
 | **Presentismo y ausencias** | Por período: presentismo, faltas justificadas/injustificadas, tardanzas, horas extra. Descarga CSV para liquidación de sueldos. |
 | **Legajos** | Ficha completa de cada persona. |

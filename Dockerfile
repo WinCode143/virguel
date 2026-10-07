@@ -13,4 +13,4 @@ RUN DJANGO_DEBUG=1 python manage.py collectstatic --noinput \
 USER virguel
 
 EXPOSE 8000
-CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi --bind 0.0.0.0:8000 --workers 3 --timeout 120"]
+CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py configurar_grupos && gunicorn config.wsgi --bind 0.0.0.0:8000 --workers 3 --timeout 120"]

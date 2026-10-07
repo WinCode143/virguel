@@ -44,6 +44,9 @@ Restricciones del cliente:
 | Métricas de rendimiento | "Mi rendimiento": meta diaria personal, órdenes/día, efectividad, minutos vs. estándar, retrabajos, controles, presentismo, motivos de no resolución y evolución semanal vs. el equipo. |
 | Evaluar al supervisor cada semana | `supervision.EncuestaSemanal`: 6 preguntas + 2 comentarios, una por semana, confidencial; recordatorio los jueves; cuenta en el puntaje "imagen/trato" del supervisor. La encuesta diaria quedó opcional (Parámetros). |
 
+## 0.c Métricas de productividad (pedido del usuario)
+Sistema de indicadores IPT (técnicos) e IGS (supervisores) con metas configurables. Definición completa en `docs/METRICAS.md`.
+
 ## 1. Operación y gestión de técnicos
 | Pedido | Implementación |
 |---|---|

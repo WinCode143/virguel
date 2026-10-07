@@ -12,6 +12,7 @@ planificación.
 
 Documentación:
 - [docs/REQUERIMIENTOS.md](docs/REQUERIMIENTOS.md) — qué pidió el cliente y cómo se resolvió cada punto.
+- [docs/METRICAS.md](docs/METRICAS.md) — indicadores de productividad (IPT técnicos, IGS supervisores).
 - [docs/MANUAL.md](docs/MANUAL.md) — uso por rol.
 - [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md) — estructura técnica, cálculos e instalación en servidor.
 - [docs/BITACORA.md](docs/BITACORA.md) — registro de lo que se fue haciendo.
@@ -47,6 +48,7 @@ Sin servidor de mail configurado, los partes diarios quedan como archivos en `me
 | Comando | Qué hace |
 |---|---|
 | `manage.py tareas_diarias` | Genera encuestas del día, cierra objetivos vencidos y recalcula todas las alertas. Programarlo cada noche (ver ARQUITECTURA). |
+| `manage.py configurar_grupos` | Crea los grupos de usuarios y sus permisos (correr una vez al instalar). |
 | `manage.py enviar_parte` | Envía el parte diario por mail (también lo hace `tareas_diarias`). |
 | `manage.py generar_demo --reset` | **Borra** los datos operativos y genera 150 días de datos de prueba. |
 | `manage.py crear_lector_powerbi --password …` | Usuario PostgreSQL de sólo lectura para Power BI. |
