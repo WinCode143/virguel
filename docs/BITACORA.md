@@ -84,11 +84,11 @@ services vencidos, siniestros y demanda comercial con un pico de campaña.
 
 ### Pendiente / próximos pasos sugeridos
 1. Validar con el cliente los supuestos de `docs/REQUERIMIENTOS.md` (sección "Puntos ambiguos").
-2. Envío automático del link de encuesta por WhatsApp/SMS (definir proveedor).
-3. Carga masiva inicial (importar Excel de personas, vehículos, stock actual).
+2. Envío automático (sin clics) del link de encuesta: hoy es con un clic vía `wa.me`; automatizarlo requiere WhatsApp Business API o SMS.
+3. ~~Carga masiva inicial~~ (hecho: importación Excel/CSV).
 4. Instalación en servidor con HTTPS (ver `docs/ARQUITECTURA.md`).
 5. Calibrar umbrales del diagnóstico con 2–3 meses de datos reales.
-6. Modo sin señal en la app (guardar formularios y enviarlos al recuperar conexión).
+6. ~~Modo sin señal en la app~~ (hecho, ver más abajo).
 
 ### Agregados (misma sesión, segunda parte)
 - **Encuestas por WhatsApp** (`/tablero/encuestas/`): lista de encuestas del día con botón
@@ -102,3 +102,12 @@ services vencidos, siniestros y demanda comercial con un pico de campaña.
   Los tests detectaron y se corrigió: "1.500" se leía como 1,5.
 - Nueva dependencia: **openpyxl** (lectura de Excel).
 - Tests: 25, todos pasan.
+- **Modo sin señal en la app** (`static/js/offline.js` + service worker):
+  formularios de la app (cerrar orden, jornada, incidente, informe, acción, encuesta)
+  se guardan en el celular (IndexedDB, incluidas fotos) si no hay conexión y se reenvían
+  solos en orden al volver la señal. El celular manda la fecha real de carga y el servidor
+  la respeta (máx. 7 días atrás). Las pantallas de `/app/` quedan disponibles sin señal y
+  se borran del celular al cerrar sesión.
+  **Probado de punta a punta** en Chromium headless: sin red → queda 1 pendiente y aviso
+  visible → vuelve la red → se envía y el servidor registra la orden completada.
+- Tests: 26, todos pasan.

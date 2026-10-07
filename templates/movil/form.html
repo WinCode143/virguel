@@ -3,7 +3,7 @@
 {% block contenido %}
 {% if ayuda %}<p class="muted">{{ ayuda }}</p>{% endif %}
 {% if informe %}<div class="card">Desvío del informe del {{ informe.fecha|date:"d/m" }} a {{ informe.tecnico.nombre_completo }}: {{ informe.descripcion|truncatechars:120 }}</div>{% endif %}
-<form method="post" class="card form-movil" enctype="multipart/form-data">{% csrf_token %}
+<form method="post" class="card form-movil" enctype="multipart/form-data" data-offline="/app/">{% csrf_token %}
   {% if informe %}<input type="hidden" name="informe" value="{{ informe.id }}">{% endif %}
   {{ form.non_field_errors }}
   {% for f in form %}{% if f.field.widget.input_type == 'checkbox' %}<div class="check">{{ f }} {{ f.label_tag }}</div>{% else %}{{ f.label_tag }}{{ f }}{% endif %}{{ f.errors }}{% endfor %}

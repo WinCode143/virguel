@@ -309,3 +309,21 @@ class ImportacionTests(TestCase):
         self.client.post("/tablero/importar/", {"tipo": "vehiculos", "archivo": SimpleUploadedFile("v.xlsx", buf.getvalue())})
         v = Vehiculo.objects.get(patente="AB123CD")
         self.assertEqual((v.km_actual, v.vencimiento_vtv.month), (45000, 12))
+
+
+class SinSenalTests(TestCase):
+    def test_orden_enviada_tarde_conserva_fecha_de_carga(self):
+        sup = persona("S1", rol="supervisor")
+        tec = persona("T1", supervisor=sup, usuario=User.objects.create_user("tec", password="x"))
+        tipo = TipoTarea.objects.create(codigo="R", nombre="Rep")
+        ot = OrdenTrabajo.objects.create(numero="1", tipo=tipo, tecnico=tec, estado="asignada")
+        self.client.login(username="tec", password="x")
+        ayer = HOY - timedelta(days=1)
+        self.client.post(f"/app/orden/{ot.id}/", {"resultado": "completada", "_fecha_cliente": ayer.isoformat()})
+        ot.refresh_from_db()
+        self.assertEqual(ot.fecha_ejecucion, ayer)
+        # una fecha demasiado vieja o futura se ignora
+        ot2 = OrdenTrabajo.objects.create(numero="2", tipo=tipo, tecnico=tec, estado="asignada")
+        self.client.post(f"/app/orden/{ot2.id}/", {"resultado": "completada", "_fecha_cliente": "2020-01-01"})
+        ot2.refresh_from_db()
+        self.assertEqual(ot2.fecha_ejecucion, HOY)

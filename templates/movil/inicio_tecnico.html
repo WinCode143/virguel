@@ -6,14 +6,14 @@
 <div class="card">
   {% if not jornada %}
     <h2>Iniciar jornada</h2>
-    <form method="post" action="{% url 'movil:jornada' 'iniciar' %}" class="form-movil">{% csrf_token %}
+    <form method="post" action="{% url 'movil:jornada' 'iniciar' %}" class="form-movil" data-offline="/app/">{% csrf_token %}
       {{ inicio_form.vehiculo.label_tag }}{{ inicio_form.vehiculo }}
       {{ inicio_form.km_inicio.label_tag }}{{ inicio_form.km_inicio }}
       <button class="btn">Salgo a la calle</button></form>
   {% elif jornada.km_fin is None and jornada.hectareas_cubiertas == 0 %}
     <h2>Jornada en curso</h2><p class="muted" style="margin:.2rem 0 0">{{ hechas }} orden{{ hechas|pluralize:"es" }} completada{{ hechas|pluralize }} hoy{% if jornada.vehiculo %} · {{ jornada.vehiculo.patente }}{% endif %}</p>
     <details style="margin-top:.5rem"><summary class="muted">Finalizar jornada</summary>
-    <form method="post" action="{% url 'movil:jornada' 'finalizar' %}" class="form-movil">{% csrf_token %}
+    <form method="post" action="{% url 'movil:jornada' 'finalizar' %}" class="form-movil" data-offline="/app/">{% csrf_token %}
       {% if jornada.vehiculo %}{{ fin_form.km_fin.label_tag }}{{ fin_form.km_fin }}{% endif %}
       {{ fin_form.hectareas_cubiertas.label_tag }}{{ fin_form.hectareas_cubiertas }}
       <button class="btn sec">Terminar el día</button></form></details>

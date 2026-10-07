@@ -1,5 +1,5 @@
 """App móvil (PWA) para técnicos y supervisores en calle."""
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.contrib import messages
 from django.db import transaction
@@ -24,6 +24,17 @@ from .forms import (AccionForm, CerrarOrdenForm, EncuestaForm, FinJornadaForm, I
                     SiniestroMovilForm)
 
 MOVIL = (TECNICO, SUPERVISOR)
+
+
+def fecha_operacion(request):
+    """Fecha en que el técnico cargó el dato en el celular (puede llegar más tarde
+    si no tenía señal). Se acepta hasta 7 días hacia atrás; si no, se usa hoy."""
+    hoy = timezone.localdate()
+    try:
+        f = date.fromisoformat(request.POST.get("_fecha_cliente", ""))
+    except ValueError:
+        return hoy
+    return f if hoy - timedelta(days=7) <= f <= hoy else hoy
 
 
 def _persona(request):
@@ -73,9 +84,9 @@ def _inicio_supervisor(request, p):
 @requiere_rol(TECNICO)
 def jornada(request, accion):
     p = _persona(request)
-    hoy = timezone.localdate()
     if request.method != "POST":
         return redirect("movil:inicio")
+    hoy = fecha_operacion(request)
     if accion == "iniciar":
         f = InicioJornadaForm(request.POST)
         if f.is_valid():
@@ -108,7 +119,7 @@ def orden(request, pk):
     if request.method == "POST":
         f = CerrarOrdenForm(request.POST, orden=ot)
         if f.is_valid():
-            hoy = timezone.localdate()
+            hoy = fecha_operacion(request)
             with transaction.atomic():
                 ot.estado = f.cleaned_data["resultado"]
                 ot.fecha_ejecucion = hoy
@@ -166,6 +177,7 @@ def reportar_incidente(request):
             ultimo = Siniestro.objects.aggregate(m=Max("id"))["m"] or 0
             s.numero = f"S-{timezone.localdate():%Y}-{ultimo + 1:05d}"
             s.reportado_por = p
+            s.fecha = fecha_operacion(request)
             if p.rol == "tecnico":
                 s.tecnico, s.supervisor = p, p.supervisor
             else:
@@ -210,6 +222,7 @@ def nuevo_informe(request):
         if f.is_valid():
             inf = f.save(commit=False)
             inf.supervisor = p
+            inf.fecha = fecha_operacion(request)
             inf.save()
             messages.success(request, f"Informe guardado (calidad de documentación {inf.calidad_informe}/100).")
             if inf.desvio_detectado:
@@ -232,6 +245,7 @@ def nueva_accion(request):
         if f.is_valid():
             a = f.save(commit=False)
             a.aplicada_por, a.informe = p, informe
+            a.fecha = fecha_operacion(request)
             a.save()
             messages.success(request, "Acción correctiva registrada.")
             return redirect("movil:inicio")

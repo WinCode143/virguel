@@ -21,6 +21,10 @@ Día típico:
 5. **Encuesta del día**: 4 preguntas con estrellas sobre el trato del supervisor.
    Es confidencial: el supervisor sólo ve promedios.
 
+**Sin señal:** la app sigue funcionando. Lo que se cargue queda guardado en el celular
+y se envía solo cuando vuelve la conexión (aparece un aviso con los envíos pendientes).
+No cerrar sesión mientras haya envíos pendientes.
+
 Otras secciones: **Mi EPP** (confirmar recepción, ver vencimientos) y **Mi desempeño**.
 
 ## Supervisor — app en el celular + tablero en la PC
@@ -54,7 +58,9 @@ En la PC (`/tablero/`): los mismos tableros que gerencia pero **sólo con su equ
 | **8 · Stock y demanda** | Stock vs. técnicos en calle (días de cobertura), antigüedad de lotes, compras necesarias según demanda comercial. |
 | **7 · Finanzas** | Egresos reales por categoría y proyección a 3 meses. |
 | **9 · Planificación** | Simulador: técnicos, hectáreas, zona, % de decodificadores → clientes atendibles, déficit de técnicos por día, decodificadores y materiales necesarios. |
+| **2 · Encuestas del día** | Enviar el link de la encuesta a cada técnico por WhatsApp con un clic. |
 | **Power BI / exportar** | Instrucciones y descargas CSV. |
+| **Importar Excel / CSV** | Carga inicial masiva con plantillas descargables. |
 | **Carga de datos (admin)** | Alta y edición de todo: personas, vehículos, materiales, ingresos de stock, demanda comercial, capacitaciones, objetivos de supervisores, parámetros. |
 
 ### Cargas que hace administración

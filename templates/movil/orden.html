@@ -3,7 +3,7 @@
 {% block contenido %}
 <div class="card"><b>{{ ot.tipo }}</b><br><span class="muted">{% if ot.cliente %}{{ ot.cliente.nombre }} · {{ ot.cliente.direccion }}{% endif %}</span>
 {% if ot.observaciones %}<p style="margin:.5rem 0 0;font-size:.9rem">{{ ot.observaciones }}</p>{% endif %}</div>
-<form method="post" class="card form-movil">{% csrf_token %}
+<form method="post" class="card form-movil" data-offline="/app/">{% csrf_token %}
   {{ form.non_field_errors }}
   {% for f in form %}
     {% if f.field.widget.input_type == 'checkbox' %}<div class="check">{{ f }} {{ f.label_tag }}</div>
