@@ -48,7 +48,7 @@
       // en horizontal la escala numérica es x
       ejes.x.beginAtZero = true; ejes.x.max = cfg.max; delete ejes.y.max;
       ejes.x.ticks.callback = (v) => f(v);
-      ejes.y.ticks = { color: ink2 };
+      ejes.y.ticks = { color: ink2, autoSkip: false };  // en horizontal se muestran todas las etiquetas
     }
     return new Chart(canvas, {
       type: tipo,

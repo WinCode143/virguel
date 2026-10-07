@@ -3,7 +3,7 @@
 {% block encabezado %}<h1>Índice de Productividad del Técnico (IPT)</h1><p class="sub">Últimos {{ dias }} días{% if es_supervisor %} · tu equipo{% endif %}. Cada indicador se compara con su meta; el índice (0–100) es el promedio ponderado. Clic en un nombre para ver su ficha. <a href="{% url 'admin:core_indicador_changelist' %}">Configurar metas y pesos</a></p>{% endblock %}
 {% block contenido %}
 <form class="filtros" method="get"><label>Período<select name="dias" onchange="this.form.submit()">
-<option value="30" {% if dias == 30 %}selected{% endif %}>30 días</option><option value="60" {% if dias == 60 %}selected{% endif %}>60 días</option><option value="90" {% if dias == 90 %}selected{% endif %}>90 días</option></select></label></form>
+<option value="30" {% if dias == 30 %}selected{% endif %}>30 días</option><option value="60" {% if dias == 60 %}selected{% endif %}>60 días</option><option value="90" {% if dias == 90 %}selected{% endif %}>90 días</option></select></label><a class="btn" href="{% url 'tablero:prod_excel' %}?dias={{ dias }}">⬇ Exportar a Excel</a></form>
 {% include "tablero/_grafico.html" with id="g-ipt" datos=g titulo="IPT por técnico" %}
 <div class="card"><div class="tabla-scroll"><table>
 <thead><tr><th>Técnico</th><th class="num">IPT</th>{% for i in indicadores %}{% if i.peso %}<th class="num" title="{{ i.descripcion }} · Meta {{ i.meta|num:0 }} · Peso {{ i.peso }}">{{ i.nombre }}</th>{% endif %}{% endfor %}</tr>

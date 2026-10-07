@@ -700,3 +700,26 @@ class IndicadoresProductividadTests(TestCase):
         self.assertEqual(self.client.get(f"/admin/core/indicador/{i.id}/change/").status_code, 200)
         self.assertEqual(self.client.get("/tablero/productividad/").status_code, 200)
         self.assertEqual(self.client.get(f"/tablero/productividad/{self.t.id}/").status_code, 200)
+
+
+class ExportacionExcelTests(TestCase):
+    def test_panel_de_productividad_exporta_excel_con_graficos(self):
+        from openpyxl import load_workbook
+        sup = persona("S1", rol="supervisor", usuario=User.objects.create_user("sup", password="x"))
+        persona("T1", supervisor=sup)
+        u = User.objects.create_user("ger", password="x")
+        u.groups.add(Group.objects.create(name="Gerencia"))
+        self.client.login(username="ger", password="x")
+        self.assertEqual(self.client.get("/tablero/productividad/general/").status_code, 200)
+        r = self.client.get("/tablero/productividad/excel/?dias=30")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("spreadsheetml", r["Content-Type"])
+        wb = load_workbook(io.BytesIO(r.content))
+        for hoja in ("Resumen", "Gráficos", "Indicadores empresa", "Técnicos", "Supervisores", "Por equipo"):
+            self.assertIn(hoja, wb.sheetnames)
+        self.assertGreaterEqual(len(wb["Gráficos"]._charts), 1)
+        # el supervisor exporta sólo su equipo y no ve la hoja de supervisores
+        self.client.login(username="sup", password="x")
+        wb = load_workbook(io.BytesIO(self.client.get("/tablero/productividad/excel/").content))
+        self.assertNotIn("Supervisores", wb.sheetnames)
+        self.assertEqual(self.client.get("/tablero/productividad/general/").status_code, 403)

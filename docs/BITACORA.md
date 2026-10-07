@@ -270,3 +270,34 @@ los supervisores". Se diseñó un sistema de indicadores documentado en **`docs/
   tiempo de respuesta, acceso de gerencia a la configuración de metas).
 - Pendiente con datos reales: calibrar tiempos estándar por tipo de trabajo y metas
   (ver `docs/METRICAS.md`).
+
+---
+
+## 2026-10-07 — Sesión 1, sexta parte: panel general, gráficos y Excel
+
+El usuario preguntó si había panel general, por técnico y por supervisor (había los dos
+últimos; el general estaba a medias) y pidió que **se pueda exportar a Excel y tenga un
+apartado gráfico**.
+
+### Hecho
+- **Panel general de productividad** (`/tablero/productividad/general/`, sólo gerencia):
+  IPT e IGS promedio, tendencia, técnicos por nivel, "dónde está el problema de la empresa"
+  (indicadores donde el valor típico está lejos de la meta), evolución semanal, cada indicador
+  contra su meta, comparación por equipo y por zona, los 5 mejores y los 5 más bajos.
+  La evolución se guarda 30 min en caché (calcularla tarda ~4 s).
+- **Gráficos**: 5 en el panel general; en el panel de supervisores, IGS por supervisor y puntos
+  por área de gestión (resultados, control y corrección, personas y clima, gestión).
+- **Exportar a Excel** (`tablero/exportar_excel.py`, botón en los tres paneles): hojas Resumen,
+  **Gráficos** (4 gráficos nativos de Excel, editables), Indicadores empresa, Técnicos,
+  Supervisores, Por equipo, Por zona y Evolución; semáforo con colores y formato condicional.
+  El supervisor exporta sólo su equipo.
+- Verificado abriendo el Excel con LibreOffice y renderizándolo: los gráficos se dibujan.
+
+### Problemas encontrados y corregidos
+- La exportación fallaba si algún supervisor no tenía datos todavía (promedio de lista vacía).
+  Lo detectó el test nuevo.
+- En los gráficos horizontales con muchas barras se salteaban etiquetas → se muestran todas.
+- En el gráfico de Excel los técnicos quedaban invertidos (peor arriba) → el mejor arriba.
+
+### Calidad
+- Tests: **55**, todos pasan.

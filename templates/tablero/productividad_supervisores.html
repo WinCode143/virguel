@@ -2,7 +2,11 @@
 {% block titulo %}Productividad de supervisores · Virguel{% endblock %}
 {% block encabezado %}<h1>Índice de Gestión del Supervisor (IGS)</h1><p class="sub">Últimos {{ dias }} días. Un supervisor se mide por los resultados de su equipo, cómo controla y corrige, el clima que genera y cómo gestiona. <a href="{% url 'admin:core_indicador_changelist' %}">Configurar metas y pesos</a></p>{% endblock %}
 {% block contenido %}
-<form class="filtros" method="get"><label>Período<select name="dias" onchange="this.form.submit()"><option value="30" {% if dias == 30 %}selected{% endif %}>30 días</option><option value="60" {% if dias == 60 %}selected{% endif %}>60 días</option><option value="90" {% if dias == 90 %}selected{% endif %}>90 días</option></select></label></form>
+<form class="filtros" method="get"><label>Período<select name="dias" onchange="this.form.submit()"><option value="30" {% if dias == 30 %}selected{% endif %}>30 días</option><option value="60" {% if dias == 60 %}selected{% endif %}>60 días</option><option value="90" {% if dias == 90 %}selected{% endif %}>90 días</option></select></label><a class="btn" href="{% url 'tablero:prod_excel' %}?dias={{ dias }}">⬇ Exportar a Excel</a></form>
+<div class="grid g2">
+  {% include "tablero/_grafico.html" with id="g-igs" datos=g_igs titulo="IGS por supervisor" %}
+  {% include "tablero/_grafico.html" with id="g-grupos" datos=g_grupos titulo="Por área de gestión (puntos 0–100)" nota="Resultados del equipo · control y corrección · personas y clima · gestión administrativa." %}
+</div>
 <div class="grid g3">{% for tb in tbs %}<div class="card"><h2 style="display:flex;justify-content:space-between"><a href="{% url 'tablero:prod_ficha' tb.persona.id %}">{{ tb.persona.apellido }}, {{ tb.persona.nombre }}</a><span class="estado {{ tb.estado }}">IGS {{ tb.indice|num:0 }}</span></h2>
 {% if tb.fuertes %}<p style="margin:.2rem 0;font-size:.85rem"><b>Fuerte en:</b> {% for m in tb.fuertes %}{{ m.indicador.nombre|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>{% endif %}
 {% if tb.debiles %}<p style="margin:.2rem 0;font-size:.85rem"><b>A mejorar:</b> {% for m in tb.debiles %}{{ m.indicador.nombre|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>{% endif %}

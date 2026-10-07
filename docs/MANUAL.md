@@ -68,6 +68,7 @@ En la PC (`/tablero/`): los mismos tableros que gerencia pero **sólo con su equ
 
 | Pantalla | Para qué |
 |---|---|
+| **Panel general** | Productividad de toda la empresa: promedios, tendencia, dónde está el problema, por equipo y por zona, con gráficos. Botón **Exportar a Excel** (con hoja de gráficos). |
 | **Índice de técnicos (IPT)** | Ranking de productividad con cada indicador contra su meta. Clic → ficha con evolución. |
 | **Índice de supervisores (IGS)** | Comparativo de supervisores con fortalezas y aspectos a mejorar. |
 | **Asistencia de hoy** | Presentes, tarde, ausentes con aviso y sin aviso, por persona y por equipo. |

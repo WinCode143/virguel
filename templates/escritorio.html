@@ -15,6 +15,7 @@
       <a href="{% url 'personal:documentos' %}" class="{% if u == 'documentos' %}activo{% endif %}">Documentación</a>
       {% if es_gerencia %}<a href="{% url 'personal:dotacion' %}" class="{% if u == 'dotacion' %}activo{% endif %}">Dotación y rotación</a>{% endif %}
       <div class="grupo">Productividad</div>
+      {% if es_gerencia %}<a href="{% url 'tablero:prod_general' %}" class="{% if u == 'prod_general' %}activo{% endif %}">Panel general</a>{% endif %}
       <a href="{% url 'tablero:prod_tecnicos' %}" class="{% if u == 'prod_tecnicos' %}activo{% endif %}">Índice de técnicos (IPT)</a>
       {% if es_gerencia %}<a href="{% url 'tablero:prod_supervisores' %}" class="{% if u == 'prod_supervisores' %}activo{% endif %}">Índice de supervisores (IGS)</a>{% endif %}
       {% if es_supervisor %}<a href="{% url 'tablero:prod_ficha' request.user.persona.id %}" class="{% if u == 'prod_ficha' %}activo{% endif %}">Mi índice (IGS)</a>{% endif %}
