@@ -104,3 +104,51 @@ def stock_tecnicos(request):
         "valor_total": sum(d["valor"] for d in por_tecnico.values()),
         "valor_parado": sum(f["valor"] for f in paradas),
         "tecnicos": tecnicos.order_by("apellido"), "materiales": Material.objects.filter(activo=True)})
+
+
+@requiere_rol(GERENCIA, SUPERVISOR, DEPOSITO)
+def deudas(request):
+    """Partes adeudadas por los técnicos y su regularización (depósito / gerencia)."""
+    from inventario.deudas import deudas as calcular, resumen_por_tecnico
+    from inventario.models import EquipoRetirado
+    tecnicos = Persona.objects.filter(rol="tecnico", activo=True)
+    if rol_de(request.user) == SUPERVISOR:
+        tecnicos = tecnicos.filter(supervisor=persona_de(request.user))
+    puede = rol_de(request.user) in (GERENCIA, DEPOSITO)
+    if request.method == "POST" and puede:
+        accion = request.POST.get("accion")
+        yo = persona_de(request.user)
+        try:
+            if accion in ("recibir", "extraviado"):
+                e = get_object_or_404(EquipoRetirado, pk=request.POST.get("equipo"), estado="en_tecnico")
+                e.estado = "devuelto" if accion == "recibir" else "extraviado"
+                e.devuelto, e.recibido_por = timezone.now(), yo
+                e.observaciones = request.POST.get("observaciones", "")[:200]
+                e.save()
+                if accion == "recibir":
+                    notificar(e.tecnico, "Equipo recibido en el depósito", f"Serie {e.numero_serie}: regularizado.", "/app/stock/")
+                messages.success(request, f"Equipo {e.numero_serie}: {e.get_estado_display().lower()}.")
+            elif accion == "entrega_pendiente":
+                t = get_object_or_404(tecnicos, pk=request.POST.get("tecnico"))
+                m = get_object_or_404(Material, pk=request.POST.get("material"))
+                cant = _dec(request.POST.get("cantidad"))
+                entregar(t, m, cant, permitir_negativo=True)
+                notificar(t, "Parte regularizada", f"Se registró la entrega de {cant:g} {m.unidad} de {m.nombre}.", "/app/stock/")
+                messages.success(request, f"Registrada la entrega a {t.nombre_completo}.")
+            elif accion == "devolucion":
+                t = get_object_or_404(tecnicos, pk=request.POST.get("tecnico"))
+                m = get_object_or_404(Material, pk=request.POST.get("material"))
+                cant = _dec(request.POST.get("cantidad"))
+                devolver(t, m, cant, observaciones="Devolución de partes paradas")
+                notificar(t, "Devolución registrada", f"{cant:g} {m.unidad} de {m.nombre} volvieron al depósito.", "/app/stock/")
+                messages.success(request, f"Devolución de {t.nombre_completo} registrada.")
+        except StockInsuficiente as e:
+            messages.error(request, str(e))
+        return redirect("tablero:deudas")
+    lista = calcular(tecnicos)
+    por_tec = resumen_por_tecnico(lista)
+    return render(request, "tablero/deudas.html", {
+        "por_tec": sorted(por_tec.items(), key=lambda kv: (-kv[1]["rojas"], -kv[1]["mas_vieja"])),
+        "total": len(lista), "rojas": sum(1 for d in lista if d.estado == "critico"),
+        "amarillas": sum(1 for d in lista if d.estado == "aviso"), "puede": puede,
+        "equipos": sum(1 for d in lista if d.tipo == "equipo_retirado")})

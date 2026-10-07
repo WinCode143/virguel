@@ -7,6 +7,7 @@
       {% if es_deposito %}
       <div class="nav-grupo">
         {% nav 'tablero:pedidos' 'Pedidos de partes' 'carrito' %}
+        {% nav 'tablero:deudas' 'Partes adeudadas' 'alerta' %}
         {% nav 'tablero:stock_tecnicos' 'Partes en técnicos' 'llave' %}
         {% nav 'tablero:stock' 'Stock y demanda' 'caja' %}
         {% nav 'tablero:herramientas' 'Herramientas y EPP' 'casco' %}
@@ -29,12 +30,13 @@
         {% if es_supervisor %}{% nav 'personal:usuarios' 'Accesos de mi equipo' 'llave' %}{% endif %}
       </details>
 
-      <details class="nav-grupo" {% grupo_abierto 'tablero:prod_general' 'tablero:prod_tecnicos' 'tablero:prod_supervisores' 'tablero:prod_ficha' %}>
+      <details class="nav-grupo" {% grupo_abierto 'tablero:prod_general' 'tablero:prod_tecnicos' 'tablero:prod_supervisores' 'tablero:prod_ficha' 'tablero:metas' %}>
         <summary>Productividad {% icono 'abajo' %}</summary>
         {% if es_gerencia %}{% nav 'tablero:prod_general' 'Panel general' 'grafico' %}{% endif %}
         {% nav 'tablero:prod_tecnicos' 'Técnicos (IPT)' 'trofeo' %}
         {% if es_gerencia %}{% nav 'tablero:prod_supervisores' 'Supervisores (IGS)' 'estrella' %}{% endif %}
         {% if es_supervisor %}{% nav 'tablero:prod_ficha' 'Mi índice (IGS)' 'estrella' 0 request.user.persona.id %}{% endif %}
+        {% nav 'tablero:metas' 'Metas y semáforos' 'ajustes' %}
       </details>
 
       <details class="nav-grupo" {% grupo_abierto 'tablero:tecnicos' 'tablero:capacitacion' 'tablero:supervisores' 'tablero:encuestas' 'tablero:incidentes' %}>
@@ -53,8 +55,9 @@
         {% nav 'tablero:planificacion' 'Planificación y capacidad' 'mapa' %}
       </details>
 
-      <details class="nav-grupo" {% grupo_abierto 'tablero:stock' 'tablero:stock_tecnicos' 'tablero:pedidos' 'tablero:herramientas' %}>
+      <details class="nav-grupo" {% grupo_abierto 'tablero:stock' 'tablero:stock_tecnicos' 'tablero:pedidos' 'tablero:herramientas' 'tablero:deudas' %}>
         <summary>Inventario {% icono 'abajo' %}</summary>
+        {% nav 'tablero:deudas' 'Partes adeudadas' 'alerta' %}
         {% nav 'tablero:stock' 'Stock y demanda' 'caja' %}
         {% nav 'tablero:stock_tecnicos' 'Partes en técnicos' 'llave' %}
         {% if es_gerencia %}{% nav 'tablero:pedidos' 'Pedidos de partes' 'carrito' %}{% endif %}

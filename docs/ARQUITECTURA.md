@@ -112,7 +112,7 @@ Qué levanta (`deploy/docker-compose.prod.yml`):
 |---|---|
 | `db` | PostgreSQL 16 con volumen persistente. |
 | `web` | Django con **gunicorn** (aplica migraciones al arrancar). |
-| `tareas` | Ejecuta `tareas_diarias` todos los días a las 21:00. |
+| `tareas` | `manage.py programador`: 07:30 recordatorios (partes adeudadas) y 21:00 tarea diaria (encuestas, alertas, parte por mail). Horarios con `HORA_RECORDATORIOS` / `HORA_TAREAS`. |
 | `caddy` | Proxy con **HTTPS automático** (Let's Encrypt), sirve estáticos y fotos. HTTPS es obligatorio: sin él no funcionan la cámara, el GPS ni la instalación de la app en el celular. |
 
 Backups: `deploy/backup.sh /ruta/backups` (base + fotos, conserva 30 días). Programarlo en el cron del servidor:

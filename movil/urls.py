@@ -14,6 +14,7 @@ urlpatterns = [
     path("stock/", views.mi_stock, name="stock"),
     path("stock/pedir/", views.pedir_partes, name="pedir"),
     path("pedidos/", views.pedidos_equipo, name="pedidos"),
+    path("deudas/", views.deudas_equipo, name="deudas"),
     path("legajo/", views.mi_legajo, name="legajo"),
     path("yo/", views.yo, name="yo"),
     path("mi-supervisor/", views.mi_supervisor, name="mi_supervisor"),

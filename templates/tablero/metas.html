@@ -1,0 +1,50 @@
+{% extends "escritorio.html" %}{% load formato ui l10n %}
+{% block titulo %}Metas y semáforos · Virguel{% endblock %}
+{% block encabezado %}<h1>Metas y semáforos</h1>
+<p class="sub">Cada indicador tiene una <b>meta</b> y un <b>límite</b>.
+<span class="estado ok">Verde</span>: cumple la meta ·
+<span class="estado aviso">Amarillo</span>: no la cumple pero está dentro del límite ·
+<span class="estado critico">Rojo</span>: está más lejos que el límite.
+{% if es_ger %}Las metas generales valen para todos; cada equipo puede tener las suyas.{% else %}Podés fijar metas propias para tu equipo; si dejás vacío, se usa la general.{% endif %}</p>{% endblock %}
+{% block contenido %}
+{% if es_ger %}<form class="filtros" method="get"><label>Estás editando<select name="equipo" onchange="this.form.submit()">
+<option value="">Metas generales (toda la empresa)</option>{% for s in supervisores %}<option value="{{ s.id }}" {% if equipo and equipo.id == s.id %}selected{% endif %}>Equipo de {{ s.apellido }}, {{ s.nombre }}</option>{% endfor %}</select></label></form>
+{% else %}<div class="card" style="margin-bottom:1rem"><span class="estado info">Editando las metas de tu equipo</span></div>{% endif %}
+
+<form method="post">{% csrf_token %}{% if equipo %}<input type="hidden" name="equipo" value="{{ equipo.id }}">{% endif %}
+{% if editando_general %}<div class="card"><h2>Umbrales generales</h2><div class="filtros" style="margin:0">
+  <label>Índices (IPT/IGS): verde desde<input name="indice_verde" type="number" min="1" max="100" value="{{ p.indice_verde }}" style="width:7rem"></label>
+  <label>…rojo por debajo de<input name="indice_rojo" type="number" min="0" max="99" value="{{ p.indice_rojo }}" style="width:7rem"></label>
+  <label>Partes adeudadas: amarillo después de (días)<input name="deuda_dias_aviso" type="number" min="0" value="{{ p.deuda_dias_aviso }}" style="width:7rem"></label>
+  <label>…rojo después de (días)<input name="deuda_dias_critico" type="number" min="1" value="{{ p.deuda_dias_critico }}" style="width:7rem"></label>
+</div></div>{% endif %}
+
+{% for sec in secciones %}<div class="card">
+  <h2>{{ sec.titulo }} <span class="muted" style="font-weight:400;font-size:.85rem">· {{ sec.ayuda }}</span></h2>
+  <div class="tabla-scroll"><table>
+  <thead><tr><th>Indicador</th><th>Sentido</th>
+    {% if equipo %}<th class="num">General</th><th class="num">Meta del equipo</th><th class="num">Límite del equipo</th>{% else %}<th class="num">Meta</th><th class="num">Límite (rojo)</th>{% if editando_general and sec.rol != 'mando' %}<th class="num">Peso</th>{% endif %}{% endif %}
+    <th>Cómo se colorea</th></tr></thead>
+  <tbody>{% for f in sec.filas %}<tr>
+    <td><b>{{ f.i.nombre }}</b>{% if f.propia %} <span class="estado info">propia del equipo</span>{% endif %}<div class="muted" style="font-size:.78rem;max-width:380px">{{ f.i.descripcion }}</div></td>
+    <td style="white-space:nowrap">{% if f.i.mayor_es_mejor %}↑ más es mejor{% else %}↓ menos es mejor{% endif %}<div class="muted" style="font-size:.78rem">{{ f.i.unidad }}</div></td>
+    {% if equipo %}
+      <td class="num muted">{{ f.i.meta|num:1 }} / {{ f.i.minimo|num:1 }}</td>
+      <td class="num">{% if sec.editable %}<input name="meta_{{ f.i.id }}" value="{% if f.propia %}{{ f.propia.meta|floatformat:"-2u" }}{% endif %}" placeholder="{{ f.i.meta|floatformat:"-2u" }}" style="width:7.5rem;text-align:right">{% else %}—{% endif %}</td>
+      <td class="num">{% if sec.editable %}<input name="lim_{{ f.i.id }}" value="{% if f.propia %}{{ f.propia.minimo|floatformat:"-2u" }}{% endif %}" placeholder="{{ f.i.minimo|floatformat:"-2u" }}" style="width:7.5rem;text-align:right">{% else %}—{% endif %}</td>
+    {% else %}
+      <td class="num">{% if sec.editable %}<input name="meta_{{ f.i.id }}" value="{{ f.i.meta|floatformat:"-2u" }}" style="width:7.5rem;text-align:right">{% else %}{{ f.i.meta|num:1 }}{% endif %}</td>
+      <td class="num">{% if sec.editable %}<input name="lim_{{ f.i.id }}" value="{{ f.i.minimo|floatformat:"-2u" }}" style="width:7.5rem;text-align:right">{% else %}{{ f.i.minimo|num:1 }}{% endif %}</td>
+      {% if editando_general and sec.rol != 'mando' %}<td class="num"><input name="peso_{{ f.i.id }}" type="number" min="0" max="100" value="{{ f.i.peso }}" style="width:4.5rem;text-align:right"></td>{% endif %}
+    {% endif %}
+    <td style="font-size:.8rem;min-width:240px">{{ f.regla }}</td>
+  </tr>{% endfor %}</tbody></table></div>
+</div>{% endfor %}
+<div style="display:flex;gap:.6rem;align-items:center;margin-top:1rem"><button class="btn">{% icono 'check' 'sm' %} Guardar cambios</button>
+{% if equipo %}<span class="muted" style="font-size:.85rem">Dejá vacíos meta y límite para volver a la meta general.</span>{% endif %}</div>
+</form>
+
+<div class="card"><h2>Últimos cambios</h2><div class="tabla-scroll"><table><thead><tr><th>Fecha</th><th>Quién</th><th>Indicador</th><th>Alcance</th><th>Antes</th><th>Después</th></tr></thead>
+<tbody>{% for c in cambios %}<tr><td>{{ c.fecha|date:"d/m/Y H:i" }}</td><td>{{ c.usuario.get_full_name|default:c.usuario.username }}</td><td>{{ c.indicador.nombre }}</td><td>{{ c.alcance }}</td><td class="muted">{{ c.antes }}</td><td>{{ c.despues }}</td></tr>
+{% empty %}<tr><td colspan="6" class="vacio">Todavía no hubo cambios.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

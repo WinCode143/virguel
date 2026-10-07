@@ -335,3 +335,46 @@ Pedido: "mejorá la UI/UX de la aplicación, la web y todo el proyecto, agregá 
 ### Calidad
 - Todas las plantillas compilan; 55 tests pasan; revisión visual en claro y oscuro (escritorio,
   celular, login y carga de datos).
+
+---
+
+## 2026-10-07 — Sesión 1, octava parte: login, credenciales, partes adeudadas y semáforos
+
+Pedido: sistema de login, manejo de credenciales para gerencia, aviso diario de partes adeudadas
+con días sin regularizar, información para gerente y supervisor con semáforos según objetivos y
+una forma de fijar los límites; "pensá en cosas que se me pudieron pasar".
+
+### Hecho
+- **Login**: ingreso con usuario, **legajo o DNI**; bloqueo 15 min tras 5 intentos; registro de
+  accesos (ingresos, salidas, fallidos, bloqueos, blanqueos, cambios de rol con IP y dispositivo);
+  **cambio de clave obligatorio** en el primer ingreso y tras un blanqueo; "olvidé mi clave" por mail;
+  clave mínima de 8 caracteres; al cambiar la clave se cierran las otras sesiones.
+- **Credenciales** (`/personal/usuarios/`): crear acceso, **blanquear** (clave temporal legible que
+  se muestra una sola vez + envío por WhatsApp), desbloquear, dar de baja/reactivar, roles, historial.
+  Supervisores: sólo blanquear/desbloquear a su equipo. **Baja automática del acceso al egresar.**
+- **Rol Depósito**: sólo inventario, pedidos, partes de técnicos y herramientas.
+- **Aviso de privacidad** (Ley 25.326) que técnicos y supervisores aceptan antes de usar la app
+  (GPS, fotos, horarios). Texto a validar por legales.
+- **Partes adeudadas** (`inventario/deudas.py`): equipos retirados a clientes sin devolver (nuevo
+  modelo `EquipoRetirado`, se crea al cerrar la orden con series retiradas), partes usadas sin cargo
+  y partes paradas. Días sin regularizar con semáforo (amarillo > 2 días, rojo > 5; configurable).
+  Aviso **cada mañana** al técnico y resumen al supervisor (`manage.py recordatorios`); banner en
+  la app; pantalla de regularización para depósito (`/tablero/partes-adeudadas/`).
+- **Programador** (`manage.py programador`): corre 07:30 recordatorios y 21:00 tarea diaria
+  (reemplaza el bucle de shell del servicio de producción).
+- **Semáforos con metas**: regla única (verde = cumple la meta; amarillo = dentro del límite;
+  rojo = más allá del límite). **Tablero de mando** en el Resumen con 13 indicadores (presentismo,
+  sin aviso, tardanzas, órdenes vs. capacidad, IPT, IGS, riesgo, partes adeudadas, siniestros,
+  documentación, stock parado, alertas). **Metas y semáforos** (`/tablero/metas/`): gerencia fija
+  metas generales, de cada equipo, pesos y umbrales; el supervisor fija las de su equipo (no las que
+  lo evalúan a él). Validación de coherencia y **registro de cambios**.
+
+### Problemas encontrados y corregidos
+- El campo de metas no admitía valores mayores a 999.999 (falló al cargar el límite de stock parado).
+- "Órdenes vs. capacidad (hoy)" siempre daba rojo durante el día → se mide el último día completo.
+- Cuentas existentes no deben verse obligadas a cambiar la clave: sólo las creadas o blanqueadas.
+
+### Calidad
+- Tests: **71**, todos pasan (login por legajo/DNI, bloqueo, blanqueo + cambio obligatorio, permisos
+  de supervisor sobre credenciales, baja por egreso, privacidad, rol depósito, partes adeudadas y su
+  regularización, aviso diario, metas de equipo y registro, validaciones, tablero de mando).

@@ -197,3 +197,32 @@ class PedidoItem(models.Model):
     class Meta:
         verbose_name = "Ítem del pedido"
         verbose_name_plural = "Ítems del pedido"
+
+
+class EquipoRetirado(models.Model):
+    """Equipo retirado de un cliente (decodificador, módem…) que el técnico debe devolver al depósito."""
+
+    class Estado(models.TextChoices):
+        EN_TECNICO = "en_tecnico", "En poder del técnico"
+        DEVUELTO = "devuelto", "Devuelto al depósito"
+        EXTRAVIADO = "extraviado", "Extraviado"
+
+    orden = models.ForeignKey(OrdenTrabajo, null=True, blank=True, on_delete=models.SET_NULL, related_name="equipos_retirados")
+    tecnico = models.ForeignKey(Persona, on_delete=models.PROTECT, related_name="equipos_retirados")
+    numero_serie = models.CharField(max_length=60)
+    material = models.ForeignKey(Material, null=True, blank=True, on_delete=models.SET_NULL,
+                                 help_text="Tipo de equipo (opcional).")
+    fecha_retiro = models.DateField(default=timezone.localdate, db_index=True)
+    estado = models.CharField(max_length=12, choices=Estado.choices, default=Estado.EN_TECNICO, db_index=True)
+    devuelto = models.DateTimeField(null=True, blank=True)
+    recibido_por = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL,
+                                     related_name="equipos_recibidos")
+    observaciones = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ["fecha_retiro"]
+        verbose_name = "Equipo retirado a cliente"
+        verbose_name_plural = "Equipos retirados a clientes"
+
+    def __str__(self):
+        return f"{self.numero_serie} ({self.tecnico})"

@@ -102,6 +102,7 @@ class Command(BaseCommand):
             self.siniestros()
             self.demanda()
             self.finanzas()
+            self.equipos_retirados()
             self.tiempos_respuesta()
             self.historial()
         self.stdout.write(self.style.SUCCESS("Datos de demostración generados. Contraseña de todos: virguel2026"))
@@ -116,7 +117,9 @@ class Command(BaseCommand):
         from core.models import Notificacion
         from inventario.models import MovimientoStockTecnico, PedidoMaterial
         from supervision.models import EncuestaSemanal
-        for m in (MovimientoStockTecnico, PedidoMaterial, EncuestaSemanal, Notificacion):
+        from core.models import RegistroAcceso
+        from inventario.models import EquipoRetirado
+        for m in (EquipoRetirado, MovimientoStockTecnico, PedidoMaterial, EncuestaSemanal, Notificacion, RegistroAcceso):
             m.objects.all().delete()
         for m in (Egreso, CostoFijo, Alerta, AccionCorrectiva, InformeControl, EncuestaSupervisor, TareaSupervisor,
                   Siniestro, Salida, LoteIngreso, DemandaComercial, RecetaMaterial, Participacion, Capacitacion,
@@ -404,6 +407,36 @@ class Command(BaseCommand):
         OrdenTrabajo.objects.bulk_update(cambiadas, ["inicio_trabajo", "fin_trabajo", "foto_trabajo", "conforme_nombre",
                                                      "conforme_dni", "firma", "lat_cierre", "lng_cierre"], batch_size=2000)
         self.stdout.write(f"  {len(cambiadas)} cierres con datos completos (últimos 45 días)")
+
+    def equipos_retirados(self):
+        """Equipos retirados a clientes (órdenes de retiro de los últimos 30 días): la mayoría ya
+        entregados al depósito; algunos pendientes, más en los técnicos de riesgo."""
+        from datetime import datetime
+
+        from inventario.models import EquipoRetirado
+        from inventario.stock_tecnico import consumir
+        r = self.r
+        tz = timezone.get_current_timezone()
+        pendiente = {"bueno": .04, "capacitar": .08, "riesgo": .6, "nuevo": .15, "mejora": .05}
+        equipos = []
+        for o in OrdenTrabajo.objects.filter(tipo__codigo="RET", estado="completada",
+                                             fecha_ejecucion__gte=self.hoy - timedelta(days=30)).select_related("tecnico"):
+            serie = f"{r.choice(['DCO', 'ONT', 'DCH'])}{r.randint(100000, 999999)}"
+            o.series_retiradas = serie
+            o.save(update_fields=["series_retiradas"])
+            pf = getattr(o.tecnico, "perfil", None) or self.perfil_de.get(o.tecnico_id, "bueno")
+            sigue = r.random() < pendiente.get(pf, .1) and o.fecha_ejecucion < self.hoy
+            devuelto = None if sigue else datetime.combine(
+                min(self.hoy, o.fecha_ejecucion + timedelta(days=r.choice([0, 1, 1, 2]))), datetime.min.time(), tz
+            ) + timedelta(hours=17)
+            equipos.append(EquipoRetirado(orden=o, tecnico=o.tecnico, numero_serie=serie, fecha_retiro=o.fecha_ejecucion,
+                                          estado="en_tecnico" if sigue else "devuelto", devuelto=devuelto,
+                                          material=self.mat["DECO-HD" if serie.startswith("D") else "ONT"]))
+        EquipoRetirado.objects.bulk_create(equipos)
+        # dos técnicos usaron partes que no figuraban a su cargo (falta registrar la entrega)
+        for t in r.sample([t for t in self.tecs if t.perfil != "riesgo"], 2):
+            consumir(t, None, self.mat["FO-ROS"], Decimal("40"), self.hoy - timedelta(days=r.randint(3, 9)))
+        self.stdout.write(f"  {len(equipos)} equipos retirados ({sum(1 for e in equipos if e.estado == 'en_tecnico')} sin devolver)")
 
     def tiempos_respuesta(self):
         """Cuándo se cargó y cuándo resolvió el supervisor cada aviso y pedido."""

@@ -820,3 +820,114 @@ class LoginYCredencialesTests(TestCase):
         self.assertEqual(self.client.get("/tablero/stock/").status_code, 200)
         self.assertEqual(self.client.get("/tablero/finanzas/").status_code, 403)
         self.assertEqual(self.client.get("/tablero/tecnicos/").status_code, 403)
+
+
+class PartesAdeudadasTests(TestCase):
+    def setUp(self):
+        self.sup = persona("S1", rol="supervisor", usuario=User.objects.create_user("sup", password="x"))
+        self.t = persona("T1", supervisor=self.sup, usuario=User.objects.create_user("tec", password="x"))
+        self.tipo = TipoTarea.objects.create(codigo="RET", nombre="Retiro")
+        self.ger = User.objects.create_user("ger", password="x")
+        self.ger.groups.add(Group.objects.create(name="Gerencia"))
+
+    def test_cerrar_retiro_registra_equipos_y_genera_deuda(self):
+        from inventario.deudas import deudas
+        from inventario.models import EquipoRetirado
+        ot = OrdenTrabajo.objects.create(numero="1", tipo=self.tipo, tecnico=self.t, estado="asignada")
+        self.client.login(username="tec", password="x")
+        self.client.post(f"/app/orden/{ot.id}/", {"resultado": "completada", "series_retiradas": "ABC1, ABC2"})
+        self.assertEqual(EquipoRetirado.objects.filter(tecnico=self.t, estado="en_tecnico").count(), 2)
+        EquipoRetirado.objects.update(fecha_retiro=HOY - timedelta(days=8))
+        d = deudas([self.t])
+        self.assertEqual((len(d), d[0].dias, d[0].estado), (2, 8, "critico"))  # más de 5 días: rojo
+        self.assertContains(self.client.get("/app/"), "por regularizar")
+
+    def test_aviso_diario_y_regularizacion_en_deposito(self):
+        from core.models import Notificacion
+        from inventario.deudas import deudas, notificar_deudas
+        from inventario.models import EquipoRetirado
+        e = EquipoRetirado.objects.create(tecnico=self.t, numero_serie="X1", fecha_retiro=HOY - timedelta(days=3))
+        notificar_deudas(log=lambda *_: None)
+        self.assertTrue(Notificacion.objects.filter(persona=self.t, titulo__icontains="regularizar").exists())
+        self.assertTrue(Notificacion.objects.filter(persona=self.sup, titulo__icontains="tu equipo").exists())
+        self.assertEqual(deudas([self.t])[0].estado, "aviso")  # 3 días: amarillo
+        self.client.force_login(self.ger)
+        self.client.post("/tablero/partes-adeudadas/", {"accion": "recibir", "equipo": e.id})
+        e.refresh_from_db()
+        self.assertEqual(e.estado, "devuelto")
+        self.assertEqual(deudas([self.t]), [])
+
+    def test_uso_sin_cargo_cuenta_desde_que_quedo_negativo(self):
+        from inventario.deudas import deudas
+        from inventario.stock_tecnico import consumir, entregar
+        m = Material.objects.create(codigo="R", nombre="Roseta", costo_unitario=Decimal("1"))
+        LoteIngreso.objects.create(material=m, cantidad=100)
+        entregar(self.t, m, 2, fecha=HOY - timedelta(days=10))
+        consumir(self.t, None, m, 5, fecha=HOY - timedelta(days=4))
+        d = deudas([self.t])[0]
+        self.assertEqual((d.tipo, d.cantidad, d.dias), ("uso_sin_cargo", 3, 4))
+
+    def test_supervisor_ve_su_equipo_pero_no_regulariza(self):
+        from inventario.models import EquipoRetirado
+        ajeno = persona("T2")
+        EquipoRetirado.objects.create(tecnico=ajeno, numero_serie="Z9")
+        e = EquipoRetirado.objects.create(tecnico=self.t, numero_serie="Y1")
+        self.client.force_login(self.sup.usuario)
+        r = self.client.get("/tablero/partes-adeudadas/")
+        self.assertContains(r, "Y1")
+        self.assertNotContains(r, "Z9")
+        self.client.post("/tablero/partes-adeudadas/", {"accion": "recibir", "equipo": e.id})
+        e.refresh_from_db()
+        self.assertEqual(e.estado, "en_tecnico")
+
+
+class MetasYSemaforosTests(TestCase):
+    def setUp(self):
+        self.ger = User.objects.create_user("ger", password="x")
+        self.ger.groups.add(Group.objects.create(name="Gerencia"))
+        self.sup = persona("S1", rol="supervisor", usuario=User.objects.create_user("sup", password="x"))
+        self.otro_sup = persona("S2", rol="supervisor")
+        self.t1 = persona("T1", supervisor=self.sup)
+        self.t2 = persona("T2", supervisor=self.otro_sup)
+
+    def test_regla_verde_amarillo_rojo(self):
+        from core.models import Indicador
+        i = Indicador(meta=90, minimo=70, mayor_es_mejor=True, unidad="%")
+        self.assertEqual([i.estado(v) for v in (95, 90, 80, 70, 60, None)], ["ok", "ok", "aviso", "critico", "critico", "info"])
+        j = Indicador(meta=0, minimo=3, mayor_es_mejor=False, unidad="personas")
+        self.assertEqual([j.estado(v) for v in (0, 2, 3)], ["ok", "aviso", "critico"])
+
+    def test_supervisor_fija_metas_de_su_equipo_y_queda_registro(self):
+        from core.metas import indicadores_efectivos
+        from core.models import CambioMeta, Indicador
+        i = Indicador.objects.get(codigo="primera_visita")
+        self.client.force_login(self.sup.usuario)
+        self.client.post("/tablero/metas/", {f"meta_{i.id}": "98", f"lim_{i.id}": "90"})
+        propia = {x.codigo: x for x in indicadores_efectivos("tecnico", self.sup)}["primera_visita"]
+        general = {x.codigo: x for x in indicadores_efectivos("tecnico", self.otro_sup)}["primera_visita"]
+        self.assertEqual((propia.meta, propia.minimo), (98, 90))
+        self.assertEqual((general.meta, general.minimo), (95, 80))  # el otro equipo usa la general
+        self.assertTrue(CambioMeta.objects.filter(indicador=i, usuario=self.sup.usuario).exists())
+
+    def test_supervisor_no_puede_tocar_las_metas_que_lo_evaluan(self):
+        from core.models import Indicador, MetaEquipo
+        i = Indicador.objects.get(codigo="clima_equipo")
+        self.client.force_login(self.sup.usuario)
+        self.client.post("/tablero/metas/", {f"meta_{i.id}": "10", f"lim_{i.id}": "1"})
+        self.assertFalse(MetaEquipo.objects.filter(indicador=i).exists())
+
+    def test_meta_incoherente_se_rechaza(self):
+        from core.models import Indicador
+        i = Indicador.objects.get(codigo="presentismo_hoy")
+        self.client.force_login(self.ger)
+        r = self.client.post("/tablero/metas/", {f"meta_{i.id}": "80", f"lim_{i.id}": "90"}, follow=True)
+        self.assertContains(r, "debe ser mayor")
+        i.refresh_from_db()
+        self.assertEqual(i.meta, 95)
+
+    def test_resumen_muestra_semaforos(self):
+        self.client.force_login(self.ger)
+        r = self.client.get("/tablero/")
+        self.assertContains(r, "card kpi mando")
+        self.client.force_login(self.sup.usuario)
+        self.assertEqual(self.client.get("/tablero/").status_code, 200)

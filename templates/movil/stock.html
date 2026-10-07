@@ -5,6 +5,12 @@
   <a class="accion" href="{% url 'movil:pedir' %}">{% icono 'mas' %}Pedir partes<small>al depósito</small></a>
   {% if falta_algo %}<a class="accion" href="{% url 'movil:pedir' %}?faltante=1" style="border-color:var(--aviso)">{% icono 'carrito' %}Pedir lo que me falta<small>para mis {{ n_ordenes }} órdenes</small></a>{% endif %}
 </div>
+{% if deudas %}<div class="card" id="deudas" style="border-color:var(--critico)"><h2>Pendientes de regularizar ({{ deudas|length }})</h2>
+<ul class="lista-ot">{% for d in deudas %}<li style="align-items:flex-start"><div><b>{{ d.titulo }}</b><br><span style="font-size:.88rem">{{ d.descripcion }}</span><br>
+<span class="muted" style="font-size:.82rem">{{ d.que_hacer }}</span></div>
+<span class="estado {{ d.estado }}">{{ d.dias }} día{{ d.dias|pluralize }}</span></li>{% endfor %}</ul>
+<p class="muted" style="font-size:.8rem;margin:.4rem 0 0">Los días cuentan desde que quedó pendiente. Te llega un aviso cada mañana hasta regularizarlo.</p></div>
+{% else %}<div class="card" id="deudas"><span class="estado ok">No tenés partes pendientes de regularizar</span></div>{% endif %}
 <div class="card"><h2>Lo que tengo a mi cargo</h2><table><tbody>{% for m, c in saldos %}
 <tr><td>{{ m.nombre }}</td><td class="num">{% if c < 0 %}<span class="estado critico">{{ c|cant }}</span>{% else %}{{ c|cant }}{% endif %} {{ m.unidad }}</td></tr>
 {% empty %}<tr><td class="muted">No tenés partes a tu cargo.</td></tr>{% endfor %}</tbody></table>

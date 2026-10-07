@@ -161,6 +161,12 @@ a.card:hover { text-decoration: none; border-color: var(--accent); box-shadow: v
 .chart-box { position: relative; height: 280px; }
 .chart-box.alto { height: 400px; }
 
+/* Tarjetas del tablero de mando: borde superior con el color del semáforo */
+.card.mando { border-top: 4px solid var(--axis); }
+.card.mando.ok { border-top-color: var(--ok); }
+.card.mando.aviso { border-top-color: var(--aviso); }
+.card.mando.critico { border-top-color: var(--critico); }
+
 /* Tablas */
 table { width: 100%; border-collapse: collapse; font-size: .89rem; }
 th { text-align: left; font-weight: 600; color: var(--ink-2); font-size: .76rem; text-transform: uppercase; letter-spacing: .03em;

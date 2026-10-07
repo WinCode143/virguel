@@ -111,3 +111,23 @@ En la PC (`/tablero/`): los mismos tableros que gerencia pero **sólo con su equ
 - **Entregas de EPP**, **services** de vehículos, **capacitaciones**, **costos fijos**.
 - **Parámetros del sistema**: 60 días de stock, 5–6 ha, técnicos por cuadrilla,
   clientes por técnico, 50 %/60 % de decodificadores, ventana de evaluación.
+
+
+## Ingreso y claves
+- Se entra con **usuario, legajo o DNI**. Tras 5 intentos fallidos el acceso se bloquea 15 minutos.
+- La primera vez (o después de un blanqueo) el sistema pide elegir una clave propia.
+- ¿Te olvidaste la clave? Con mail cargado: "¿Olvidaste tu clave?" en el ingreso. Si no, tu supervisor
+  o gerencia la blanquean (te pasan una clave temporal por WhatsApp).
+- Gerencia gestiona todos los accesos en **Administración → Usuarios y accesos**; el **Registro de
+  accesos** muestra ingresos, intentos fallidos y bloqueos.
+
+## Partes adeudadas
+- Al cerrar una orden con equipos retirados (series), quedan **a cargo del técnico** hasta que el
+  depósito los recibe.
+- Cada mañana el técnico recibe un aviso con lo que debe y hace cuántos días; el supervisor, el
+  resumen de su equipo. El depósito regulariza en **Inventario → Partes adeudadas**.
+
+## Metas y semáforos
+- 🟢 cumple la meta · 🟡 no la cumple pero está dentro del límite · 🔴 más allá del límite.
+- **Productividad → Metas y semáforos**: gerencia fija metas generales, por equipo, pesos y umbrales;
+  cada supervisor puede fijar las de su equipo. Todo cambio queda registrado.

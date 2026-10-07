@@ -31,7 +31,7 @@ services:
       - media:/app/media
       - static:/app/staticfiles
 
-  # Tarea diaria (encuestas + alertas) todos los días a las 21:00
+  # Tareas automáticas: 07:30 recordatorios (partes adeudadas) y 21:00 tarea diaria (encuestas, alertas, parte por mail)
   tareas:
     build: ..
     restart: unless-stopped
@@ -43,10 +43,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: >
-      sh -c 'while true; do
-        sleep $$(( ($$(date -d "21:00" +%s) - $$(date +%s) + 86400) % 86400 ));
-        python manage.py tareas_diarias; sleep 60; done'
+    command: python manage.py programador
 
   caddy:
     image: caddy:2-alpine

@@ -1,0 +1,8 @@
+{% extends "movil/base_movil.html" %}
+{% block titulo_movil %}Partes adeudadas del equipo{% endblock %}
+{% block contenido %}
+{% for t, r in por_tec %}<div class="card"><h2 style="display:flex;justify-content:space-between;gap:.5rem">{{ t.nombre_completo }} <span class="estado {{ r.estado }}">{{ r.mas_vieja }} días</span></h2>
+<ul class="lista-ot">{% for d in r.items %}<li style="align-items:flex-start"><div><b>{{ d.titulo }}</b><br><span class="muted" style="font-size:.85rem">{{ d.descripcion }}</span></div><span class="estado {{ d.estado }}">{{ d.dias }} d</span></li>{% endfor %}</ul>
+{% if t.telefono %}<a class="btn sec" href="tel:{{ t.telefono }}" style="margin-top:.4rem">Llamar</a>{% endif %}</div>
+{% empty %}<div class="card"><span class="estado ok">Nadie del equipo debe partes</span></div>{% endfor %}
+{% endblock %}

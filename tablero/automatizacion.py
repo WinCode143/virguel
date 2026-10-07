@@ -151,20 +151,21 @@ def recordar_evaluacion_semanal(hoy):
 
 
 def alertas_partes(hoy):
-    from inventario.models import MovimientoStockTecnico
     from inventario.stock_tecnico import partes_paradas
-    from django.db.models import Sum
     with SincronizadorAlertas(Alerta.Modulo.PARTES) as s:
         url = reverse("tablero:stock_tecnicos")
         for f in partes_paradas(hoy=hoy):
             s.alerta(f"parada-{f['tecnico'].id}-{f['material'].id}",
                      f"{f['tecnico'].nombre_completo}: {f['cantidad'].normalize():f} {f['material'].unidad} de {f['material'].nombre} sin usar hace {f['dias']} días",
                      f"Valor ${f['valor']:,.0f}. Pedir devolución al depósito.", C if f["dias"] >= 90 else A, url)
-        for r in (MovimientoStockTecnico.objects.values("tecnico_id", "tecnico__apellido", "material__nombre", "material_id")
-                  .annotate(t=Sum("cantidad")).filter(t__lt=0)):
-            s.alerta(f"negativo-{r['tecnico_id']}-{r['material_id']}",
-                     f"{r['tecnico__apellido']}: usó {(-r['t']).normalize():f} de {r['material__nombre']} sin tenerlo a su cargo",
-                     "Falta registrar una entrega o hay un error de carga.", A, url)
+        from inventario.deudas import deudas
+        for d in deudas():
+            if d.tipo == "parte_parada":
+                continue  # ya alertada arriba
+            if d.estado != "ok":
+                s.alerta(f"deuda-{d.tipo}-{d.tecnico.id}-{getattr(d.referencia, 'id', '')}",
+                         f"{d.tecnico.nombre_completo}: {d.titulo.lower()} hace {d.dias} días",
+                         d.descripcion, C if d.estado == "critico" else A, reverse("tablero:deudas"))
 
 
 def alertas_personal(hoy):

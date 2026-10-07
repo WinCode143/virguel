@@ -1,36 +1,21 @@
-{% extends "escritorio.html" %}{% load formato %}
+{% extends "escritorio.html" %}{% load formato ui %}
 {% block titulo %}Resumen · Virguel{% endblock %}
 {% block encabezado %}<h1>Resumen operativo</h1><p class="sub">Datos del {{ dia|date:"l d/m/Y" }}{% if es_supervisor %} · sólo tu equipo{% endif %}</p>{% endblock %}
 {% block contenido %}
-<h2 style="margin:.25rem 0 .6rem">Personal hoy</h2>
-<div class="grid g4">
-  <div class="card kpi"><div class="etq">Presentes</div><div class="valor">{{ per_presentes }} / {{ per_total }}</div><div class="det"><a href="{% url 'personal:hoy' %}">ver quién está</a></div></div>
-  <div class="card kpi"><div class="etq">Sin fichar y sin aviso</div><div class="valor">{% if per_sin_aviso %}<span class="estado critico">{{ per_sin_aviso }}</span>{% else %}0{% endif %}</div><div class="det">{{ per_con_aviso }} ausente{{ per_con_aviso|pluralize }} con aviso</div></div>
-  <div class="card kpi"><div class="etq">Llegaron tarde hoy</div><div class="valor">{{ per_tarde }}</div><div class="det">fuera de la tolerancia</div></div>
-  <div class="card kpi"><div class="etq">Presentismo del mes</div><div class="valor">{{ per_presentismo_mes|pct:1 }}</div><div class="det">{{ per_injustificadas_mes }} falta{{ per_injustificadas_mes|pluralize }} sin justificar · <a href="{% url 'personal:asistencia' %}">detalle</a></div></div>
+<div class="filtros" style="justify-content:space-between;align-items:center">
+  <span class="leyenda" style="margin:0"><span class="estado ok">Cumple la meta</span><span class="estado aviso">No cumple, dentro del límite</span><span class="estado critico">Más allá del límite</span></span>
+  <a class="btn sec" href="{% url 'tablero:metas' %}">{% icono 'ajustes' 'sm' %} {% if es_supervisor %}Metas de mi equipo{% else %}Metas y semáforos{% endif %}</a>
 </div>
-<h2 style="margin:1.25rem 0 .6rem">Operación</h2>
-<div class="grid g4">
-  <div class="card kpi"><div class="etq">Técnicos en calle</div><div class="valor">{{ en_calle }}</div>
-    <div class="det">{% if p.usar_hectareas %}{{ cap.cuadrillas|num:1 }} cuadrillas · {{ cap.ha_min|num }}–{{ cap.ha_max|num }} ha/día{% else %}<a href="{% url 'personal:hoy' %}">ver asistencia de hoy</a>{% endif %}</div></div>
-  <div class="card kpi"><div class="etq">Órdenes completadas</div><div class="valor">{{ completadas_dia }}</div>
-    <div class="det">Capacidad estimada {% if cap.clientes_min == cap.clientes_max %}{{ cap.clientes_max|num }}{% else %}{{ cap.clientes_min|num }}–{{ cap.clientes_max|num }}{% endif %} clientes</div></div>
-  <div class="card kpi"><div class="etq">Stock parado +{{ p.dias_max_stock|default:"60" }} días</div><div class="valor">{{ parado_valor|pesos }}</div>
-    <div class="det">{{ parado_lotes }} lote{{ parado_lotes|pluralize }} · <a href="{% url 'tablero:stock' %}">ver stock</a></div></div>
-  <div class="card kpi"><div class="etq">Prob. de pedido de decodificador</div><div class="valor">{{ prob.media|pct }}</div>
-    <div class="det">Rango 90%: {{ prob.inf90|pct }}–{{ prob.sup90|pct }} · {{ prob.observados }} casos reales</div></div>
-</div>
-<div class="grid g4">
-  <div class="card kpi"><div class="etq">Técnicos en riesgo alto</div><div class="valor">{{ riesgo|length }}</div>
-    <div class="det"><a href="{% url 'tablero:tecnicos' %}?diagnostico=Riesgo alto – evaluar desvinculación">ver detalle</a></div></div>
-  <div class="card kpi"><div class="etq">Necesitan capacitación</div><div class="valor">{{ capacitar|length }}</div>
-    <div class="det"><a href="{% url 'tablero:capacitacion' %}">plan de capacitación</a></div></div>
-  <div class="card kpi"><div class="etq">Siniestros del mes</div><div class="valor">{{ siniestros_mes }}</div>
-    <div class="det">{{ siniestros_graves_mes }} grave{{ siniestros_graves_mes|pluralize:"s" }} o crítico{{ siniestros_graves_mes|pluralize:"s" }}</div></div>
-  <div class="card kpi"><div class="etq">{% if es_gerencia %}Egresos del mes{% else %}Nota de la encuesta (30 días){% endif %}</div>
-    <div class="valor">{% if es_gerencia %}{{ egresos_mes|pesos }}{% else %}{{ nota_sup|num:1 }} / 5{% endif %}</div>
-    <div class="det">{% if es_gerencia %}Nota de supervisores: {{ nota_sup|num:1 }} / 5{% else %}promedio de tu equipo{% endif %}</div></div>
-</div>
+{% for titulo, tarjetas in mando %}{% if tarjetas %}
+<h2 style="margin:1.1rem 0 .6rem">{{ titulo }}</h2>
+<div class="grid g4">{% for k in tarjetas %}
+  <a class="card kpi mando {{ k.estado }}" {% if k.url %}href="{{ k.url }}"{% endif %}>
+    <div class="etq" style="display:flex;justify-content:space-between;gap:.5rem">{{ k.i.nombre }}<span class="estado {{ k.estado }}" style="padding:.05rem .45rem">{% if k.estado == 'ok' %}Cumple{% elif k.estado == 'aviso' %}Cerca{% elif k.estado == 'critico' %}Lejos{% else %}—{% endif %}</span></div>
+    <div class="valor">{% if k.valor is None %}—{% elif k.i.unidad == '%' %}{{ k.valor|num:1 }}%{% elif k.i.unidad == '$' %}{{ k.valor|pesos }}{% elif k.i.unidad == 'pts' %}{{ k.valor|num:0 }}{% else %}{{ k.valor|num:0 }}{% endif %}</div>
+    <div class="det">Meta {% if not k.i.mayor_es_mejor %}≤ {% endif %}{% if k.i.unidad == '$' %}{{ k.i.meta|pesos }}{% else %}{{ k.i.meta|num:0 }}{% if k.i.unidad == '%' %}%{% endif %}{% endif %} · límite {% if k.i.unidad == '$' %}{{ k.i.minimo|pesos }}{% else %}{{ k.i.minimo|num:0 }}{% if k.i.unidad == '%' %}%{% endif %}{% endif %}{% if k.propia %} · <i>meta del equipo</i>{% endif %}</div>
+  </a>{% endfor %}
+</div>{% endif %}{% endfor %}
+<h2 style="margin:1.4rem 0 .6rem">Detalle</h2>
 <div class="grid g2">
   {% include "tablero/_grafico.html" with id="g-prod" datos=g_prod titulo="Órdenes completadas vs. capacidad estimada (30 días)" nota="Capacidad = técnicos en calle × clientes que puede atender cada técnico por día (parámetro)." %}
   {% include "tablero/_grafico.html" with id="g-diag" datos=g_diag titulo="Diagnóstico de técnicos" nota="Ventana de evaluación configurable (por defecto 90 días)." %}

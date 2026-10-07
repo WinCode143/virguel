@@ -1,0 +1,23 @@
+{% extends "escritorio.html" %}{% load ui %}
+{% block titulo %}Partes adeudadas · Virguel{% endblock %}
+{% block encabezado %}<h1>Partes adeudadas por los técnicos</h1><p class="sub">Equipos retirados a clientes sin entregar, partes usadas sin estar a cargo y partes paradas que hay que devolver. Cada técnico recibe un aviso todas las mañanas hasta regularizar.</p>{% endblock %}
+{% block contenido %}
+<div class="grid g4">
+  <div class="card kpi"><div class="etq">Pendientes</div><div class="valor">{{ total }}</div><div class="det">{{ por_tec|length }} técnico{{ por_tec|length|pluralize }}</div></div>
+  <div class="card kpi"><div class="etq">En rojo</div><div class="valor">{% if rojas %}<span class="estado critico">{{ rojas }}</span>{% else %}0{% endif %}</div><div class="det">más días de lo tolerado</div></div>
+  <div class="card kpi"><div class="etq">En amarillo</div><div class="valor">{{ amarillas }}</div></div>
+  <div class="card kpi"><div class="etq">Equipos de clientes en la calle</div><div class="valor">{{ equipos }}</div><div class="det">retirados y no entregados</div></div>
+</div>
+{% for t, r in por_tec %}<div class="card">
+  <h2 style="display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap"><span><a href="{% url 'personal:legajo' t.id %}">{{ t.apellido }}, {{ t.nombre }}</a> <span class="muted" style="font-weight:400">· sup. {{ t.supervisor.apellido|default:"—" }}{% if t.telefono %} · {{ t.telefono }}{% endif %}</span></span>
+  <span class="estado {{ r.estado }}">{{ r.n }} pendiente{{ r.n|pluralize }} · la más antigua {{ r.mas_vieja }} días</span></h2>
+  <div class="tabla-scroll"><table><thead><tr><th>Qué debe</th><th>Detalle</th><th class="num">Días sin regularizar</th>{% if puede %}<th>Regularizar</th>{% endif %}</tr></thead><tbody>
+  {% for d in r.items %}<tr><td>{{ d.titulo }}</td><td>{{ d.descripcion }}</td><td class="num"><span class="estado {{ d.estado }}">{{ d.dias }}</span></td>
+  {% if puede %}<td><form method="post" style="display:flex;gap:.4rem;flex-wrap:wrap">{% csrf_token %}
+    {% if d.tipo == "equipo_retirado" %}<input type="hidden" name="equipo" value="{{ d.referencia.id }}"><button class="btn" name="accion" value="recibir">{% icono 'check' 'sm' %} Recibido</button><button class="btn sec" name="accion" value="extraviado" onclick="return confirm('¿Marcar como extraviado?')">Extraviado</button>
+    {% elif d.tipo == "uso_sin_cargo" %}<input type="hidden" name="tecnico" value="{{ t.id }}"><input type="hidden" name="material" value="{{ d.referencia.id }}"><input type="hidden" name="cantidad" value="{{ d.cantidad|stringformat:'s' }}"><button class="btn sec" name="accion" value="entrega_pendiente" title="Registra la entrega que faltó cargar (sale del depósito)">Registrar entrega</button>
+    {% else %}<input type="hidden" name="tecnico" value="{{ t.id }}"><input type="hidden" name="material" value="{{ d.referencia.id }}"><input type="hidden" name="cantidad" value="{{ d.cantidad|stringformat:'s' }}"><button class="btn sec" name="accion" value="devolucion">Registrar devolución</button>{% endif %}
+  </form></td>{% endif %}</tr>{% endfor %}</tbody></table></div>
+</div>{% empty %}<div class="card vacio">{% icono 'check' %}<p>Ningún técnico debe partes.</p></div>{% endfor %}
+<p class="muted" style="font-size:.82rem">Colores según días sin regularizar: se configuran en <a href="{% url 'tablero:metas' %}">Metas y semáforos</a>.</p>
+{% endblock %}

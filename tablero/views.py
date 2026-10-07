@@ -141,6 +141,7 @@ def inicio(request):
     res_mes = resumen(hoy.replace(day=1), hoy, personas)
     pres = sum(r.presentes for r in res_mes)
     base = sum(r.esperados - r.no_computables for r in res_mes)
+    ctx["alertas_criticas_n"] = Alerta.objects.filter(resuelta=False, nivel=Alerta.Nivel.CRITICA).count()
     ctx.update({
         "per_total": sum(1 for e in estado if e.laborable or e.asistencia),
         "per_presentes": sum(1 for e in estado if e.asistencia),
@@ -150,7 +151,62 @@ def inicio(request):
         "per_presentismo_mes": pres / base if base else None,
         "per_injustificadas_mes": sum(r.injustificadas for r in res_mes),
     })
+    ctx["mando"] = tablero_de_mando(request, ctx, personas, equipo)
     return render(request, "tablero/inicio.html", ctx)
+
+
+def tablero_de_mando(request, ctx, personas, equipo):
+    """Los indicadores del Resumen con su semáforo (metas del equipo si es un supervisor)."""
+    from core.metas import mapa
+    from inventario.deudas import deudas
+    from personal.indicadores import documentos_faltantes_o_vencidos
+
+    from .metricas import tableros_supervisores, tableros_tecnicos
+    sup = persona_de(request.user) if rol_de(request.user) == SUPERVISOR else None
+    ind = mapa("mando", sup)
+    # último día COMPLETO (hoy todavía no terminó y siempre daría bajo)
+    ayer = ultimo_dia_con_datos(timezone.localdate() - timedelta(days=1))
+    en_calle_ayer = Jornada.objects.filter(fecha=ayer, en_calle=True, tecnico__in=equipo).count()
+    cap = capacidad(en_calle_ayer)
+    capacidad_dia = (cap.clientes_min + cap.clientes_max) / 2
+    completadas_ayer = OrdenTrabajo.objects.filter(tecnico__in=equipo, fecha_ejecucion=ayer, estado="completada").count()
+    ipt = [t.indice for t in tableros_tecnicos(tecnicos=equipo) if t.indice is not None]
+    igs = [t.indice for t in tableros_supervisores(supervisores=[sup] if sup else None) if t.indice is not None]
+    valores = {
+        "presentismo_hoy": ctx["per_presentes"] / ctx["per_total"] * 100 if ctx["per_total"] else None,
+        "sin_aviso_hoy": ctx["per_sin_aviso"], "tarde_hoy": ctx["per_tarde"],
+        "presentismo_mes": ctx["per_presentismo_mes"] * 100 if ctx["per_presentismo_mes"] is not None else None,
+        "cumplimiento_capacidad": completadas_ayer / capacidad_dia * 100 if capacidad_dia else None,
+        "ipt_promedio": sum(ipt) / len(ipt) if ipt else None, "igs_promedio": sum(igs) / len(igs) if igs else None,
+        "tecnicos_riesgo": len(ctx["riesgo"]),
+        "partes_adeudadas": sum(1 for d in deudas(equipo) if d.estado == "critico"),
+        "siniestros_mes": ctx["siniestros_mes"],
+        "docs_vencidos": sum(1 for d in documentos_faltantes_o_vencidos(personas) if d["estado"] == "critico"),
+        "stock_parado": float(ctx["parado_valor"]), "alertas_criticas": ctx["alertas_criticas_n"],
+    }
+    enlaces = {"presentismo_hoy": "personal:hoy", "sin_aviso_hoy": "personal:hoy", "tarde_hoy": "personal:hoy",
+               "presentismo_mes": "personal:asistencia", "cumplimiento_capacidad": "tablero:operacion",
+               "ipt_promedio": "tablero:prod_tecnicos", "igs_promedio": "tablero:prod_supervisores" if not sup else "",
+               "tecnicos_riesgo": "tablero:tecnicos", "partes_adeudadas": "tablero:deudas",
+               "siniestros_mes": "tablero:incidentes", "docs_vencidos": "personal:documentos",
+               "stock_parado": "tablero:stock", "alertas_criticas": "tablero:alertas"}
+    grupos = [("Personal", ["presentismo_hoy", "sin_aviso_hoy", "tarde_hoy", "presentismo_mes"]),
+              ("Productividad", ["cumplimiento_capacidad", "ipt_promedio", "igs_promedio", "tecnicos_riesgo"]),
+              ("Riesgos y pendientes", ["partes_adeudadas", "siniestros_mes", "docs_vencidos", "stock_parado",
+                                        "alertas_criticas"])]
+    res = []
+    for titulo, codigos in grupos:
+        tarjetas = []
+        for c in codigos:
+            i = ind.get(c)
+            if i is None or (c == "igs_promedio" and sup is None and not igs):
+                continue
+            valor = valores.get(c)
+            url = reverse(enlaces[c]) if enlaces.get(c) else ""
+            tarjetas.append({"i": i, "valor": valor, "estado": i.estado(valor), "url": url,
+                             "propia": getattr(i, "ajustada_por_equipo", False)})
+        res.append((titulo, tarjetas))
+    return res
 
 
 # ---------------------------------------------------------------- 1. operación

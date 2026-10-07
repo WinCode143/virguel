@@ -1,6 +1,9 @@
-{% extends "movil/base_movil.html" %}
+{% extends "movil/base_movil.html" %}{% load ui %}
 {% block contenido %}
 {% if encuesta %}<a class="card" style="display:block;border-color:var(--accent)" href="{% url 'encuesta' encuesta.token %}"><b>Encuesta del día pendiente</b><br><span class="muted">¿Cómo te trató tu supervisor? Lleva 20 segundos y es confidencial.</span></a>{% endif %}
+{% if deudas %}<a class="card" href="{% url 'movil:stock' %}#deudas" style="display:flex;gap:.8rem;align-items:center;border:2px solid var(--{{ deuda_vieja.estado }})">
+  {% icono 'caja' 'lg' %}<span style="flex:1"><b>Tenés {{ deudas|length }} parte{{ deudas|length|pluralize }} por regularizar</b><br>
+  <span class="estado {{ deuda_vieja.estado }}">La más antigua: {{ deuda_vieja.dias }} día{{ deuda_vieja.dias|pluralize }}</span></span>{% icono 'flecha-der' %}</a>{% endif %}
 {% if encuesta_semanal_pendiente %}<a class="card" style="display:block" href="{% url 'movil:mi_supervisor' %}"><b>Evaluá a tu supervisor esta semana</b><br><span class="muted">6 preguntas, confidencial.</span></a>{% endif %}
 {% if epp_vencido %}<div class="card"><span class="estado critico">Tenés {{ epp_vencido }} elemento{{ epp_vencido|pluralize }} de seguridad vencido{{ epp_vencido|pluralize }}</span> · <a href="{% url 'movil:epp' %}">ver</a></div>{% endif %}
 

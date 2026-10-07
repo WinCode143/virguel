@@ -36,10 +36,8 @@ class Medicion:
 
     @property
     def estado(self):
-        p = self.puntos
-        if p is None:
-            return "info"
-        return "ok" if p >= 80 else "aviso" if p >= 50 else "critico"
+        """verde = cumple la meta · amarillo = dentro del límite · rojo = más allá del límite."""
+        return self.indicador.estado(self.valor)
 
 
 @dataclass
@@ -56,7 +54,10 @@ class Tablero:
     @property
     def estado(self):
         i = self.indice
-        return "info" if i is None else "ok" if i >= 75 else "aviso" if i >= 55 else "critico"
+        if i is None:
+            return "info"
+        p = Parametros.actual()
+        return "ok" if i >= p.indice_verde else "aviso" if i >= p.indice_rojo else "critico"
 
     def get(self, codigo):
         return next((m for m in self.mediciones if m.indicador.codigo == codigo), None)
@@ -208,9 +209,15 @@ def tableros_tecnicos(desde=None, hasta=None, tecnicos=None, dias=30) -> list[Ta
     if tecnicos is None:
         tecnicos = Persona.objects.filter(rol="tecnico", activo=True)
     tecnicos = list(tecnicos)
-    indicadores = list(Indicador.objects.filter(rol="tecnico", activo=True))
+    from core.metas import indicadores_efectivos
+    por_equipo = {}  # metas propias del equipo de cada técnico (si su supervisor las fijó)
+
+    def inds(t):
+        if t.supervisor_id not in por_equipo:
+            por_equipo[t.supervisor_id] = indicadores_efectivos("tecnico", t.supervisor_id and t.supervisor)
+        return por_equipo[t.supervisor_id]
     valores = valores_tecnicos(desde, hasta, tecnicos)
-    res = [Tablero(t, [Medicion(i, valores[t.id].get(i.codigo)) for i in indicadores]) for t in tecnicos]
+    res = [Tablero(t, [Medicion(i, valores[t.id].get(i.codigo)) for i in inds(t)]) for t in tecnicos]
     return sorted(res, key=lambda tb: -(tb.indice or -1))
 
 
@@ -220,7 +227,6 @@ def tableros_supervisores(desde=None, hasta=None, dias=30, supervisores=None) ->
     hasta = hasta or timezone.localdate()
     desde = desde or hasta - timedelta(days=dias - 1)
     sups = list(supervisores if supervisores is not None else Persona.objects.filter(rol="supervisor", activo=True))
-    indicadores = list(Indicador.objects.filter(rol="supervisor", activo=True))
     equipos = defaultdict(list)
     for t in Persona.objects.filter(rol="tecnico", activo=True, supervisor__in=sups):
         equipos[t.supervisor_id].append(t)
@@ -296,7 +302,8 @@ def tableros_supervisores(desde=None, hasta=None, dias=30, supervisores=None) ->
         x["tiempo_respuesta"] = median(demoras) if demoras else None
         n, ok = puntual_sup.get(s.id, (0, 0))
         x["puntualidad_propia"] = _pct(ok, n)
-        res.append(Tablero(s, [Medicion(i, x.get(i.codigo)) for i in indicadores]))
+        from core.metas import indicadores_efectivos
+        res.append(Tablero(s, [Medicion(i, x.get(i.codigo)) for i in indicadores_efectivos("supervisor", s)]))
     return sorted(res, key=lambda tb: -(tb.indice or -1))
 
 

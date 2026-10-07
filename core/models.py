@@ -30,6 +30,18 @@ class Parametros(models.Model):
         "Medir hectáreas cubiertas", default=False,
         help_text="Opcional. Si está apagado, la capacidad se calcula sólo por clientes por técnico.")
 
+    # ---- Semáforo de los índices (IPT / IGS)
+    indice_verde = models.PositiveSmallIntegerField("Índice: verde desde", default=75)
+    indice_rojo = models.PositiveSmallIntegerField("Índice: rojo por debajo de", default=55)
+
+    # ---- Partes adeudadas por los técnicos
+    deuda_dias_aviso = models.PositiveIntegerField(
+        "Días para pasar a amarillo (partes adeudadas)", default=2,
+        help_text="Una parte sin regularizar pasa a amarillo después de estos días.")
+    deuda_dias_critico = models.PositiveIntegerField(
+        "Días para pasar a rojo (partes adeudadas)", default=5,
+        help_text="Y a rojo después de estos días (además se avisa al supervisor).")
+
     dias_max_stock = models.PositiveIntegerField(
         "Días máximos de stock parado", default=60,
         help_text="Un lote con más días que esto sin consumirse genera alerta crítica.")
@@ -262,6 +274,7 @@ class Indicador(models.Model):
     de los indicadores con datos."""
 
     class Rol(models.TextChoices):
+        MANDO = "mando", "Tablero de mando"
         TECNICO = "tecnico", "Técnico"
         SUPERVISOR = "supervisor", "Supervisor"
 
@@ -270,9 +283,9 @@ class Indicador(models.Model):
     nombre = models.CharField(max_length=80)
     descripcion = models.TextField(help_text="Qué mide y cómo se calcula.")
     unidad = models.CharField(max_length=20, default="%")
-    meta = models.DecimalField(max_digits=8, decimal_places=2)
-    minimo = models.DecimalField("Mínimo aceptable", max_digits=8, decimal_places=2,
-                                 help_text="Valor que vale 0 puntos (si 'mayor es mejor' está apagado, es el máximo tolerable).")
+    meta = models.DecimalField(max_digits=14, decimal_places=2)
+    minimo = models.DecimalField("Límite (rojo)", max_digits=14, decimal_places=2,
+                                 help_text="Más allá de este valor el indicador está en rojo (y vale 0 puntos).")
     mayor_es_mejor = models.BooleanField(default=True)
     peso = models.PositiveSmallIntegerField(default=10, help_text="Peso en el índice (0 = sólo informativo).")
     orden = models.PositiveSmallIntegerField(default=0)
@@ -285,6 +298,28 @@ class Indicador(models.Model):
 
     def __str__(self):
         return f"{self.get_rol_display()}: {self.nombre}"
+
+    def estado(self, valor) -> str:
+        """verde = cumple la meta · amarillo = no la cumple pero no pasó el límite · rojo = pasó el límite."""
+        if valor is None:
+            return "info"
+        v, meta, lim = float(valor), float(self.meta), float(self.minimo)
+        if (v >= meta) if self.mayor_es_mejor else (v <= meta):
+            return "ok"
+        if (v <= lim) if self.mayor_es_mejor else (v >= lim):
+            return "critico"
+        return "aviso"
+
+    def regla(self) -> str:
+        """Explicación legible del semáforo."""
+        def f(x):
+            x = float(x)
+            return f"{x:,.0f}".replace(",", ".") if x == int(x) else f"{x:,.1f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        u = "" if self.unidad in ("%",) else f" {self.unidad}"
+        p = "%" if self.unidad == "%" else ""
+        if self.mayor_es_mejor:
+            return f"Verde ≥ {f(self.meta)}{p}{u} · Amarillo entre {f(self.minimo)} y {f(self.meta)}{p} · Rojo ≤ {f(self.minimo)}{p}{u}"
+        return f"Verde ≤ {f(self.meta)}{p}{u} · Amarillo entre {f(self.meta)} y {f(self.minimo)}{p} · Rojo ≥ {f(self.minimo)}{p}{u}"
 
     def puntos(self, valor) -> float | None:
         if valor is None:
@@ -351,3 +386,37 @@ class RegistroAcceso(models.Model):
         ordering = ["-fecha"]
         verbose_name = "Registro de acceso"
         verbose_name_plural = "Registro de accesos"
+
+
+class MetaEquipo(models.Model):
+    """Meta y límite propios de un equipo (los fija su supervisor o gerencia); reemplazan a los generales."""
+
+    supervisor = models.ForeignKey(Persona, on_delete=models.CASCADE, related_name="metas_equipo",
+                                   limit_choices_to={"rol": "supervisor"})
+    indicador = models.ForeignKey(Indicador, on_delete=models.CASCADE, related_name="metas_equipo")
+    meta = models.DecimalField(max_digits=12, decimal_places=2)
+    minimo = models.DecimalField("Límite (rojo)", max_digits=12, decimal_places=2)
+
+    class Meta:
+        unique_together = [("supervisor", "indicador")]
+        verbose_name = "Meta de equipo"
+        verbose_name_plural = "Metas de equipo"
+
+    def __str__(self):
+        return f"{self.indicador.nombre} · equipo {self.supervisor.apellido}"
+
+
+class CambioMeta(models.Model):
+    """Registro de quién cambió una meta o un límite, cuándo y de qué valor a cuál."""
+
+    fecha = models.DateTimeField(auto_now_add=True)
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    indicador = models.ForeignKey(Indicador, on_delete=models.CASCADE)
+    alcance = models.CharField(max_length=80, help_text="General o equipo de …")
+    antes = models.CharField(max_length=80)
+    despues = models.CharField(max_length=80)
+
+    class Meta:
+        ordering = ["-fecha"]
+        verbose_name = "Cambio de meta"
+        verbose_name_plural = "Cambios de metas"

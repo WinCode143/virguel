@@ -1,6 +1,6 @@
 from django.contrib import admin, messages
 
-from .models import (DemandaComercial, LoteIngreso, Material, MovimientoStockTecnico, PedidoItem, PedidoMaterial,
+from .models import (DemandaComercial, EquipoRetirado, LoteIngreso, Material, MovimientoStockTecnico, PedidoItem, PedidoMaterial,
                      RecetaMaterial, Salida)
 from .services import StockInsuficiente, registrar_salida
 
@@ -86,3 +86,11 @@ class PedidoAdmin(admin.ModelAdmin):
     list_display = ["id", "tecnico", "creado", "estado", "aprobado_por", "entregado"]
     list_filter = ["estado"]
     inlines = [PedidoItemInline]
+
+
+@admin.register(EquipoRetirado)
+class EquipoRetiradoAdmin(admin.ModelAdmin):
+    list_display = ["numero_serie", "tecnico", "fecha_retiro", "estado", "devuelto", "recibido_por", "orden"]
+    list_filter = ["estado"]
+    search_fields = ["numero_serie", "tecnico__apellido", "orden__numero"]
+    date_hierarchy = "fecha_retiro"

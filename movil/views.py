@@ -1,5 +1,6 @@
 """App móvil (PWA) para técnicos y supervisores en calle."""
 import os
+import re
 from datetime import date, timedelta
 
 from django.contrib import messages
@@ -61,9 +62,12 @@ def inicio(request):
     epp_vencido = Asignacion.objects.filter(persona=p, estado="en_uso", fecha_vencimiento__lt=hoy).count()
     if not Parametros.actual().encuesta_diaria:
         encuesta = None
+    from inventario.deudas import deudas as deudas_de
+    mis_deudas = deudas_de([p])
     epp_sin_firmar = Asignacion.objects.filter(persona=p, estado="en_uso", conformidad_firmada=False).count()
     return render(request, "movil/inicio_tecnico.html", {
         "p": p, "jornada": jornada, "asistencia": asistencia, "ots": ots, "hechas": hechas, "encuesta": encuesta,
+        "deudas": mis_deudas, "deuda_vieja": mis_deudas[0] if mis_deudas else None,
         "epp_vencido": epp_vencido, "epp_sin_firmar": epp_sin_firmar, "tab": "inicio",
         "inicio_form": InicioJornadaForm(), "fin_form": FinJornadaForm()})
 
@@ -75,6 +79,8 @@ def _inicio_supervisor(request, p):
     hoy = timezone.localdate()
     equipo = p.a_cargo.filter(activo=True, rol="tecnico")
     estado_equipo = estado_del_dia(hoy, equipo)
+    from inventario.deudas import deudas as deudas_de
+    deudas_equipo = deudas_de(equipo)
     faltan = [e for e in estado_equipo if e.situacion[0] == "critico"]
     en_calle = Jornada.objects.filter(fecha=hoy, en_calle=True, tecnico__in=equipo).count()
     ots_hoy = OrdenTrabajo.objects.filter(tecnico__in=equipo, fecha_programada=hoy)
@@ -91,6 +97,7 @@ def _inicio_supervisor(request, p):
         "tarde": [e for e in estado_equipo if e.situacion[0] == "aviso"],
         "novedades_pendientes": Novedad.objects.filter(persona__supervisor=p, estado="pendiente").count(),
         "pedidos_pendientes": PedidoMaterial.objects.filter(tecnico__supervisor=p, estado="pendiente").count(),
+        "deudas_equipo": deudas_equipo,
         "inicio_form": InicioJornadaForm(), "fin_form": FinJornadaForm()})
 
 
@@ -267,6 +274,14 @@ def orden(request, pk):
                     ot.inicio_trabajo = None
                 ot._sin_notificar = True
                 ot.save()
+                from inventario.models import EquipoRetirado
+                series = [x.strip() for x in re.split(r"[,;\s]+", d["series_retiradas"] or "") if x.strip()]
+                if not series and ot.tipo.codigo == "RET":
+                    series = ["(sin informar)"]
+                for serie in series:
+                    EquipoRetirado.objects.create(orden=ot, tecnico=p, numero_serie=serie[:60], fecha_retiro=hoy)
+                if series:
+                    avisos.append(f"Tenés {len(series)} equipo(s) retirado(s) para entregar en el depósito.")
                 for material, cantidad in f.materiales():
                     if not consumir(p, ot, material, cantidad, hoy):
                         avisos.append(f"{material.nombre}: usaste más de lo que figuraba a tu cargo. Avisale a tu supervisor.")
@@ -315,8 +330,10 @@ def mi_stock(request):
     from inventario.models import PedidoMaterial
     from inventario.stock_tecnico import faltante_para_ordenes, partes_paradas, saldos
     p = _persona(request)
+    from inventario.deudas import deudas as deudas_de
     faltante, n_ordenes = faltante_para_ordenes(p)
     return render(request, "movil/stock.html", {
+        "deudas": deudas_de([p]),
         "saldos": sorted(saldos(p).items(), key=lambda kv: kv[0].nombre), "paradas": partes_paradas([p]),
         "faltante": faltante, "falta_algo": any(f["falta"] for f in faltante), "n_ordenes": n_ordenes,
         "pedidos": PedidoMaterial.objects.filter(tecnico=p).prefetch_related("items__material")[:10], "tab": "stock"})
@@ -377,6 +394,16 @@ def pedidos_equipo(request):
 @requiere_rol(TECNICO)
 def yo(request):
     return render(request, "movil/yo.html", {"tab": "yo"})
+
+
+@requiere_rol(SUPERVISOR)
+def deudas_equipo(request):
+    from inventario.deudas import deudas as deudas_de
+    from inventario.deudas import resumen_por_tecnico
+    p = _persona(request)
+    por_tec = resumen_por_tecnico(deudas_de(p.a_cargo.filter(activo=True, rol="tecnico")))
+    return render(request, "movil/deudas_equipo.html", {
+        "por_tec": sorted(por_tec.items(), key=lambda kv: -kv[1]["mas_vieja"]), "tab": "inicio"})
 
 
 @requiere_rol(TECNICO)
