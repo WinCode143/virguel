@@ -19,6 +19,16 @@ Documentación (índice completo en [docs/README.md](docs/README.md)):
 - [docs/BITACORA.md](docs/BITACORA.md) — registro de lo que se fue haciendo.
 - [docs/TECNOLOGIAS.md](docs/TECNOLOGIAS.md) — tecnologías usadas.
 
+## Verlo funcionando (un comando)
+
+```bash
+scripts/ver.sh
+```
+Levanta la base y el servidor, abre el **escritorio** en Firefox y la **app del celular** en una
+ventana con tamaño de teléfono. También muestra la dirección para entrarle **desde tu celular**
+conectado al mismo WiFi. Para ver todas las pantallas juntas:
+`uv run --with playwright python scripts/capturas.py` → abre `capturas/index.html`.
+
 ## Puesta en marcha (desarrollo)
 
 Requisitos: Python 3.12+, Docker, [uv](https://docs.astral.sh/uv/) (o pip).

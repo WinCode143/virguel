@@ -378,3 +378,14 @@ una forma de fijar los límites; "pensá en cosas que se me pudieron pasar".
 - Tests: **71**, todos pasan (login por legajo/DNI, bloqueo, blanqueo + cambio obligatorio, permisos
   de supervisor sobre credenciales, baja por egreso, privacidad, rol depósito, partes adeudadas y su
   regularización, aviso diario, metas de equipo y registro, validaciones, tablero de mando).
+
+---
+
+## 2026-10-07 — Cómo ver el sistema
+
+- `scripts/ver.sh`: levanta PostgreSQL y el servidor (escuchando en la red local), abre el escritorio
+  en Firefox y la app en una ventana de Chromium con tamaño y perfil de celular (sesión separada).
+- `scripts/capturas.py`: galería con las 60 pantallas (escritorio, app del técnico, app del supervisor,
+  modo oscuro) en `capturas/index.html` (no se versiona). Verificado: las 60 rutas responden 200.
+- Nota: al levantar, Docker recreó el contenedor de la base por cambios en `.env`; los datos están en
+  el volumen `virguel_pgdata` y se conservaron.
