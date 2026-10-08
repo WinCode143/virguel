@@ -22,7 +22,7 @@ from supervision.evaluacion import evaluar_supervisores
 from supervision.models import EncuestaSupervisor, InformeControl, TareaSupervisor
 
 from .forms import (AccionForm, CerrarOrdenForm, EncuestaForm, EncuestaSemanalForm, FinJornadaForm, InformeForm,
-                    InicioJornadaForm, NovedadForm, PedidoForm, SiniestroMovilForm)
+                    InicioJornadaForm, NotaForm, NovedadForm, PedidoForm, SiniestroMovilForm)
 
 MOVIL = (TECNICO, SUPERVISOR)
 
@@ -224,25 +224,82 @@ def novedades_equipo(request):
         .select_related("persona")[:15], "tab": "asistencia"})
 
 
+def _orden_del_tecnico(request, pk):
+    p = _persona(request)
+    ot = get_object_or_404(OrdenTrabajo.objects.select_related("tipo", "cliente", "zona"), pk=pk, tecnico=p)
+    return p, ot
+
+
+def _notas_de(ot):
+    """Notas de esta llamada + las de visitas anteriores al mismo cliente (de cualquier técnico)."""
+    from operaciones.models import NotaOrden
+    notas = NotaOrden.objects.filter(orden=ot)
+    if ot.cliente_id:
+        notas = NotaOrden.objects.filter(orden__cliente_id=ot.cliente_id)
+    return notas.select_related("autor", "orden", "orden__tipo").order_by("-creada")
+
+
 @requiere_rol(TECNICO)
 def orden(request, pk):
-    """Ficha completa de la orden + empezar trabajo + cierre con todos los datos de calle."""
+    """Ficha de la llamada: tarea, contacto del cliente, LOM (partes), notas y acceso al cierre."""
+    p, ot = _orden_del_tecnico(request, pk)
+    abierta = ot.estado in ("pendiente", "asignada")
+    if request.method == "POST":
+        if request.POST.get("accion") == "empezar" and abierta:
+            if not ot.inicio_trabajo:
+                ot.inicio_trabajo = momento_operacion(request)
+                ot._sin_notificar = True
+                ot.save(update_fields=["inicio_trabajo"])
+            return redirect("movil:orden", pk=ot.pk)
+        return orden_cierre(request, pk)  # compatibilidad: cierres enviados a la ficha (también sin señal)
+    from inventario.models import PedidoMaterial
+    from urllib.parse import quote
+    destino = ""
+    if ot.cliente and ot.cliente.latitud:
+        destino = f"{ot.cliente.latitud},{ot.cliente.longitud}"
+    elif ot.cliente and ot.cliente.direccion:
+        destino = f"{ot.cliente.direccion}, {ot.zona or ''}"
+    notas = _notas_de(ot)
+    return render(request, "movil/orden.html", {
+        "ot": ot, "abierta": abierta, "tab": "inicio",
+        "mapa": f"https://www.google.com/maps/dir/?api=1&destination={quote(destino)}" if destino else "",
+        "n_notas": notas.count() + (1 if ot.observaciones else 0), "ultima_nota": notas.first(),
+        "pedidos": PedidoMaterial.objects.filter(orden=ot).prefetch_related("items__material"),
+        "consumos": ot.consumos.select_related("material") if not abierta else [],
+        "gastos": ot.gastos.all() if not abierta else []})
+
+
+@requiere_rol(TECNICO)
+def orden_notas(request, pk):
+    from operaciones.models import NotaOrden
+    p, ot = _orden_del_tecnico(request, pk)
+    if request.method == "POST":
+        f = NotaForm(request.POST)
+        if f.is_valid():
+            NotaOrden.objects.create(orden=ot, autor=p, texto=f.cleaned_data["texto"], creada=momento_operacion(request))
+            messages.success(request, "Nota agregada.")
+            return redirect("movil:orden_notas", pk=ot.pk)
+    else:
+        f = NotaForm()
+    return render(request, "movil/orden_notas.html", {"ot": ot, "notas": _notas_de(ot), "form": f, "tab": "inicio"})
+
+
+@requiere_rol(TECNICO)
+def orden_cierre(request, pk):
+    """Debrief: material, nota, viaje/trabajo, gastos y conformidad del cliente (ACK)."""
     import base64
 
     from django.core.files.base import ContentFile
 
     from inventario.models import RecetaMaterial
     from inventario.stock_tecnico import consumir, saldos
-    p = _persona(request)
-    ot = get_object_or_404(OrdenTrabajo.objects.select_related("tipo", "cliente", "zona"), pk=pk, tecnico=p)
-    abierta = ot.estado in ("pendiente", "asignada")
-    stock = saldos(p)
-    if request.method == "POST" and request.POST.get("accion") == "empezar" and abierta:
-        if not ot.inicio_trabajo:
-            ot.inicio_trabajo = momento_operacion(request)
-            ot.save(update_fields=["inicio_trabajo"])
+    from operaciones.models import GastoOrden, NotaOrden
+    p, ot = _orden_del_tecnico(request, pk)
+    if ot.estado not in ("pendiente", "asignada"):
+        messages.info(request, "Esta llamada ya está cerrada.")
         return redirect("movil:orden", pk=ot.pk)
-    if request.method == "POST" and abierta:
+    stock = saldos(p)
+    if request.method == "POST" and request.POST.get("accion") != "empezar":
         f = CerrarOrdenForm(request.POST, request.FILES, orden=ot, stock=stock)
         if f.is_valid():
             d = f.cleaned_data
@@ -253,17 +310,20 @@ def orden(request, pk):
                 ot.estado = d["resultado"]
                 ot.fecha_ejecucion = hoy
                 ot.fin_trabajo = fin
-                if ot.inicio_trabajo:
+                if d.get("minutos_reales"):
+                    ot.minutos_reales = d["minutos_reales"]
+                elif ot.inicio_trabajo:
                     ot.minutos_reales = max(1, int((fin - ot.inicio_trabajo).total_seconds() // 60))
-                else:
-                    ot.minutos_reales = d.get("minutos_reales")
+                ot.minutos_viaje, ot.minutos_retorno = d.get("minutos_viaje"), d.get("minutos_retorno")
                 ot.motivo_no_resuelto = "" if ot.estado == "completada" else (d.get("motivo_no_resuelto") or "")
                 ot.decodificador_solicitado = bool(d.get("decodificador_solicitado"))
                 ot.decodificadores_instalados = d.get("decodificadores_instalados") or 0
                 ot.series_instaladas, ot.series_retiradas = d["series_instaladas"], d["series_retiradas"]
-                ot.conforme_nombre, ot.conforme_dni = d["conforme_nombre"], d["conforme_dni"]
+                ot.conforme_nombre, ot.conforme_apellido = d["conforme_nombre"], d["conforme_apellido"]
+                ot.conforme_dni = d["conforme_dni"]
                 ot.lat_cierre, ot.lng_cierre = d.get("lat"), d.get("lng")
-                ot.observaciones = d["observaciones"] or ot.observaciones
+                if d.get("observaciones"):
+                    ot.observaciones = d["observaciones"]
                 if d.get("foto_trabajo"):
                     ot.foto_trabajo = d["foto_trabajo"]
                 if d.get("firma", "").startswith("data:image/png;base64,"):
@@ -274,6 +334,11 @@ def orden(request, pk):
                     ot.inicio_trabajo = None
                 ot._sin_notificar = True
                 ot.save()
+                if d.get("nota"):
+                    NotaOrden.objects.create(orden=ot, autor=p, tipo=NotaOrden.Tipo.CIERRE, texto=d["nota"], creada=fin)
+                for desc, monto, comprobante in f.gastos():
+                    GastoOrden.objects.create(orden=ot, tecnico=p, fecha=hoy, descripcion=desc, monto=monto,
+                                              comprobante=comprobante or "")
                 from inventario.models import EquipoRetirado
                 series = [x.strip() for x in re.split(r"[,;\s]+", d["series_retiradas"] or "") if x.strip()]
                 if not series and ot.tipo.codigo == "RET":
@@ -287,31 +352,19 @@ def orden(request, pk):
                         avisos.append(f"{material.nombre}: usaste más de lo que figuraba a tu cargo. Avisale a tu supervisor.")
             for a in avisos:
                 messages.warning(request, a)
-            messages.success(request, f"Orden {ot.numero} registrada.")
+            messages.success(request, f"Llamada {ot.numero} cerrada.")
             return redirect("movil:inicio")
     else:
-        # materiales precargados con lo que normalmente lleva este tipo de trabajo
         inicial = {}
         for k, r in enumerate(RecetaMaterial.objects.filter(tipo_tarea=ot.tipo).select_related("material"), 1):
             if k > 6:
                 break
             inicial[f"material_{k}"] = r.material_id
             inicial[f"cantidad_{k}"] = r.cantidad.normalize()
+        if ot.inicio_trabajo:
+            inicial["minutos_reales"] = max(1, int((timezone.now() - ot.inicio_trabajo).total_seconds() // 60))
         f = CerrarOrdenForm(orden=ot, stock=stock, initial=inicial)
-    previas = []
-    if ot.cliente_id:
-        previas = (OrdenTrabajo.objects.filter(cliente_id=ot.cliente_id).exclude(pk=ot.pk)
-                   .exclude(fecha_ejecucion__isnull=True).select_related("tipo", "tecnico").order_by("-fecha_ejecucion")[:5])
-    destino = ""
-    if ot.cliente and ot.cliente.latitud:
-        destino = f"{ot.cliente.latitud},{ot.cliente.longitud}"
-    elif ot.cliente and ot.cliente.direccion:
-        destino = f"{ot.cliente.direccion}, {ot.zona or ''}"
-    from urllib.parse import quote
-    return render(request, "movil/orden.html", {
-        "ot": ot, "form": f, "abierta": abierta, "previas": previas, "tab": "inicio",
-        "mapa": f"https://www.google.com/maps/dir/?api=1&destination={quote(destino)}" if destino else "",
-        "consumos": ot.consumos.select_related("material") if not abierta else []})
+    return render(request, "movil/orden_cierre.html", {"ot": ot, "form": f, "tab": "inicio"})
 
 
 @requiere_rol(TECNICO)
@@ -345,27 +398,43 @@ def pedir_partes(request):
     from inventario.models import PedidoItem, PedidoMaterial
     from inventario.stock_tecnico import faltante_para_ordenes
     p = _persona(request)
+    orden_lom = None
+    if request.GET.get("orden") or request.POST.get("orden"):
+        orden_lom = OrdenTrabajo.objects.filter(pk=request.GET.get("orden") or request.POST.get("orden"),
+                                                tecnico=p).select_related("tipo").first()
     if request.method == "POST":
         f = PedidoForm(request.POST)
         if f.is_valid():
             with transaction.atomic():
-                ped = PedidoMaterial.objects.create(tecnico=p, motivo=f.cleaned_data["motivo"])
+                ped = PedidoMaterial.objects.create(tecnico=p, motivo=f.cleaned_data["motivo"], orden=orden_lom)
                 for m, c in f.items():
                     PedidoItem.objects.create(pedido=ped, material_id=m, cantidad=c)
             notificar(p.supervisor, f"Pedido de partes de {p.nombre_completo}",
                       f"{len(f.items())} ítem(s) para aprobar", "/app/pedidos/")
             messages.success(request, "Pedido enviado. Te avisamos cuando lo aprueben.")
-            return redirect("movil:stock")
+            return redirect("movil:orden", pk=orden_lom.pk) if orden_lom else redirect("movil:stock")
     else:
         inicial = {}
-        if request.GET.get("faltante"):
+        if orden_lom:  # LOM: lo que lleva este tipo de trabajo, menos lo que ya tengo
+            from inventario.models import RecetaMaterial
+            from inventario.stock_tecnico import saldos
+            tengo = saldos(p)
+            k = 0
+            for r in RecetaMaterial.objects.filter(tipo_tarea=orden_lom.tipo).select_related("material"):
+                falta = r.cantidad - tengo.get(r.material, 0)
+                if falta > 0 and k < 6:
+                    k += 1
+                    inicial[f"material_{k}"] = r.material_id
+                    inicial[f"cantidad_{k}"] = falta.normalize()
+            inicial["motivo"] = f"Para la llamada {orden_lom.numero} ({orden_lom.tipo})"
+        elif request.GET.get("faltante"):
             faltante, _ = faltante_para_ordenes(p)
             for k, fila in enumerate([x for x in faltante if x["falta"]][:6], 1):
                 inicial[f"material_{k}"] = fila["material"].id
                 inicial[f"cantidad_{k}"] = fila["falta"].normalize()
             inicial["motivo"] = "Para mis órdenes asignadas"
         f = PedidoForm(initial=inicial)
-    return render(request, "movil/pedido.html", {"form": f, "tab": "stock"})
+    return render(request, "movil/pedido.html", {"form": f, "tab": "stock", "orden_lom": orden_lom})
 
 
 @requiere_rol(SUPERVISOR)

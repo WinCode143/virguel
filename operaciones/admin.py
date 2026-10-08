@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from inventario.models import Salida
 
-from .models import Jornada, OrdenTrabajo, TipoTarea
+from .models import GastoOrden, Jornada, NotaOrden, OrdenTrabajo, TipoTarea
 
 
 @admin.register(TipoTarea)
@@ -16,6 +16,20 @@ class JornadaAdmin(admin.ModelAdmin):
     list_filter = ["en_calle", "zona", "fecha"]
     search_fields = ["tecnico__apellido", "tecnico__legajo"]
     date_hierarchy = "fecha"
+    autocomplete_fields = ["tecnico"]
+
+
+class NotaInline(admin.TabularInline):
+    model = NotaOrden
+    extra = 1
+    fields = ["creada", "autor", "tipo", "texto"]
+    autocomplete_fields = ["autor"]
+
+
+class GastoInline(admin.TabularInline):
+    model = GastoOrden
+    extra = 0
+    fields = ["fecha", "tecnico", "descripcion", "monto", "comprobante", "estado"]
     autocomplete_fields = ["tecnico"]
 
 
@@ -39,3 +53,16 @@ class OrdenTrabajoAdmin(admin.ModelAdmin):
     date_hierarchy = "fecha_programada"
     autocomplete_fields = ["tecnico", "cliente", "orden_original"]
     inlines = [ConsumoInline]
+
+    def get_inlines(self, request, obj):
+        return [NotaInline, GastoInline, ConsumoInline]
+
+
+@admin.register(GastoOrden)
+class GastoOrdenAdmin(admin.ModelAdmin):
+    """Revisión de gastos de campo para reintegro."""
+    list_display = ["fecha", "tecnico", "orden", "descripcion", "monto", "comprobante", "estado"]
+    list_filter = ["estado", "fecha"]
+    list_editable = ["estado"]
+    search_fields = ["descripcion", "tecnico__apellido", "orden__numero"]
+    autocomplete_fields = ["tecnico", "orden"]

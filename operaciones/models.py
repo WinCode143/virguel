@@ -78,12 +78,15 @@ class OrdenTrabajo(models.Model):
         ("cliente_ausente", "Cliente ausente"), ("falta_material", "Faltó material"),
         ("problema_red", "Problema de red / externo"), ("direccion", "Dirección errónea"),
         ("clima", "Clima"), ("rechazo", "Cliente rechazó el trabajo"), ("otro", "Otro")])
+    minutos_viaje = models.PositiveIntegerField("Tiempo de viaje (min)", null=True, blank=True)
+    minutos_retorno = models.PositiveIntegerField("Tiempo de retorno (min)", null=True, blank=True)
     inicio_trabajo = models.DateTimeField(null=True, blank=True)
     fin_trabajo = models.DateTimeField(null=True, blank=True)
     series_instaladas = models.CharField("N° de serie instalados", max_length=300, blank=True)
     series_retiradas = models.CharField("N° de serie retirados", max_length=300, blank=True)
     foto_trabajo = models.FileField(upload_to="ordenes/%Y/%m/", blank=True)
     conforme_nombre = models.CharField("Conformidad: nombre", max_length=120, blank=True)
+    conforme_apellido = models.CharField("Conformidad: apellido", max_length=120, blank=True)
     conforme_dni = models.CharField("Conformidad: DNI", max_length=15, blank=True)
     firma = models.FileField(upload_to="firmas/%Y/%m/", blank=True)
     lat_cierre = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
@@ -96,3 +99,51 @@ class OrdenTrabajo(models.Model):
 
     def __str__(self):
         return f"OT {self.numero} - {self.tipo}"
+
+
+class NotaOrden(models.Model):
+    """Notas de una llamada: indicaciones, avances y lo que se hizo al cerrar."""
+
+    class Tipo(models.TextChoices):
+        NOTA = "nota", "Nota"
+        CIERRE = "cierre", "Cierre (qué se hizo)"
+        DESPACHO = "despacho", "Indicación de despacho"
+
+    orden = models.ForeignKey(OrdenTrabajo, on_delete=models.CASCADE, related_name="notas")
+    autor = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL, related_name="notas_orden")
+    tipo = models.CharField(max_length=10, choices=Tipo.choices, default=Tipo.NOTA)
+    texto = models.TextField()
+    creada = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ["-creada"]
+        verbose_name = "Nota de la orden"
+        verbose_name_plural = "Notas de las órdenes"
+
+    def __str__(self):
+        return f"{self.orden.numero}: {self.texto[:40]}"
+
+
+class GastoOrden(models.Model):
+    """Gasto extra que el técnico pagó para resolver la llamada (con su comprobante)."""
+
+    class Estado(models.TextChoices):
+        PENDIENTE = "pendiente", "Pendiente de revisión"
+        APROBADO = "aprobado", "Aprobado para reintegro"
+        RECHAZADO = "rechazado", "Rechazado"
+
+    orden = models.ForeignKey(OrdenTrabajo, on_delete=models.CASCADE, related_name="gastos")
+    tecnico = models.ForeignKey(Persona, on_delete=models.PROTECT, related_name="gastos_orden")
+    fecha = models.DateField(default=timezone.localdate)
+    descripcion = models.CharField("Qué se compró", max_length=200)
+    monto = models.DecimalField(max_digits=12, decimal_places=2)
+    comprobante = models.FileField("Factura / ticket", upload_to="gastos/%Y/%m/", blank=True)
+    estado = models.CharField(max_length=10, choices=Estado.choices, default=Estado.PENDIENTE)
+
+    class Meta:
+        ordering = ["-fecha"]
+        verbose_name = "Gasto de la orden"
+        verbose_name_plural = "Gastos de las órdenes"
+
+    def __str__(self):
+        return f"{self.orden.numero}: {self.descripcion} ${self.monto}"

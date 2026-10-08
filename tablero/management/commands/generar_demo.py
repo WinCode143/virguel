@@ -185,7 +185,8 @@ class Command(BaseCommand):
                     zona=self.r.choice(self.zonas),
                     tipo=self.r.choices(["residencial", "moderno", "comercial"], [55, 35, 10])[0],
                     cantidad_televisores=self.r.choices([1, 2, 3], [50, 35, 15])[0],
-                    telefono=f"11{self.r.randint(40000000, 69999999)}") for i in range(1, 2501)])
+                    telefono=f"11{self.r.randint(40000000, 69999999)}",
+                    email=f"cliente{i}@correo.demo" if self.r.random() < .7 else "") for i in range(1, 2501)])
 
     def personas(self):
         r = self.r
@@ -396,9 +397,11 @@ class Command(BaseCommand):
             o.inicio_trabajo = cursor
             o.fin_trabajo = cursor + timedelta(minutes=o.minutos_reales or 45)
             cursor = o.fin_trabajo + timedelta(minutes=r.randint(10, 30))
+            o.minutos_viaje = r.randint(10, 40)
+            o.minutos_retorno = r.randint(5, 30) if r.random() < .3 else None
             if r.random() < prob_doc[pf]:
                 o.foto_trabajo = "ordenes/demo.jpg"
-                o.conforme_nombre = f"{r.choice(NOMBRES)} {r.choice(APELLIDOS)}"
+                o.conforme_nombre, o.conforme_apellido = r.choice(NOMBRES), r.choice(APELLIDOS)
                 o.conforme_dni = str(r.randint(20000000, 45000000))
                 if r.random() < .7:
                     o.firma = "firmas/demo.png"
@@ -410,7 +413,36 @@ class Command(BaseCommand):
                 o.lng_cierre = lo + Decimal(str(round(r.uniform(-d, d), 6)))
             cambiadas.append(o)
         OrdenTrabajo.objects.bulk_update(cambiadas, ["inicio_trabajo", "fin_trabajo", "foto_trabajo", "conforme_nombre",
-                                                     "conforme_dni", "firma", "lat_cierre", "lng_cierre"], batch_size=2000)
+                                                     "conforme_apellido", "conforme_dni", "firma", "lat_cierre",
+                                                     "lng_cierre", "minutos_viaje", "minutos_retorno"], batch_size=2000)
+        # Notas de cierre ("qué se hizo") e indicaciones, para el historial de cada cliente
+        from operaciones.models import GastoOrden, NotaOrden
+        textos = {"INST-FO": ["Instalé ONT, medí potencia -19 dBm, navegación OK.", "Tendido de drop por fachada, roseta en living."],
+                  "INST-TV": ["Instalé decodificador y configuré canales.", "Cableado coaxial a dos TV, señal OK."],
+                  "REP": ["Conector dañado, reemplazado. Potencia normalizada.", "Corte en el drop por poda, empalme nuevo.",
+                          "Se reinició ONT y se reconfiguró WiFi."],
+                  "MUD": ["Mudanza de servicio, drop nuevo hasta el departamento.", "Retiré en domicilio anterior e instalé en el nuevo."],
+                  "RET": ["Retiro de equipos, cliente firmó conformidad."], "REL": ["Relevamiento: requiere poste nuevo."]}
+        notas = []
+        for o in cambiadas:
+            if r.random() < .75:
+                pf = perfil.get(o.tecnico_id, "bueno")
+                notas.append(NotaOrden(orden=o, autor_id=o.tecnico_id, tipo="cierre", creada=o.fin_trabajo,
+                                       texto=r.choice(textos.get(o.tipo.codigo, ["Trabajo realizado."]))
+                                       + ("" if pf != "riesgo" or r.random() < .5 else " Quedó pendiente ajustar.")))
+        NotaOrden.objects.bulk_create(notas, batch_size=2000)
+        for o in OrdenTrabajo.objects.filter(estado="asignada", fecha_programada__gte=self.hoy)[:60]:
+            o.observaciones = r.choice(["Llamar antes de ir.", "Timbre roto, golpear.", "Cliente disponible de 14 a 18.",
+                                        "Perro en el patio.", ""])
+            o.save(update_fields=["observaciones"])
+        gastos = [GastoOrden(orden=o, tecnico_id=o.tecnico_id, fecha=o.fecha_ejecucion,
+                             descripcion=r.choice(["Tarugos y tornillos", "Cinta aisladora", "Estacionamiento", "Precintos extra"]),
+                             monto=Decimal(r.choice([1800, 2500, 3500, 6000])), comprobante="gastos/demo.jpg",
+                             estado=r.choice(["aprobado", "aprobado", "pendiente"])) for o in r.sample(cambiadas, 25)]
+        GastoOrden.objects.bulk_create(gastos)
+        from finanzas.signals import sincronizar
+        for gasto in GastoOrden.objects.all():
+            sincronizar(gasto)
         self.stdout.write(f"  {len(cambiadas)} cierres con datos completos (últimos 45 días)")
 
     def equipos_retirados(self):

@@ -931,3 +931,67 @@ class MetasYSemaforosTests(TestCase):
         self.assertContains(r, "card kpi mando")
         self.client.force_login(self.sup.usuario)
         self.assertEqual(self.client.get("/tablero/").status_code, 200)
+
+
+class DebriefTests(TestCase):
+    def setUp(self):
+        self.sup = persona("S1", rol="supervisor")
+        self.t = persona("T1", supervisor=self.sup, usuario=User.objects.create_user("tec", password="x"))
+        self.otro = persona("T2", supervisor=self.sup)
+        self.cli = Cliente.objects.create(numero="C1", nombre="Ana", telefono="1155550000", email="ana@x.com",
+                                          direccion="Calle 1")
+        self.tipo = TipoTarea.objects.create(codigo="I", nombre="Instalación")
+        self.ot = OrdenTrabajo.objects.create(numero="OT1", tipo=self.tipo, tecnico=self.t, cliente=self.cli,
+                                              estado="asignada", observaciones="Timbre 2B")
+        self.client.login(username="tec", password="x")
+
+    def test_ficha_muestra_tarea_contacto_lom_y_notas_de_visitas_anteriores(self):
+        from operaciones.models import NotaOrden
+        anterior = OrdenTrabajo.objects.create(numero="OT0", tipo=self.tipo, tecnico=self.otro, cliente=self.cli,
+                                               estado="completada", fecha_ejecucion=HOY - timedelta(days=20))
+        NotaOrden.objects.create(orden=anterior, autor=self.otro, tipo="cierre", texto="Se cambió el conector")
+        r = self.client.get(f"/app/orden/{self.ot.id}/")
+        for texto in ("Instalación", "1155550000", "ana@x.com", "Calle 1", "LOM", "Notas (2)"):
+            self.assertContains(r, texto)
+        r = self.client.get(f"/app/orden/{self.ot.id}/notas/")
+        self.assertContains(r, "Se cambió el conector")
+        self.assertContains(r, "visita anterior")
+        self.client.post(f"/app/orden/{self.ot.id}/notas/", {"texto": "Llegué, el cliente no está"})
+        self.assertTrue(NotaOrden.objects.filter(orden=self.ot, texto__icontains="no está").exists())
+
+    def test_debrief_completo(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from finanzas.models import Egreso
+        from operaciones.models import GastoOrden, NotaOrden
+        r = self.client.post(f"/app/orden/{self.ot.id}/cierre/", {
+            "resultado": "completada", "nota": "Instalé ONT y probé velocidad", "minutos_viaje": "25",
+            "minutos_reales": "70", "minutos_retorno": "20", "conforme_nombre": "Ana", "conforme_apellido": "Gómez",
+            "conforme_dni": "30111222", "gasto_desc_1": "Tarugos", "gasto_monto_1": "3500",
+            "gasto_comp_1": SimpleUploadedFile("t.jpg", b"img", content_type="image/jpeg")})
+        self.assertEqual(r.status_code, 302)
+        self.ot.refresh_from_db()
+        self.assertEqual((self.ot.estado, self.ot.minutos_viaje, self.ot.minutos_reales, self.ot.minutos_retorno),
+                         ("completada", 25, 70, 20))
+        self.assertEqual((self.ot.conforme_nombre, self.ot.conforme_apellido), ("Ana", "Gómez"))
+        self.assertEqual(NotaOrden.objects.get(orden=self.ot, tipo="cierre").texto, "Instalé ONT y probé velocidad")
+        g = GastoOrden.objects.get(orden=self.ot)
+        self.assertEqual(Egreso.objects.get(origen=f"gasto_orden:{g.id}").monto, Decimal("3500"))
+        g.comprobante.delete()
+
+    def test_gasto_sin_monto_se_rechaza(self):
+        r = self.client.post(f"/app/orden/{self.ot.id}/cierre/", {"resultado": "completada", "gasto_desc_1": "Cinta"})
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Completá qué compraste")
+
+    def test_lom_pide_partes_para_la_llamada_descontando_lo_que_tiene(self):
+        from inventario.models import PedidoMaterial, RecetaMaterial
+        from inventario.stock_tecnico import entregar
+        m = Material.objects.create(codigo="ONT", nombre="Módem")
+        LoteIngreso.objects.create(material=m, cantidad=10)
+        RecetaMaterial.objects.create(tipo_tarea=self.tipo, material=m, cantidad=3)
+        entregar(self.t, m, 1)
+        r = self.client.get(f"/app/stock/pedir/?orden={self.ot.id}")
+        self.assertEqual(r.context["form"].initial["cantidad_1"], 2)  # necesita 3, tiene 1
+        self.client.post("/app/stock/pedir/", {"orden": self.ot.id, "material_1": m.id, "cantidad_1": "2"})
+        self.assertEqual(PedidoMaterial.objects.get().orden, self.ot)

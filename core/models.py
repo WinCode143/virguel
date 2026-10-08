@@ -183,6 +183,7 @@ class Cliente(models.Model):
     tipo = models.CharField(max_length=20, choices=Tipo.choices, default=Tipo.RESIDENCIAL)
     cantidad_televisores = models.PositiveSmallIntegerField(default=1)
     telefono = models.CharField(max_length=30, blank=True)
+    email = models.EmailField(blank=True)
     latitud = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitud = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
 

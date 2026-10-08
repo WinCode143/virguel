@@ -62,6 +62,7 @@ class NovedadForm(forms.ModelForm):
 
 
 FILAS_MATERIAL = 6
+FILAS_GASTO = 3
 
 
 class CerrarOrdenForm(forms.Form):
@@ -69,8 +70,13 @@ class CerrarOrdenForm(forms.Form):
                                            ("reprogramada", "Reprogramar")])
     motivo_no_resuelto = forms.ChoiceField(required=False, label="¿Por qué no se pudo?",
                                            choices=[("", "—")] + OrdenTrabajo._meta.get_field("motivo_no_resuelto").choices)
-    minutos_reales = forms.IntegerField(min_value=1, max_value=1440, required=False,
-                                        label="Minutos que llevó (si no tocaste 'Empezar trabajo')")
+    # Viaje y trabajo (minutos)
+    minutos_viaje = forms.IntegerField(min_value=0, max_value=1440, required=False, label="Tiempo de viaje (min)")
+    minutos_reales = forms.IntegerField(min_value=1, max_value=1440, required=False, label="Tiempo de trabajo (min)")
+    minutos_retorno = forms.IntegerField(min_value=0, max_value=1440, required=False, label="Tiempo de retorno (min)")
+    # Nota de cierre
+    nota = forms.CharField(required=False, label="Qué se hizo",
+                           widget=forms.Textarea(attrs={"rows": 5, "placeholder": "Trabajo realizado, pruebas, pendientes…"}))
     decodificador_solicitado = forms.BooleanField(required=False, label="El cliente pidió decodificador para TV")
     decodificadores_instalados = forms.IntegerField(min_value=0, max_value=10, initial=0, required=False,
                                                     label="Decodificadores instalados")
@@ -80,8 +86,9 @@ class CerrarOrdenForm(forms.Form):
                                        widget=forms.TextInput(attrs={"placeholder": "Separados por coma"}))
     foto_trabajo = forms.FileField(required=False, label="Foto del trabajo terminado",
                                    widget=forms.ClearableFileInput(attrs={"accept": "image/*", "capture": "environment"}))
-    conforme_nombre = forms.CharField(required=False, max_length=120, label="Nombre de quien recibe el trabajo")
-    conforme_dni = forms.CharField(required=False, max_length=15, label="DNI")
+    conforme_nombre = forms.CharField(required=False, max_length=120, label="Nombre")
+    conforme_apellido = forms.CharField(required=False, max_length=120, label="Apellido")
+    conforme_dni = forms.CharField(required=False, max_length=15, label="DNI (si lo da)")
     firma = forms.CharField(required=False, widget=forms.HiddenInput)
     lat = forms.DecimalField(required=False, widget=forms.HiddenInput, max_digits=9, decimal_places=6)
     lng = forms.DecimalField(required=False, widget=forms.HiddenInput, max_digits=9, decimal_places=6)
@@ -102,6 +109,14 @@ class CerrarOrdenForm(forms.Form):
                                                                   empty_value=None, label=f"Material {i}")
             self.fields[f"cantidad_{i}"] = forms.DecimalField(min_value=0, required=False, label="Cantidad",
                                                               max_digits=10, decimal_places=2)
+        # Gastos extra (expensas): qué, cuánto y comprobante
+        for i in range(1, FILAS_GASTO + 1):
+            self.fields[f"gasto_desc_{i}"] = forms.CharField(required=False, max_length=200, label="Qué compraste")
+            self.fields[f"gasto_monto_{i}"] = forms.DecimalField(required=False, min_value=0, max_digits=12,
+                                                                 decimal_places=2, label="Monto ($)")
+            self.fields[f"gasto_comp_{i}"] = forms.FileField(
+                required=False, label="Foto de la factura / ticket",
+                widget=forms.ClearableFileInput(attrs={"accept": "image/*,application/pdf"}))
         if orden and not orden.tipo.puede_requerir_decodificador:
             del self.fields["decodificador_solicitado"]
             del self.fields["decodificadores_instalados"]
@@ -110,7 +125,16 @@ class CerrarOrdenForm(forms.Form):
         d = super().clean()
         if d.get("resultado") in ("fallida", "reprogramada") and not d.get("motivo_no_resuelto"):
             self.add_error("motivo_no_resuelto", "Indicá el motivo.")
+        for i in range(1, FILAS_GASTO + 1):
+            desc, monto = d.get(f"gasto_desc_{i}"), d.get(f"gasto_monto_{i}")
+            if bool(desc) != bool(monto):
+                self.add_error(f"gasto_monto_{i}" if desc else f"gasto_desc_{i}", "Completá qué compraste y el monto.")
         return d
+
+    def gastos(self):
+        return [(self.cleaned_data[f"gasto_desc_{i}"], self.cleaned_data[f"gasto_monto_{i}"],
+                 self.cleaned_data.get(f"gasto_comp_{i}")) for i in range(1, FILAS_GASTO + 1)
+                if self.cleaned_data.get(f"gasto_desc_{i}") and self.cleaned_data.get(f"gasto_monto_{i}")]
 
     def materiales(self):
         ids = {}
@@ -120,6 +144,10 @@ class CerrarOrdenForm(forms.Form):
                 ids[m] = ids.get(m, 0) + c
         mats = Material.objects.in_bulk(list(ids))
         return [(mats[k], v) for k, v in ids.items()]
+
+
+class NotaForm(forms.Form):
+    texto = forms.CharField(label="Nueva nota", widget=forms.Textarea(attrs={"rows": 3}), max_length=2000)
 
 
 class PedidoForm(forms.Form):

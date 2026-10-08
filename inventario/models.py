@@ -170,6 +170,8 @@ class PedidoMaterial(models.Model):
         RECHAZADO = "rechazado", "Rechazado"
 
     tecnico = models.ForeignKey(Persona, on_delete=models.PROTECT, related_name="pedidos_material")
+    orden = models.ForeignKey(OrdenTrabajo, null=True, blank=True, on_delete=models.SET_NULL, related_name="pedidos",
+                              help_text="Llamada para la que se piden las partes (LOM).")
     creado = models.DateTimeField(auto_now_add=True)
     estado = models.CharField(max_length=10, choices=Estado.choices, default=Estado.PENDIENTE, db_index=True)
     motivo = models.CharField(max_length=200, blank=True)

@@ -1,0 +1,128 @@
+{% extends "movil/base_movil.html" %}{% load ui %}
+{% block titulo_movil %}Debrief · {{ ot.numero }}{% endblock %}
+{% block contenido %}
+<form method="post" class="form-movil" enctype="multipart/form-data" data-offline="/app/" data-gps id="cierre"
+      action="{% url 'movil:orden_cierre' ot.id %}">{% csrf_token %}
+<nav class="solapas" role="tablist" aria-label="Partes del cierre">
+  <button type="button" data-panel="resultado" class="activa">{% icono 'check' %}Resultado</button>
+  <button type="button" data-panel="material">{% icono 'carrito' %}Material</button>
+  <button type="button" data-panel="nota">{% icono 'documento' %}Nota</button>
+  <button type="button" data-panel="tiempos">{% icono 'camioneta' %}Viaje y trabajo</button>
+  <button type="button" data-panel="gastos">{% icono 'billetera' %}Gastos</button>
+  <button type="button" data-panel="ack">{% icono 'firma' %}Conformidad</button>
+</nav>
+{% if form.errors %}<div class="card" style="border-color:var(--critico)"><span class="estado critico">Revisá los campos marcados</span></div>{% endif %}
+
+<section class="panel card" id="p-resultado">
+  <h2>¿Cómo terminó la llamada?</h2>
+  {{ form.resultado.label_tag }}{{ form.resultado }}{{ form.resultado.errors }}
+  <div id="bloque-motivo">{{ form.motivo_no_resuelto.label_tag }}{{ form.motivo_no_resuelto }}{{ form.motivo_no_resuelto.errors }}</div>
+  {% if form.decodificador_solicitado %}<div class="check">{{ form.decodificador_solicitado }} {{ form.decodificador_solicitado.label_tag }}</div>
+  {{ form.decodificadores_instalados.label_tag }}{{ form.decodificadores_instalados }}{% endif %}
+  <button type="button" class="btn sec" data-siguiente="material">Siguiente: material {% icono 'flecha-der' 'sm' %}</button>
+</section>
+
+<section class="panel card" id="p-material" hidden>
+  <h2>Partes usadas</h2>
+  <p class="muted" style="font-size:.84rem;margin:0">Salen de tus partes. Vienen cargadas con lo habitual para este trabajo: corregí las cantidades.</p>
+  {% for i in "123456" %}{% with m="material_"|add:i c="cantidad_"|add:i %}
+  <div style="display:grid;grid-template-columns:1fr 76px;gap:.5rem;align-items:end;margin-top:.5rem">
+    <div>{% for f in form %}{% if f.name == m %}{{ f }}{% endif %}{% endfor %}</div>
+    <div>{% for f in form %}{% if f.name == c %}{{ f }}{% endif %}{% endfor %}</div>
+  </div>{% endwith %}{% endfor %}
+  <details style="margin-top:1rem"><summary class="muted">¿Retiraste equipos del cliente?</summary>
+    {{ form.series_retiradas.label_tag }}{{ form.series_retiradas }}
+    <p class="muted" style="font-size:.8rem;margin:.3rem 0 0">Quedan a tu cargo hasta que los entregues en el depósito.</p></details>
+  <button type="button" class="btn sec" data-siguiente="nota">Siguiente: nota {% icono 'flecha-der' 'sm' %}</button>
+</section>
+
+<section class="panel card" id="p-nota" hidden>
+  <h2>Nota de cierre</h2>
+  {{ form.nota.label_tag }}{{ form.nota }}{{ form.nota.errors }}
+  {{ form.foto_trabajo.label_tag }}{{ form.foto_trabajo }}
+  <p class="muted" style="font-size:.8rem;margin:.4rem 0 0">La nota queda en el historial del cliente: la verá el próximo técnico que vaya.</p>
+  <button type="button" class="btn sec" data-siguiente="tiempos">Siguiente: viaje y trabajo {% icono 'flecha-der' 'sm' %}</button>
+</section>
+
+<section class="panel card" id="p-tiempos" hidden>
+  <h2>Viaje y trabajo</h2>
+  {{ form.minutos_viaje.label_tag }}{{ form.minutos_viaje }}{{ form.minutos_viaje.errors }}
+  {{ form.minutos_reales.label_tag }}{{ form.minutos_reales }}{{ form.minutos_reales.errors }}
+  {% if ot.inicio_trabajo %}<p class="muted" style="font-size:.8rem;margin:.3rem 0 0">Calculado desde que tocaste "Empezar trabajo" ({{ ot.inicio_trabajo|time:"H:i" }}). Podés corregirlo.</p>{% endif %}
+  {{ form.minutos_retorno.label_tag }}{{ form.minutos_retorno }}{{ form.minutos_retorno.errors }}
+  <button type="button" class="btn sec" data-siguiente="gastos">Siguiente: gastos {% icono 'flecha-der' 'sm' %}</button>
+</section>
+
+<section class="panel card" id="p-gastos" hidden>
+  <h2>Gastos extra</h2>
+  <p class="muted" style="font-size:.84rem;margin:0">Si compraste algo para resolver la llamada, cargalo con la foto de la factura. Se revisa para el reintegro.</p>
+  {% for i in "123" %}{% with d="gasto_desc_"|add:i mo="gasto_monto_"|add:i co="gasto_comp_"|add:i %}
+  <fieldset style="border:1px solid var(--grid);border-radius:12px;padding:.2rem .8rem .8rem;margin:.8rem 0 0">
+    <legend class="muted" style="font-size:.8rem;padding:0 .3rem">Gasto {{ i }}</legend>
+    {% for f in form %}{% if f.name == d or f.name == mo or f.name == co %}{{ f.label_tag }}{{ f }}{{ f.errors }}{% endif %}{% endfor %}
+  </fieldset>{% endwith %}{% endfor %}
+  <button type="button" class="btn sec" data-siguiente="ack">Siguiente: conformidad {% icono 'flecha-der' 'sm' %}</button>
+</section>
+
+<section class="panel card" id="p-ack" hidden>
+  <h2>Conformidad del cliente</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+    <div>{{ form.conforme_nombre.label_tag }}{{ form.conforme_nombre }}</div>
+    <div>{{ form.conforme_apellido.label_tag }}{{ form.conforme_apellido }}</div>
+  </div>
+  {{ form.conforme_dni.label_tag }}{{ form.conforme_dni }}
+  <label>Firma del cliente</label>
+  <canvas id="firma" style="width:100%;height:170px;border:1px solid var(--axis);border-radius:10px;background:#fff;touch-action:none"></canvas>
+  <button type="button" class="btn sec" style="width:auto;margin-top:.4rem;padding:.4rem .8rem" onclick="limpiarFirma()">Borrar firma</button>
+</section>
+
+{{ form.firma }}{{ form.lat }}{{ form.lng }}
+<p class="muted gps-estado" style="font-size:.8rem;text-align:center;margin:.4rem 0 0">Obteniendo ubicación…</p>
+<div class="barra-cierre"><button class="btn">{% icono 'check' %} Cerrar llamada</button></div>
+</form>
+<script>
+(function () {
+  const form = document.getElementById("cierre");
+  const botones = form.querySelectorAll(".solapas button");
+  function abrir(nombre) {
+    botones.forEach((b) => b.classList.toggle("activa", b.dataset.panel === nombre));
+    form.querySelector(`[data-panel="${nombre}"]`).scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+    form.querySelectorAll(".panel").forEach((p) => { p.hidden = p.id !== "p-" + nombre; });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (nombre === "ack") ajustar();
+  }
+  botones.forEach((b) => b.addEventListener("click", () => abrir(b.dataset.panel)));
+  form.querySelectorAll("[data-siguiente]").forEach((b) => b.addEventListener("click", () => abrir(b.dataset.siguiente)));
+  // si el servidor devolvió errores, marcar y abrir la primera solapa con error
+  let primera = null;
+  form.querySelectorAll(".panel").forEach((p) => {
+    if (p.querySelector(".errorlist")) {
+      const n = p.id.slice(2);
+      form.querySelector(`[data-panel="${n}"]`).classList.add("con-error");
+      primera = primera || n;
+    }
+  });
+  if (primera) abrir(primera);
+  // motivo sólo si no se completó
+  const sel = document.getElementById("id_resultado"), bloque = document.getElementById("bloque-motivo");
+  const ver = () => { bloque.style.display = sel.value === "completada" ? "none" : ""; };
+  sel.addEventListener("change", ver); ver();
+  // firma con el dedo
+  const c = document.getElementById("firma"), ctx = c.getContext("2d");
+  let dibujando = false, hay = false, listo = false;
+  function ajustar() {
+    if (listo) return;
+    const r = c.getBoundingClientRect();
+    if (!r.width) return;
+    c.width = r.width * 2; c.height = r.height * 2; ctx.scale(2, 2);
+    ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.strokeStyle = "#0b0b0b"; listo = true;
+  }
+  const pos = (e) => { const r = c.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  c.addEventListener("pointerdown", (e) => { ajustar(); dibujando = true; hay = true; ctx.beginPath(); ctx.moveTo(...pos(e)); });
+  c.addEventListener("pointermove", (e) => { if (!dibujando) return; ctx.lineTo(...pos(e)); ctx.stroke(); });
+  ["pointerup", "pointerleave"].forEach((ev) => c.addEventListener(ev, () => { dibujando = false; }));
+  window.limpiarFirma = () => { ctx.clearRect(0, 0, c.width, c.height); hay = false; };
+  form.addEventListener("submit", () => { document.getElementById("id_firma").value = hay ? c.toDataURL("image/png") : ""; }, true);
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "movil/base_movil.html" %}{% load ui %}
+{% block titulo_movil %}Notas · {{ ot.numero }}{% endblock %}
+{% block contenido %}
+<form method="post" class="card form-movil" data-offline="/app/orden/{{ ot.id }}/notas/">{% csrf_token %}
+  {{ form.texto.label_tag }}{{ form.texto }}{{ form.texto.errors }}
+  <button class="btn">{% icono 'mas' 'sm' %} Agregar nota</button></form>
+<div class="card"><h2>Historial{% if ot.cliente %} del cliente{% endif %}</h2>
+  {% if ot.observaciones %}<div class="nota-item"><span class="estado info">Indicación de despacho</span><p>{{ ot.observaciones }}</p></div>{% endif %}
+  {% for n in notas %}<div class="nota-item">
+    <div class="meta">{{ n.creada|date:"d/m/Y H:i" }} · {{ n.autor.nombre_completo|default:"Sistema" }}{% if n.orden_id != ot.id %} · <b>visita anterior</b> ({{ n.orden.tipo }}, {{ n.orden.numero }}){% endif %}</div>
+    {% if n.tipo == 'cierre' %}<span class="estado ok" style="margin-top:.25rem">Qué se hizo</span>{% endif %}
+    <p>{{ n.texto }}</p></div>
+  {% empty %}{% if not ot.observaciones %}<p class="vacio">Todavía no hay notas.</p>{% endif %}{% endfor %}
+</div>
+{% endblock %}

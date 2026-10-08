@@ -1,8 +1,9 @@
 {% extends "movil/base_movil.html" %}
 {% block titulo_movil %}Pedir partes{% endblock %}
 {% block contenido %}
+{% if orden_lom %}<div class="llamada-cab"><small>LOM · partes para la llamada</small><b>{{ orden_lom.tipo }}</b><small>{{ orden_lom.numero }} · ya descontado lo que tenés a tu cargo</small></div>{% endif %}
 <p class="muted">Lo aprueba tu supervisor y lo prepara el depósito. Te avisamos en cada paso.</p>
-<form method="post" class="card form-movil" data-offline="/app/stock/">{% csrf_token %}
+<form method="post" class="card form-movil" data-offline="/app/stock/">{% csrf_token %}{% if orden_lom %}<input type="hidden" name="orden" value="{{ orden_lom.id }}">{% endif %}
 {{ form.non_field_errors }}
 {% for i in "123456" %}{% with m="material_"|add:i c="cantidad_"|add:i %}
 <div style="display:grid;grid-template-columns:1fr 76px;gap:.5rem;align-items:end">

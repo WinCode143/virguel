@@ -389,3 +389,26 @@ una forma de fijar los límites; "pensá en cosas que se me pudieron pasar".
   modo oscuro) en `capturas/index.html` (no se versiona). Verificado: las 60 rutas responden 200.
 - Nota: al levantar, Docker recreó el contenedor de la base por cambios en `.env`; los datos están en
   el volumen `virguel_pgdata` y se conservaron.
+
+---
+
+## 2026-10-07 — La llamada (orden) como en la app que usan hoy
+
+El usuario mostró capturas de la app actual (estilo Oracle Field Service: "Details" + "Debrief").
+
+### Hecho
+- **Ficha de la llamada** (`/app/orden/<id>/`): primero la tarea (tipo, número, estado, fecha); luego
+  el contacto del cliente (nombre, teléfono para llamar, **mail** nuevo, dirección, cómo llegar);
+  **LOM** = pedido de partes asociado a la llamada, precargado con lo que lleva el trabajo menos lo
+  que el técnico ya tiene; **Notas**: indicación de despacho, notas de esta llamada y de visitas
+  anteriores de otros técnicos al mismo cliente, y se pueden agregar notas.
+- **Debrief** (`/app/orden/<id>/cierre/`) por solapas: Resultado · **Material** (partes de su stock,
+  sin número de serie; equipos retirados opcional) · **Nota** (qué se hizo + foto) · **Viaje y trabajo**
+  (tiempo de viaje, de trabajo y de retorno) · **Gastos** (qué se compró, monto y foto de la factura;
+  genera el egreso "gastos de campo" y queda para revisión/reintegro) · **Conformidad** (nombre,
+  apellido, DNI opcional y firma).
+- Modelos nuevos: `NotaOrden`, `GastoOrden`; campos `Cliente.email`, `OrdenTrabajo.minutos_viaje`,
+  `minutos_retorno`, `conforme_apellido`; `PedidoMaterial.orden`. En la carga de datos, notas y
+  gastos dentro de la orden y revisión de gastos.
+- Compatibilidad: un cierre enviado a la dirección anterior (p. ej. guardado sin señal) se procesa igual.
+- Tests: **75**, todos pasan.

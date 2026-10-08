@@ -60,7 +60,7 @@ class PersonaAdmin(admin.ModelAdmin):
 
 @admin.register(Cliente)
 class ClienteAdmin(admin.ModelAdmin):
-    list_display = ["numero", "nombre", "telefono", "zona", "tipo", "cantidad_televisores"]
+    list_display = ["numero", "nombre", "telefono", "email", "zona", "tipo", "cantidad_televisores"]
     list_filter = ["tipo", "zona"]
     search_fields = ["numero", "nombre", "direccion"]
 
