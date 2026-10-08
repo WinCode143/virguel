@@ -412,3 +412,27 @@ El usuario mostró capturas de la app actual (estilo Oracle Field Service: "Deta
   gastos dentro de la orden y revisión de gastos.
 - Compatibilidad: un cierre enviado a la dirección anterior (p. ej. guardado sin señal) se procesa igual.
 - Tests: **75**, todos pasan.
+
+---
+
+## 2026-10-07 — Contabilidad e indicadores editables
+
+Pedidos: "en finanzas veo la información pero no cómo cargar ni quién la maneja" y
+"metas y semáforos no permite editar/eliminar las métricas en sí".
+
+### Hecho
+- **Rol Contabilidad** (usuario demo `contable`): entra directo a su área y no ve personal ni evaluaciones.
+- **Área Finanzas** (`/finanzas/`, gerencia y contabilidad): panel con **presupuesto vs. gastado con
+  semáforo** (verde ≤ presupuesto, amarillo hasta + tolerancia por categoría, rojo excedido) y proyección;
+  **egresos** con filtros, carga/edición/eliminación de los manuales (proveedor, N° de factura, archivo),
+  y exportación a Excel; **reintegros** de gastos de campo (aprobar/rechazar con aviso al técnico;
+  rechazado = se quita el egreso); **presupuestos** mensuales por categoría (copiar el mes anterior);
+  **costos fijos y categorías**.
+- **Indicadores editables** (`/tablero/metas/`, gerencia): editar nombre, descripción, unidad, sentido,
+  meta, límite y peso; **desactivar/reactivar** (los del sistema) y **eliminar** (los manuales); **crear
+  indicadores de carga manual** (técnico, supervisor o tablero de mando) con **carga mensual de valores**
+  (el supervisor puede cargar los de su equipo). Entran al semáforo, a los índices IPT/IGS y al Resumen.
+  Todo cambio queda en el registro.
+- Datos demo: presupuestos, egresos manuales con comprobante, indicadores "Reclamos de clientes"
+  (por técnico) y "Satisfacción de clientes" (empresa).
+- Tests: **82**, todos pasan.

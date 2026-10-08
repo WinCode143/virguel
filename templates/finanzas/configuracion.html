@@ -1,0 +1,18 @@
+{% extends "escritorio.html" %}{% load formato ui l10n %}
+{% block titulo %}Costos fijos y categorías · Virguel{% endblock %}
+{% block encabezado %}<h1>Costos fijos y categorías</h1><p class="sub">Los costos fijos alimentan la proyección de los próximos meses. Las categorías ordenan los egresos y el presupuesto.</p>{% endblock %}
+{% block contenido %}
+<div class="grid g2">
+<div class="card"><h2>Costos fijos mensuales</h2><div class="tabla-scroll"><table><thead><tr><th>Descripción</th><th>Categoría</th><th class="num">Monto mensual</th><th></th></tr></thead>
+<tbody>{% for c in costos %}<tr {% if not c.activo %}style="opacity:.5"{% endif %}><td>{{ c.descripcion }}</td><td>{{ c.categoria }}</td>
+<td class="num"><form method="post" style="display:flex;gap:.3rem;justify-content:flex-end">{% csrf_token %}<input type="hidden" name="costo" value="{{ c.id }}"><input name="monto" value="{{ c.monto_mensual|floatformat:'-2u' }}" style="width:9rem;text-align:right"><button class="btn sec" name="accion" value="costo_editar">Guardar</button></form></td>
+<td><form method="post">{% csrf_token %}<input type="hidden" name="costo" value="{{ c.id }}"><button class="btn sec" name="accion" value="costo_baja">{% if c.activo %}Desactivar{% else %}Activar{% endif %}</button></form></td></tr>{% endfor %}</tbody></table></div>
+<form method="post" class="filtros" style="margin:1rem 0 0">{% csrf_token %}<input type="hidden" name="accion" value="costo">
+<label>Descripción<input name="descripcion" required></label><label>Categoría<select name="categoria">{% for c in categorias %}<option value="{{ c.id }}">{{ c.nombre }}</option>{% endfor %}</select></label>
+<label>Monto mensual<input name="monto" required style="width:9rem"></label><button class="btn">{% icono 'mas' 'sm' %} Agregar</button></form></div>
+<div class="card"><h2>Categorías</h2><table><thead><tr><th>Categoría</th><th class="num">Egresos</th><th>Tolerancia sobre presupuesto</th></tr></thead>
+<tbody>{% for c in categorias %}<tr><td>{{ c.nombre }}</td><td class="num">{{ c.n }}</td>
+<td><form method="post" style="display:flex;gap:.3rem;align-items:center">{% csrf_token %}<input type="hidden" name="accion" value="tolerancia"><input type="hidden" name="categoria" value="{{ c.id }}"><input name="tolerancia" type="number" min="0" max="100" value="{{ c.tolerancia_presupuesto }}" style="width:5rem"> %<button class="btn sec">Guardar</button></form></td></tr>{% endfor %}</tbody></table>
+<form method="post" class="filtros" style="margin:1rem 0 0">{% csrf_token %}<input type="hidden" name="accion" value="categoria"><label>Nueva categoría<input name="nombre" required></label><button class="btn">{% icono 'mas' 'sm' %} Crear</button></form></div>
+</div>
+{% endblock %}

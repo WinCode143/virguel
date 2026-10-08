@@ -4,13 +4,14 @@
 * supervisor   → app móvil en modo supervisor + tableros de su equipo en PC.
 * gerencia / administración / superusuario → aplicación de escritorio completa.
 * depósito     → sólo inventario, partes de técnicos, pedidos y herramientas.
+* contabilidad → finanzas: egresos, comprobantes, reintegros, presupuestos y costos fijos.
 """
 from functools import wraps
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 
-TECNICO, SUPERVISOR, GERENCIA, DEPOSITO = "tecnico", "supervisor", "gerencia", "deposito"
+TECNICO, SUPERVISOR, GERENCIA, DEPOSITO, CONTABILIDAD = "tecnico", "supervisor", "gerencia", "deposito", "contabilidad"
 
 
 def rol_de(user) -> str | None:
@@ -19,6 +20,8 @@ def rol_de(user) -> str | None:
     grupos = set(user.groups.values_list("name", flat=True))
     if user.is_superuser or grupos & {"Gerencia", "Administración"}:
         return GERENCIA
+    if "Contabilidad" in grupos:
+        return CONTABILIDAD
     if "Depósito" in grupos:
         return DEPOSITO
     persona = getattr(user, "persona", None)

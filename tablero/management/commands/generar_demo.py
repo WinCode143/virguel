@@ -104,6 +104,7 @@ class Command(BaseCommand):
             self.finanzas()
             self.equipos_retirados()
             self.tiempos_respuesta()
+            self.indicadores_manuales()
             self.historial()
         self.stdout.write(self.style.SUCCESS("Datos de demostración generados. Contraseña de todos: virguel2026"))
 
@@ -121,6 +122,8 @@ class Command(BaseCommand):
         from inventario.models import EquipoRetirado
         for m in (EquipoRetirado, MovimientoStockTecnico, PedidoMaterial, EncuestaSemanal, Notificacion, RegistroAcceso):
             m.objects.all().delete()
+        from finanzas.models import Presupuesto
+        Presupuesto.objects.all().delete()
         for m in (Egreso, CostoFijo, Alerta, AccionCorrectiva, InformeControl, EncuestaSupervisor, TareaSupervisor,
                   Siniestro, Salida, LoteIngreso, DemandaComercial, RecetaMaterial, Participacion, Capacitacion,
                   EvaluacionCompetencia, Curso, Competencia, Asignacion, Elemento, Jornada, OrdenTrabajo,
@@ -202,6 +205,11 @@ class Command(BaseCommand):
         dep.groups.add(Group.objects.get(name="Depósito"))
         Persona.objects.create(legajo="D001", nombre="Diego", apellido="Depósito", rol="administrativo",
                                trabaja_sabados=False, usuario=dep)
+        con = User.objects.create(username="contable", password=hash_, is_staff=True, first_name="Carla",
+                                  last_name="Contable")
+        con.groups.add(Group.objects.get(name="Contabilidad"))
+        Persona.objects.create(legajo="C001", nombre="Carla", apellido="Contable", rol="administrativo",
+                               trabaja_sabados=False, usuario=con)
         ger.user_permissions.set([])
         usados = set()
 
@@ -474,6 +482,25 @@ class Command(BaseCommand):
         for t in r.sample([t for t in self.tecs if t.perfil != "riesgo"], 2):
             consumir(t, None, self.mat["FO-ROS"], Decimal("40"), self.hoy - timedelta(days=r.randint(3, 9)))
         self.stdout.write(f"  {len(equipos)} equipos retirados ({sum(1 for e in equipos if e.estado == 'en_tecnico')} sin devolver)")
+
+    def indicadores_manuales(self):
+        """Ejemplos de indicadores creados por gerencia, de carga mensual."""
+        from core.models import Indicador, ValorIndicador
+        Indicador.objects.filter(tipo="manual").delete()
+        mes = self.hoy.replace(day=1)
+        rec = Indicador.objects.create(codigo="manual-reclamos-de-clientes", rol="tecnico", tipo="manual",
+                                       nombre="Reclamos de clientes", unidad="reclamos", mayor_es_mejor=False,
+                                       meta=1, minimo=4, peso=5, orden=100,
+                                       descripcion="Reclamos recibidos por atención comercial sobre trabajos del técnico.")
+        sat = Indicador.objects.create(codigo="manual-satisfaccion-de-clientes", rol="mando", tipo="manual",
+                                       nombre="Satisfacción de clientes", unidad="%", mayor_es_mejor=True, meta=85,
+                                       minimo=70, peso=0, orden=100,
+                                       descripcion="Resultado de la encuesta externa de satisfacción (mensual).")
+        ValorIndicador.objects.create(indicador=sat, periodo=mes, valor=Decimal("81.5"))
+        for t in self.tecs:
+            base = {"riesgo": 4, "capacitar": 2, "nuevo": 2}.get(t.perfil, 0)
+            ValorIndicador.objects.create(indicador=rec, persona=t, periodo=mes,
+                                          valor=Decimal(max(0, base + self.r.randint(-1, 2))))
 
     def tiempos_respuesta(self):
         """Cuándo se cargó y cuándo resolvió el supervisor cada aviso y pedido."""
@@ -1042,6 +1069,19 @@ class Command(BaseCommand):
         for modelo in (LoteIngreso, ServiceRealizado, Asignacion, Siniestro):
             for obj in modelo.objects.all():
                 sincronizar(obj)
+        # egresos cargados a mano por Contabilidad (con proveedor y comprobante)
+        cat_var = {c: CategoriaEgreso.objects.get_or_create(codigo=c, defaults={"nombre": n})[0] for c, n in
+                   [("servicios", "Servicios (luz, gas, internet)"), ("honorarios", "Honorarios profesionales")]}
+        contable = User.objects.get(username="contable")
+        for k in range(18):
+            f = self.hoy - timedelta(days=self.r.randint(0, 120))
+            c = self.r.choice(list(cat_var.values()) + [cats["combustible"]])
+            Egreso.objects.create(fecha=f, categoria=c, monto=Decimal(self.r.randint(80, 900) * 1000),
+                                  descripcion=self.r.choice(["Factura mensual", "Carga de combustible flota",
+                                                             "Honorarios contador", "Servicio de internet oficina"]),
+                                  proveedor=self.r.choice(["YPF", "Edesur", "Telecom", "Estudio Pérez"]),
+                                  numero_comprobante=f"A-0003-{self.r.randint(10000, 99999)}",
+                                  comprobante="egresos/demo.pdf" if self.r.random() < .8 else "", cargado_por=contable)
         # egresos fijos reales de meses anteriores
         f = self.inicio.replace(day=1)
         while f <= self.hoy:
@@ -1049,3 +1089,18 @@ class Command(BaseCommand):
                 Egreso.objects.create(fecha=f.replace(day=5), categoria=cf.categoria, descripcion=cf.descripcion,
                                       monto=cf.monto_mensual * Decimal(str(round(self.r.uniform(.96, 1.04), 3))))
             f = (f + timedelta(days=32)).replace(day=1)
+        # presupuestos: el gasto típico de cada categoría con un margen (mes actual y los 3 anteriores)
+        from django.db.models import Sum
+
+        from finanzas.models import Presupuesto
+        mes = self.hoy.replace(day=1)
+        for i in range(4):
+            m = (mes - timedelta(days=1)).replace(day=1) if i else mes
+            mes_ref = m
+            for c in CategoriaEgreso.objects.all():
+                prom = (Egreso.objects.filter(categoria=c, fecha__gte=self.inicio).aggregate(t=Sum("monto"))["t"] or 0)
+                prom = prom / Decimal(max(1, (self.hoy - self.inicio).days / 30))
+                if prom:
+                    Presupuesto.objects.update_or_create(categoria=c, mes=mes_ref, defaults={
+                        "monto": (prom * Decimal(str(self.r.uniform(.9, 1.15)))).quantize(Decimal("1000"))})
+            mes = m

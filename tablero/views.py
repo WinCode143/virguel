@@ -15,7 +15,7 @@ from django.views.decorators.http import require_POST
 from capacitacion.evaluacion import Diagnostico, evaluar_tecnicos
 from capacitacion.models import EvaluacionHistorica, Participacion
 from core.models import Alerta, Parametros, Persona, Zona
-from core.roles import DEPOSITO, GERENCIA, SUPERVISOR, TECNICO, persona_de, requiere_rol, rol_de
+from core.roles import CONTABILIDAD, DEPOSITO, GERENCIA, SUPERVISOR, TECNICO, persona_de, requiere_rol, rol_de
 from finanzas.models import CostoFijo, Egreso
 from finanzas.proyeccion import historico_mensual, proyectar
 from flota.models import ServiceRealizado, Vehiculo, proximos_services
@@ -73,6 +73,8 @@ def raiz(request):
         return redirect("login")
     if rol == DEPOSITO:
         return redirect("tablero:pedidos")
+    if rol == CONTABILIDAD:
+        return redirect("finanzas:panel")
     es_celular = "Mobi" in request.headers.get("User-Agent", "")
     if rol == TECNICO or (rol == SUPERVISOR and es_celular):
         return redirect("movil:inicio")
@@ -194,6 +196,15 @@ def tablero_de_mando(request, ctx, personas, equipo):
               ("Productividad", ["cumplimiento_capacidad", "ipt_promedio", "igs_promedio", "tecnicos_riesgo"]),
               ("Riesgos y pendientes", ["partes_adeudadas", "siniestros_mes", "docs_vencidos", "stock_parado",
                                         "alertas_criticas"])]
+    # indicadores creados por gerencia (carga manual): valor del equipo del supervisor o, si no hay, de la empresa
+    from core.models import valores_manuales
+    manuales = [c for c, i in ind.items() if i.tipo == "manual"]
+    if manuales:
+        cargados = valores_manuales(manuales, [sup] if sup else [], timezone.localdate())
+        for c in manuales:
+            valores[c] = cargados.get((c, sup.id) if sup else (c, None), cargados.get((c, None)))
+            enlaces[c] = ""
+        grupos.append(("Otros indicadores", manuales))
     res = []
     for titulo, codigos in grupos:
         tarjetas = []
@@ -449,7 +460,7 @@ def flota(request):
 
 
 # ---------------------------------------------------------------- 7. finanzas
-@requiere_rol(GERENCIA)
+@requiere_rol(GERENCIA, CONTABILIDAD)
 def finanzas(request):
     hoy = timezone.localdate()
     hist = historico_mensual(6, hoy)

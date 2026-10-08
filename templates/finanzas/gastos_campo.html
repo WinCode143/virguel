@@ -1,0 +1,13 @@
+{% extends "escritorio.html" %}{% load formato ui %}
+{% block titulo %}Reintegros · Virguel{% endblock %}
+{% block encabezado %}<h1>Reintegros de gastos de campo</h1><p class="sub">Lo que los técnicos compraron para resolver una llamada, con su factura. Al aprobar, queda como egreso; al rechazar, se quita y se avisa al técnico.</p>{% endblock %}
+{% block contenido %}
+<form class="filtros" method="get"><label>Estado<select name="estado" onchange="this.form.submit()"><option value="pendiente" {% if estado == 'pendiente' %}selected{% endif %}>Pendientes</option><option value="aprobado" {% if estado == 'aprobado' %}selected{% endif %}>Aprobados</option><option value="rechazado" {% if estado == 'rechazado' %}selected{% endif %}>Rechazados</option><option value="" {% if not estado %}selected{% endif %}>Todos</option></select></label></form>
+<div class="card"><div class="tabla-scroll"><table><thead><tr><th>Fecha</th><th>Técnico</th><th>Llamada</th><th>Qué compró</th><th class="num">Monto</th><th>Factura</th><th>Estado</th><th></th></tr></thead>
+<tbody>{% for g in gastos %}<tr><td>{{ g.fecha|date:"d/m/Y" }}</td><td>{{ g.tecnico.apellido }}, {{ g.tecnico.nombre }}</td><td>{{ g.orden.numero }} <span class="muted">{{ g.orden.tipo }}</span></td>
+<td>{{ g.descripcion }}</td><td class="num">{{ g.monto|pesos }}</td><td>{% if g.comprobante %}<a href="{{ g.comprobante.url }}" target="_blank">ver factura</a>{% else %}<span class="estado aviso">sin factura</span>{% endif %}</td>
+<td><span class="estado {% if g.estado == 'aprobado' %}ok{% elif g.estado == 'rechazado' %}critico{% else %}aviso{% endif %}">{{ g.get_estado_display }}</span></td>
+<td>{% if g.estado == 'pendiente' %}<form method="post" style="display:flex;gap:.3rem;flex-wrap:wrap">{% csrf_token %}<input type="hidden" name="gasto" value="{{ g.id }}"><button class="btn" name="accion" value="aprobar">Aprobar</button><input name="motivo" placeholder="Motivo si se rechaza" style="width:11rem"><button class="btn sec" name="accion" value="rechazar">Rechazar</button></form>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="8" class="vacio">{% icono 'check' %}<p>No hay gastos {{ estado|default:"" }}.</p></td></tr>{% endfor %}</tbody></table></div></div>
+{% if por_tecnico %}<div class="card"><h2>Reintegros aprobados este mes por técnico</h2><table><tbody>{% for r in por_tecnico %}<tr><td>{{ r.tecnico__apellido }}, {{ r.tecnico__nombre }}</td><td class="num">{{ r.n }} gasto{{ r.n|pluralize }}</td><td class="num"><b>{{ r.t|pesos }}</b></td></tr>{% endfor %}</tbody></table></div>{% endif %}
+{% endblock %}

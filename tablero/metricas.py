@@ -200,7 +200,21 @@ def valores_tecnicos(desde: date, hasta: date, tecnicos) -> dict:
         x["arranque"] = mean(demoras) if len(demoras) >= 3 else None
         x["minutos_vs_estandar"] = (_pct(mean(reales[t.id]), mean(estandar_con_real[t.id]))
                                     if reales[t.id] else None)
+    _agregar_manuales(v, "tecnico", tecnicos, hasta)
     return v
+
+
+def _agregar_manuales(valores: dict, rol: str, personas, hasta):
+    """Suma a cada persona el último valor cargado de los indicadores de carga manual."""
+    from core.models import valores_manuales
+    codigos = list(Indicador.objects.filter(rol=rol, tipo="manual", activo=True).values_list("codigo", flat=True))
+    if not codigos:
+        return
+    cargados = valores_manuales(codigos, personas, hasta)
+    for p in personas:
+        for c in codigos:
+            if (c, p.id) in cargados:
+                valores.setdefault(p.id, {})[c] = cargados[(c, p.id)]
 
 
 def tableros_tecnicos(desde=None, hasta=None, tecnicos=None, dias=30) -> list[Tablero]:
@@ -303,6 +317,9 @@ def tableros_supervisores(desde=None, hasta=None, dias=30, supervisores=None) ->
         n, ok = puntual_sup.get(s.id, (0, 0))
         x["puntualidad_propia"] = _pct(ok, n)
         from core.metas import indicadores_efectivos
+        manuales = {}
+        _agregar_manuales(manuales, "supervisor", [s], hasta)
+        x.update(manuales.get(s.id, {}))
         res.append(Tablero(s, [Medicion(i, x.get(i.codigo)) for i in indicadores_efectivos("supervisor", s)]))
     return sorted(res, key=lambda tb: -(tb.indice or -1))
 

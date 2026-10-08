@@ -1,0 +1,22 @@
+{% extends "escritorio.html" %}{% load ui %}
+{% block titulo %}{% if i %}Editar indicador{% else %}Nuevo indicador{% endif %} · Virguel{% endblock %}
+{% block encabezado %}<h1>{% if i %}Editar «{{ i.nombre }}»{% else %}Nuevo indicador{% endif %}</h1>
+<p class="sub">{% if i and i.tipo == 'calculado' %}Este indicador lo calcula el sistema: podés cambiar su nombre, descripción, meta, límite y peso, o desactivarlo. La fórmula no se modifica.{% elif i %}Indicador de carga manual: su valor se carga cada mes.{% else %}Los indicadores nuevos son de <b>carga manual</b>: cada mes gerencia (o el supervisor, para su equipo) carga el valor y entra al semáforo y a los índices como los demás.{% endif %} <a href="{% url 'tablero:metas' %}">Volver a metas</a></p>{% endblock %}
+{% block contenido %}
+<form method="post" class="card" style="max-width:760px">{% csrf_token %}
+  {% for e in form.non_field_errors %}<p class="errorlist">{{ e }}</p>{% endfor %}
+  <div class="grid g2">{% for f in form %}
+    <div class="form-movil" style="margin:0{% if f.name == 'descripcion' or f.name == 'nombre' %};grid-column:1/-1{% endif %}">
+      {% if f.field.widget.input_type == 'checkbox' %}<div class="check">{{ f }} {{ f.label_tag }}</div>{% else %}{{ f.label_tag }}{{ f }}{% endif %}
+      {% if f.help_text and f.name == 'minimo' %}<p class="muted" style="font-size:.76rem;margin:.2rem 0 0">{{ f.help_text }}</p>{% endif %}
+      {% for e in f.errors %}<p class="errorlist">{{ e }}</p>{% endfor %}</div>{% endfor %}</div>
+  <p class="muted" style="font-size:.82rem;margin:1rem 0 0">Ejemplo: "Reclamos de clientes", unidad "reclamos", menos es mejor, meta 2, límite 6 → verde con 2 o menos, amarillo de 3 a 5, rojo con 6 o más.</p>
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem">
+    <button class="btn">{% icono 'check' 'sm' %} Guardar</button>
+    <a class="btn sec" href="{% url 'tablero:metas' %}">Cancelar</a>
+    {% if i and i.tipo == 'manual' %}<a class="btn sec" href="{% url 'tablero:indicador_valores' i.id %}">Cargar valores</a>
+    <button class="btn peligro" name="accion" value="eliminar" formnovalidate style="margin-left:auto" onclick="return confirm('¿Eliminar el indicador y todos sus valores cargados?')">Eliminar</button>{% endif %}
+  </div>
+  {% if i and i.tipo == 'calculado' %}<p class="muted" style="font-size:.8rem;margin:.8rem 0 0">Para dejar de usarlo, desmarcá «Activo» y guardá.</p>{% endif %}
+</form>
+{% endblock %}

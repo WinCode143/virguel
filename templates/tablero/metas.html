@@ -7,7 +7,9 @@
 <span class="estado critico">Rojo</span>: está más lejos que el límite.
 {% if es_ger %}Las metas generales valen para todos; cada equipo puede tener las suyas.{% else %}Podés fijar metas propias para tu equipo; si dejás vacío, se usa la general.{% endif %}</p>{% endblock %}
 {% block contenido %}
-{% if es_ger %}<form class="filtros" method="get"><label>Estás editando<select name="equipo" onchange="this.form.submit()">
+{% if es_ger %}<div class="filtros"><a class="btn" href="{% url 'tablero:indicador_nuevo' %}">{% icono 'mas' 'sm' %} Nuevo indicador</a>
+<span class="muted" style="font-size:.85rem">Los del sistema se calculan solos; los nuevos se cargan a mano cada mes (satisfacción de clientes, auditorías, reclamos…).</span></div>
+<form class="filtros" method="get"><label>Estás editando<select name="equipo" onchange="this.form.submit()">
 <option value="">Metas generales (toda la empresa)</option>{% for s in supervisores %}<option value="{{ s.id }}" {% if equipo and equipo.id == s.id %}selected{% endif %}>Equipo de {{ s.apellido }}, {{ s.nombre }}</option>{% endfor %}</select></label></form>
 {% else %}<div class="card" style="margin-bottom:1rem"><span class="estado info">Editando las metas de tu equipo</span></div>{% endif %}
 
@@ -26,7 +28,8 @@
     {% if equipo %}<th class="num">General</th><th class="num">Meta del equipo</th><th class="num">Límite del equipo</th>{% else %}<th class="num">Meta</th><th class="num">Límite (rojo)</th>{% if editando_general and sec.rol != 'mando' %}<th class="num">Peso</th>{% endif %}{% endif %}
     <th>Cómo se colorea</th></tr></thead>
   <tbody>{% for f in sec.filas %}<tr>
-    <td><b>{{ f.i.nombre }}</b>{% if f.propia %} <span class="estado info">propia del equipo</span>{% endif %}<div class="muted" style="font-size:.78rem;max-width:380px">{{ f.i.descripcion }}</div></td>
+    <td><b>{{ f.i.nombre }}</b>{% if f.i.tipo == 'manual' %} <span class="estado aviso">carga manual</span>{% endif %}{% if f.propia %} <span class="estado info">propia del equipo</span>{% endif %}
+      <div style="font-size:.78rem;margin-top:.15rem">{% if es_ger %}<a href="{% url 'tablero:indicador' f.i.id %}">editar</a>{% endif %}{% if f.i.tipo == 'manual' and sec.rol != 'supervisor' or f.i.tipo == 'manual' and es_ger %}{% if es_ger %} · {% endif %}<a href="{% url 'tablero:indicador_valores' f.i.id %}">cargar valores</a>{% endif %}</div><div class="muted" style="font-size:.78rem;max-width:380px">{{ f.i.descripcion }}</div></td>
     <td style="white-space:nowrap">{% if f.i.mayor_es_mejor %}↑ más es mejor{% else %}↓ menos es mejor{% endif %}<div class="muted" style="font-size:.78rem">{{ f.i.unidad }}</div></td>
     {% if equipo %}
       <td class="num muted">{{ f.i.meta|num:1 }} / {{ f.i.minimo|num:1 }}</td>
@@ -44,6 +47,8 @@
 {% if equipo %}<span class="muted" style="font-size:.85rem">Dejá vacíos meta y límite para volver a la meta general.</span>{% endif %}</div>
 </form>
 
+{% if desactivados %}<div class="card"><h2>Indicadores desactivados</h2><p class="muted" style="margin-top:-.5rem;font-size:.84rem">No se muestran ni cuentan en los índices; conservan su historia.</p>
+<table><tbody>{% for i in desactivados %}<tr><td>{{ i.nombre }} <span class="muted">({{ i.get_rol_display }})</span></td><td><a href="{% url 'tablero:indicador' i.id %}">editar / reactivar</a></td></tr>{% endfor %}</tbody></table></div>{% endif %}
 <div class="card"><h2>Últimos cambios</h2><div class="tabla-scroll"><table><thead><tr><th>Fecha</th><th>Quién</th><th>Indicador</th><th>Alcance</th><th>Antes</th><th>Después</th></tr></thead>
 <tbody>{% for c in cambios %}<tr><td>{{ c.fecha|date:"d/m/Y H:i" }}</td><td>{{ c.usuario.get_full_name|default:c.usuario.username }}</td><td>{{ c.indicador.nombre }}</td><td>{{ c.alcance }}</td><td class="muted">{{ c.antes }}</td><td>{{ c.despues }}</td></tr>
 {% empty %}<tr><td colspan="6" class="vacio">Todavía no hubo cambios.</td></tr>{% endfor %}</tbody></table></div></div>

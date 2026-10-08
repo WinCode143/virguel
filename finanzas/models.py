@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
@@ -7,6 +8,9 @@ from django.utils import timezone
 class CategoriaEgreso(models.Model):
     nombre = models.CharField(max_length=80, unique=True)
     codigo = models.SlugField(max_length=30, unique=True)
+    tolerancia_presupuesto = models.PositiveSmallIntegerField(
+        "Tolerancia sobre el presupuesto (%)", default=10,
+        help_text="Verde hasta el presupuesto; amarillo hasta presupuesto + tolerancia; rojo después.")
 
     class Meta:
         ordering = ["nombre"]
@@ -25,6 +29,11 @@ class Egreso(models.Model):
     categoria = models.ForeignKey(CategoriaEgreso, on_delete=models.PROTECT, related_name="egresos")
     monto = models.DecimalField(max_digits=14, decimal_places=2)
     descripcion = models.CharField(max_length=200)
+    proveedor = models.CharField(max_length=120, blank=True)
+    numero_comprobante = models.CharField("N° de factura / comprobante", max_length=40, blank=True)
+    comprobante = models.FileField("Archivo del comprobante", upload_to="egresos/%Y/%m/", blank=True)
+    cargado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                    editable=False)
     automatico = models.BooleanField(default=False, editable=False)
     origen = models.CharField(max_length=60, blank=True, editable=False,
                               help_text="Referencia al registro que lo originó (modelo:id).")
@@ -38,6 +47,21 @@ class Egreso(models.Model):
 
     def __str__(self):
         return f"{self.fecha} {self.categoria}: ${self.monto}"
+
+
+class Presupuesto(models.Model):
+    """Monto previsto por categoría y mes; se compara contra lo gastado (semáforo)."""
+
+    categoria = models.ForeignKey(CategoriaEgreso, on_delete=models.CASCADE, related_name="presupuestos")
+    mes = models.DateField(help_text="Primer día del mes.")
+    monto = models.DecimalField(max_digits=14, decimal_places=2)
+
+    class Meta:
+        ordering = ["mes", "categoria__nombre"]
+        unique_together = [("categoria", "mes")]
+
+    def __str__(self):
+        return f"{self.categoria} {self.mes:%m/%Y}: ${self.monto}"
 
 
 class CostoFijo(models.Model):

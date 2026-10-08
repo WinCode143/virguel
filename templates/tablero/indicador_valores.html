@@ -1,0 +1,13 @@
+{% extends "escritorio.html" %}{% load formato ui %}
+{% block titulo %}Valores de {{ i.nombre }} · Virguel{% endblock %}
+{% block encabezado %}<h1>{{ i.nombre }}</h1><p class="sub">{{ i.descripcion }} · {{ i.regla }} · <a href="{% url 'tablero:metas' %}">volver a metas</a></p>{% endblock %}
+{% block contenido %}
+<div class="filtros" style="align-items:center"><a class="btn sec" href="?mes={{ anterior|date:'Y-m' }}">{% icono 'flecha-izq' 'sm' %}</a>
+<b style="min-width:9rem;text-align:center;text-transform:capitalize">{{ periodo|date:"F Y" }}</b><a class="btn sec" href="?mes={{ siguiente|date:'Y-m' }}">{% icono 'flecha-der' 'sm' %}</a></div>
+<form method="post" class="card" style="max-width:720px">{% csrf_token %}<input type="hidden" name="mes" value="{{ periodo|date:'Y-m' }}">
+<table><thead><tr><th>{% if i.rol == 'mando' %}Alcance{% else %}Persona{% endif %}</th><th class="num">Valor ({{ i.unidad }})</th><th>Semáforo</th></tr></thead>
+<tbody>{% for f in filas %}<tr><td>{{ f.nombre }}</td><td class="num"><input name="v_{{ f.clave }}" value="{% if f.valor is not None %}{{ f.valor|floatformat:'-2u' }}{% endif %}" inputmode="decimal" style="width:9rem;text-align:right"></td>
+<td>{% if f.valor is not None %}<span class="estado {{ f.estado }}">{% if f.estado == 'ok' %}Cumple{% elif f.estado == 'aviso' %}Cerca{% else %}Lejos{% endif %}</span>{% endif %}</td></tr>{% endfor %}</tbody></table>
+<p class="muted" style="font-size:.8rem">Dejá vacío para borrar el valor de ese mes. Se usa el último mes cargado (hasta 2 meses atrás).</p>
+<button class="btn">{% icono 'check' 'sm' %} Guardar</button></form>
+{% endblock %}

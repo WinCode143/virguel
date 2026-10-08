@@ -16,7 +16,7 @@ from core.roles import GERENCIA, SUPERVISOR, persona_de, requiere_rol, rol_de
 E = RegistroAcceso.Evento
 GRUPO_POR_ROL = {"tecnico": "Técnicos", "supervisor": "Supervisores", "gerencia": "Gerencia",
                  "administrativo": "Administración"}
-ROLES_SISTEMA = ["Gerencia", "Administración", "Depósito", "Supervisores", "Técnicos"]
+ROLES_SISTEMA = ["Gerencia", "Administración", "Contabilidad", "Depósito", "Supervisores", "Técnicos"]
 
 
 def clave_temporal() -> str:
@@ -128,7 +128,7 @@ def detalle(request, pk):
             elif accion == "rol" and u:
                 nuevos = [g for g in request.POST.getlist("grupos") if g in ROLES_SISTEMA]
                 u.groups.set(Group.objects.filter(name__in=nuevos))
-                u.is_staff = any(g in ("Gerencia", "Administración", "Depósito") for g in nuevos)
+                u.is_staff = any(g in ("Gerencia", "Administración", "Depósito", "Contabilidad") for g in nuevos)
                 u.save(update_fields=["is_staff"])
                 registrar(request, E.ADMIN, u, u.username, "Roles: " + (", ".join(nuevos) or "ninguno"), request.user)
                 messages.success(request, "Roles actualizados.")

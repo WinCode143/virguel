@@ -131,3 +131,19 @@ En la PC (`/tablero/`): los mismos tableros que gerencia pero **sólo con su equ
 - 🟢 cumple la meta · 🟡 no la cumple pero está dentro del límite · 🔴 más allá del límite.
 - **Productividad → Metas y semáforos**: gerencia fija metas generales, por equipo, pesos y umbrales;
   cada supervisor puede fijar las de su equipo. Todo cambio queda registrado.
+
+
+## Contabilidad (rol Contabilidad y gerencia) — menú Finanzas
+- **Panel y presupuesto**: gastado vs. presupuesto por categoría con semáforo; reintegros pendientes;
+  egresos sin comprobante; proyección.
+- **Cargar egreso**: fecha, categoría, monto, descripción, proveedor, N° de factura y archivo.
+  Los egresos automáticos (compras de stock, services, EPP, siniestros, gastos de campo) no se cargan.
+- **Reintegros a técnicos**: aprobar o rechazar los gastos que cargan los técnicos al cerrar llamadas.
+- **Presupuestos**: monto previsto por categoría para este mes y los dos siguientes.
+- **Costos fijos y categorías**: alimentan la proyección; tolerancia de cada categoría.
+- **Excel**: los egresos del mes con totales, para el contador.
+
+## Crear o modificar indicadores (gerencia) — Productividad → Metas y semáforos
+- "Editar" en cada indicador: nombre, descripción, meta, límite, peso; desmarcar "Activo" lo saca de uso.
+- "Nuevo indicador": para medir algo que el sistema no registra; se carga su valor cada mes en
+  "cargar valores" (el supervisor carga los de su equipo).

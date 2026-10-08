@@ -1,0 +1,26 @@
+{% extends "escritorio.html" %}{% load formato ui %}
+{% block titulo %}Finanzas · Virguel{% endblock %}
+{% block encabezado %}<h1>Finanzas</h1><p class="sub">La empresa no vende: acá se controla lo que se gasta. Muchos egresos se registran solos (compras de stock, services, EPP, siniestros, gastos de campo); los demás los carga Contabilidad.</p>{% endblock %}
+{% block contenido %}
+{% include "finanzas/_mes.html" %}
+<div class="grid g4">
+  <div class="card kpi"><div class="etq">Gastado en el mes</div><div class="valor">{{ total_real|pesos }}</div><div class="det">{% if total_pres %}de {{ total_pres|pesos }} presupuestado{% else %}sin presupuesto cargado{% endif %}</div></div>
+  <div class="card kpi"><div class="etq">Uso del presupuesto</div><div class="valor">{% if total_pres %}{% widthratio total_real total_pres 100 %}%{% else %}—{% endif %}</div></div>
+  <a class="card kpi" href="{% url 'finanzas:gastos_campo' %}"><div class="etq">Reintegros por revisar</div><div class="valor">{% if gastos_pendientes %}<span class="estado aviso">{{ gastos_pendientes }}</span>{% else %}0{% endif %}</div><div class="det">gastos cargados por técnicos</div></a>
+  <a class="card kpi" href="{% url 'finanzas:egresos' %}?mes={{ mes|date:'Y-m' }}&origen=manual"><div class="etq">Egresos sin comprobante</div><div class="valor">{% if sin_comprobante %}<span class="estado aviso">{{ sin_comprobante }}</span>{% else %}0{% endif %}</div><div class="det">cargados a mano en el mes</div></a>
+</div>
+<div class="filtros" style="margin-top:1rem"><a class="btn" href="{% url 'finanzas:egreso_nuevo' %}">{% icono 'mas' 'sm' %} Cargar egreso</a>
+<a class="btn sec" href="{% url 'finanzas:presupuestos' %}?mes={{ mes|date:'Y-m' }}">{% icono 'calendario' 'sm' %} Presupuestos</a>
+<a class="btn sec" href="{% url 'finanzas:egresos' %}?mes={{ mes|date:'Y-m' }}&formato=excel">{% icono 'bajar' 'sm' %} Egresos del mes a Excel</a></div>
+<div class="card"><h2>Presupuesto contra lo gastado</h2>
+<p class="muted" style="margin-top:-.5rem;font-size:.82rem"><span class="estado ok">Dentro del presupuesto</span> <span class="estado aviso">Pasado, dentro de la tolerancia</span> <span class="estado critico">Excedido</span></p>
+<div class="tabla-scroll"><table><thead><tr><th>Categoría</th><th class="num">Presupuesto</th><th class="num">Gastado</th><th class="num">Uso</th><th class="num">Queda</th></tr></thead>
+<tbody>{% for f in filas %}<tr><td><a href="{% url 'finanzas:egresos' %}?mes={{ mes|date:'Y-m' }}&categoria={{ f.c.id }}">{{ f.c.nombre }}</a></td><td class="num">{{ f.presupuesto|pesos }}</td><td class="num">{{ f.real|pesos }}</td>
+<td class="num">{% if f.uso is not None %}<span class="estado {{ f.estado }}">{{ f.uso|num }}%</span>{% else %}<span class="muted">sin presupuesto</span>{% endif %}</td>
+<td class="num">{% if f.diferencia is not None %}{{ f.diferencia|pesos }}{% endif %}</td></tr>
+{% empty %}<tr><td colspan="5" class="vacio">Sin movimientos ni presupuesto en el mes.</td></tr>{% endfor %}</tbody></table></div></div>
+{% include "tablero/_grafico.html" with id="g-pres" datos=g titulo="Presupuesto vs. gastado" alto=True %}
+<div class="card"><h2>Próximos meses (proyección)</h2><table><thead><tr><th>Mes</th><th class="num">Materiales</th><th class="num">Flota</th><th class="num">EPP</th><th class="num">Siniestros</th><th class="num">Fijos</th><th class="num">Total</th></tr></thead>
+<tbody>{% for p in proy %}<tr><td style="text-transform:capitalize">{{ p.mes|date:"F Y" }}</td><td class="num">{{ p.materiales|pesos }}</td><td class="num">{{ p.flota|pesos }}</td><td class="num">{{ p.epp|pesos }}</td><td class="num">{{ p.siniestros|pesos }}</td><td class="num">{{ p.fijos|pesos }}</td><td class="num"><b>{{ p.total|pesos }}</b></td></tr>{% endfor %}</tbody></table>
+<p style="margin:.6rem 0 0"><a href="{% url 'tablero:finanzas' %}">Ver histórico y detalle de la proyección →</a></p></div>
+{% endblock %}

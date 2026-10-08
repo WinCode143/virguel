@@ -25,6 +25,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("tablero/", include("tablero.urls")),
     path("personal/", include("personal.urls")),
+    path("finanzas/", include("finanzas.urls")),
     path("app/", include("movil.urls")),
     path("encuesta/<uuid:token>/", encuesta, name="encuesta"),
     path("api/powerbi/<slug:dataset>.csv", exportar_csv, name="exportar_csv"),

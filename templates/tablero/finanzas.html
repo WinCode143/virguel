@@ -19,7 +19,7 @@
 <div class="grid g2">
   <div class="card"><h2>Mes en curso por categoría</h2><table><tbody>{% for c in por_cat %}<tr><td>{{ c.categoria__nombre }}</td><td class="num">{{ c.t|pesos }}</td></tr>{% endfor %}</tbody></table></div>
   <div class="card"><h2>Costos fijos mensuales</h2><table><tbody>{% for f in fijos %}<tr><td>{{ f.descripcion }}</td><td>{{ f.categoria }}</td><td class="num">{{ f.monto_mensual|pesos }}</td></tr>{% empty %}<tr><td class="muted">Sin costos fijos cargados.</td></tr>{% endfor %}</tbody></table>
-  <p><a href="{% url 'admin:finanzas_costofijo_changelist' %}">Editar costos fijos</a> · <a href="{% url 'admin:finanzas_egreso_add' %}">Cargar egreso manual</a></p></div>
+  <p><a href="{% url 'finanzas:configuracion' %}">Editar costos fijos</a> · <a href="{% url 'finanzas:egreso_nuevo' %}">Cargar egreso</a></p></div>
 </div>
 <div class="card"><h2>Últimos egresos</h2><div class="tabla-scroll"><table><thead><tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Origen</th><th class="num">Monto</th></tr></thead>
 <tbody>{% for e in ultimos %}<tr><td>{{ e.fecha|date:"d/m/Y" }}</td><td>{{ e.categoria }}</td><td>{{ e.descripcion }}</td><td class="muted">{% if e.automatico %}automático{% else %}manual{% endif %}</td><td class="num">{{ e.monto|pesos }}</td></tr>{% endfor %}</tbody></table></div></div>

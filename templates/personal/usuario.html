@@ -38,7 +38,7 @@
 {% if u and es_gerencia_vista %}<form method="post" class="card">{% csrf_token %}<input type="hidden" name="accion" value="rol">
   <h2>Roles en el sistema</h2>
   {% for r in roles %}<label style="display:flex;gap:.55rem;align-items:center;margin:.45rem 0"><input type="checkbox" name="grupos" value="{{ r }}" {% if r in grupos %}checked{% endif %}> {{ r }}</label>{% endfor %}
-  <p class="muted" style="font-size:.82rem">Gerencia: todo · Administración: todo salvo metas y usuarios · Depósito: inventario y pedidos · Supervisores y Técnicos: app y su equipo (además se rigen por el rol de su ficha).</p>
+  <p class="muted" style="font-size:.82rem">Gerencia: todo · Administración: todo salvo metas y usuarios · Contabilidad: finanzas y reintegros · Depósito: inventario y pedidos · Supervisores y Técnicos: app y su equipo (además se rigen por el rol de su ficha).</p>
   <button class="btn sec">Guardar roles</button></form>{% endif %}
 </div>
 {% if u %}<div class="card"><h2>Historial de accesos</h2><div class="tabla-scroll"><table><thead><tr><th>Fecha</th><th>Evento</th><th>Detalle</th><th>Desde</th><th>Hecho por</th></tr></thead>

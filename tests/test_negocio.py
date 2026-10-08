@@ -995,3 +995,101 @@ class DebriefTests(TestCase):
         self.assertEqual(r.context["form"].initial["cantidad_1"], 2)  # necesita 3, tiene 1
         self.client.post("/app/stock/pedir/", {"orden": self.ot.id, "material_1": m.id, "cantidad_1": "2"})
         self.assertEqual(PedidoMaterial.objects.get().orden, self.ot)
+
+
+class ContabilidadTests(TestCase):
+    def setUp(self):
+        from django.core.management import call_command
+        call_command("configurar_grupos", stdout=io.StringIO())
+        self.cont = User.objects.create_user("cont", password="x", is_staff=True)
+        self.cont.groups.add(Group.objects.get(name="Contabilidad"))
+        self.client.force_login(self.cont)
+
+    def test_contabilidad_entra_a_finanzas_y_no_al_resto(self):
+        self.assertRedirects(self.client.get("/"), "/finanzas/", fetch_redirect_response=False)
+        self.assertEqual(self.client.get("/finanzas/").status_code, 200)
+        self.assertEqual(self.client.get("/tablero/finanzas/").status_code, 200)
+        self.assertEqual(self.client.get("/tablero/tecnicos/").status_code, 403)
+        self.assertEqual(self.client.get("/personal/legajos/").status_code, 403)
+
+    def test_cargar_editar_y_eliminar_egreso_manual(self):
+        from finanzas.models import CategoriaEgreso, Egreso
+        cat = CategoriaEgreso.objects.create(nombre="Servicios", codigo="servicios")
+        self.client.post("/finanzas/egresos/nuevo/", {"fecha": HOY.isoformat(), "categoria": cat.id, "monto": "15000",
+                                                     "descripcion": "Luz", "proveedor": "Edesur",
+                                                     "numero_comprobante": "A-1"})
+        e = Egreso.objects.get()
+        self.assertEqual((e.monto, e.proveedor, e.cargado_por), (15000, "Edesur", self.cont))
+        self.client.post(f"/finanzas/egresos/{e.id}/", {"accion": "eliminar"})
+        self.assertFalse(Egreso.objects.exists())
+
+    def test_aprobar_y_rechazar_reintegro(self):
+        from finanzas.models import Egreso
+        from operaciones.models import GastoOrden
+        t = persona("T1")
+        ot = OrdenTrabajo.objects.create(numero="1", tipo=TipoTarea.objects.create(codigo="R", nombre="R"), tecnico=t)
+        g = GastoOrden.objects.create(orden=ot, tecnico=t, descripcion="Cinta", monto=2000)
+        self.assertTrue(Egreso.objects.filter(origen=f"gasto_orden:{g.id}").exists())
+        self.client.post("/finanzas/reintegros/", {"gasto": g.id, "accion": "rechazar", "motivo": "sin factura"})
+        g.refresh_from_db()
+        self.assertEqual(g.estado, "rechazado")
+        self.assertFalse(Egreso.objects.filter(origen=f"gasto_orden:{g.id}").exists())
+
+    def test_presupuesto_con_semaforo(self):
+        from finanzas.models import CategoriaEgreso, Egreso, Presupuesto
+        from finanzas.views import presupuesto_vs_real
+        mes = HOY.replace(day=1)
+        c = CategoriaEgreso.objects.create(nombre="Flota", codigo="flota", tolerancia_presupuesto=10)
+        Presupuesto.objects.create(categoria=c, mes=mes, monto=1000)
+        for monto, esperado in ((900, "ok"), (150, "aviso"), (100, "critico")):  # 900 → 1050 → 1150
+            Egreso.objects.create(categoria=c, fecha=mes, monto=monto, descripcion="x")
+            self.assertEqual(presupuesto_vs_real(mes)[0]["estado"], esperado)
+        self.client.post(f"/finanzas/presupuestos/?mes={mes:%Y-%m}", {f"p_{c.id}_{mes:%Y%m}": "2.000,50"})
+        self.assertEqual(Presupuesto.objects.get(categoria=c, mes=mes).monto, Decimal("2000.50"))
+
+
+class IndicadoresEditablesTests(TestCase):
+    def setUp(self):
+        self.ger = User.objects.create_user("ger", password="x")
+        self.ger.groups.add(Group.objects.create(name="Gerencia"))
+        self.sup = persona("S1", rol="supervisor", usuario=User.objects.create_user("sup", password="x"))
+        self.t = persona("T1", supervisor=self.sup)
+        self.ajeno = persona("T2")
+        self.client.force_login(self.ger)
+
+    def test_crear_indicador_manual_cargar_valores_y_que_cuente(self):
+        from core.models import Indicador
+        from tablero.metricas import tableros_tecnicos
+        r = self.client.post("/tablero/metas/indicador/nuevo/", {
+            "rol": "tecnico", "nombre": "Reclamos de clientes", "descripcion": "Reclamos recibidos en el mes",
+            "unidad": "reclamos", "meta": "2", "minimo": "6", "peso": "10", "activo": "on"})
+        i = Indicador.objects.get(nombre="Reclamos de clientes")
+        self.assertEqual((i.tipo, i.mayor_es_mejor), ("manual", False))
+        self.assertRedirects(r, f"/tablero/metas/indicador/{i.id}/valores/", fetch_redirect_response=False)
+        self.client.post(f"/tablero/metas/indicador/{i.id}/valores/", {"mes": f"{HOY:%Y-%m}", f"v_{self.t.id}": "4"})
+        m = tableros_tecnicos(tecnicos=[self.t])[0].get(i.codigo)
+        self.assertEqual((m.valor, m.estado), (4, "aviso"))
+
+    def test_supervisor_carga_valores_solo_de_su_equipo(self):
+        from core.models import Indicador, ValorIndicador
+        i = Indicador.objects.create(codigo="manual-x", rol="tecnico", tipo="manual", nombre="X", descripcion="x",
+                                     meta=10, minimo=5)
+        self.client.force_login(self.sup.usuario)
+        self.client.post(f"/tablero/metas/indicador/{i.id}/valores/", {f"v_{self.t.id}": "8", f"v_{self.ajeno.id}": "1"})
+        self.assertEqual(list(ValorIndicador.objects.values_list("persona_id", flat=True)), [self.t.id])
+        self.assertEqual(self.client.get("/tablero/metas/indicador/nuevo/").status_code, 403)
+
+    def test_editar_desactivar_y_no_eliminar_los_del_sistema(self):
+        from core.models import Indicador
+        i = Indicador.objects.get(codigo="primera_visita")
+        self.client.post(f"/tablero/metas/indicador/{i.id}/", {
+            "nombre": "Sin retrabajos", "descripcion": i.descripcion, "unidad": "%", "mayor_es_mejor": "on",
+            "meta": "96", "minimo": "85", "peso": "15"})  # sin 'activo' → se desactiva
+        i.refresh_from_db()
+        self.assertEqual((i.nombre, i.peso, i.activo), ("Sin retrabajos", 15, False))
+        self.client.post(f"/tablero/metas/indicador/{i.id}/", {"accion": "eliminar"})
+        self.assertTrue(Indicador.objects.filter(pk=i.pk).exists())
+        r = self.client.post(f"/tablero/metas/indicador/{i.id}/", {
+            "nombre": "x", "descripcion": "x", "unidad": "%", "mayor_es_mejor": "on", "meta": "50", "minimo": "80",
+            "peso": "5", "activo": "on"})
+        self.assertContains(r, "lado")  # meta incoherente con el límite

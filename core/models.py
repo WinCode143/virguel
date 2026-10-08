@@ -279,8 +279,13 @@ class Indicador(models.Model):
         TECNICO = "tecnico", "Técnico"
         SUPERVISOR = "supervisor", "Supervisor"
 
+    class Tipo(models.TextChoices):
+        CALCULADO = "calculado", "Calculado por el sistema"
+        MANUAL = "manual", "Carga manual (valor mensual)"
+
     codigo = models.SlugField(max_length=40, unique=True)
     rol = models.CharField(max_length=12, choices=Rol.choices)
+    tipo = models.CharField(max_length=10, choices=Tipo.choices, default=Tipo.CALCULADO)
     nombre = models.CharField(max_length=80)
     descripcion = models.TextField(help_text="Qué mide y cómo se calcula.")
     unidad = models.CharField(max_length=20, default="%")
@@ -421,3 +426,34 @@ class CambioMeta(models.Model):
         ordering = ["-fecha"]
         verbose_name = "Cambio de meta"
         verbose_name_plural = "Cambios de metas"
+
+
+class ValorIndicador(models.Model):
+    """Valor mensual de un indicador de carga manual (por persona o, en el tablero de mando, de la empresa)."""
+
+    indicador = models.ForeignKey(Indicador, on_delete=models.CASCADE, related_name="valores")
+    persona = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.CASCADE, related_name="valores_indicador",
+                                help_text="Vacío = valor de toda la empresa.")
+    periodo = models.DateField(help_text="Primer día del mes al que corresponde.")
+    valor = models.DecimalField(max_digits=14, decimal_places=2)
+    cargado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    actualizado = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-periodo"]
+        unique_together = [("indicador", "persona", "periodo")]
+        verbose_name = "Valor de indicador manual"
+        verbose_name_plural = "Valores de indicadores manuales"
+
+
+def valores_manuales(codigos, personas, hasta, meses=2):
+    """{(codigo, persona_id|None): valor} con el último valor cargado dentro de los últimos `meses`."""
+    from datetime import timedelta
+    desde = (hasta.replace(day=1) - timedelta(days=31 * (meses - 1))).replace(day=1)
+    res = {}
+    qs = (ValorIndicador.objects.filter(indicador__codigo__in=codigos, periodo__range=(desde, hasta))
+          .filter(models.Q(persona__in=personas) | models.Q(persona__isnull=True))
+          .order_by("periodo").values_list("indicador__codigo", "persona_id", "valor"))
+    for codigo, pid, valor in qs:  # el más reciente pisa al anterior
+        res[(codigo, pid)] = float(valor)
+    return res

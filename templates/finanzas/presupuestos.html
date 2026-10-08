@@ -1,0 +1,13 @@
+{% extends "escritorio.html" %}{% load formato ui l10n %}
+{% block titulo %}Presupuestos · Virguel{% endblock %}
+{% block encabezado %}<h1>Presupuestos mensuales</h1><p class="sub">Cuánto se prevé gastar en cada categoría. En el panel se compara contra lo gastado con semáforo. Dejá vacío para no presupuestar.</p>{% endblock %}
+{% block contenido %}
+<div class="filtros" style="align-items:center"><a class="btn sec" href="?mes={{ anterior|date:'Y-m' }}">{% icono 'flecha-izq' 'sm' %}</a><b style="text-transform:capitalize">Desde {{ mes|date:"F Y" }}</b>
+<form method="post" style="margin-left:auto">{% csrf_token %}<button class="btn sec" name="accion" value="copiar">Copiar el mes anterior a {{ mes|date:"m/Y" }}</button></form></div>
+<form method="post" class="card">{% csrf_token %}<div class="tabla-scroll"><table>
+<thead><tr><th>Categoría</th>{% for m in meses %}<th class="num" style="text-transform:capitalize">{{ m|date:"F Y" }}</th>{% endfor %}</tr></thead>
+<tbody>{% for f in filas %}<tr><td>{{ f.c.nombre }}<div class="muted" style="font-size:.76rem">tolerancia {{ f.c.tolerancia_presupuesto }}%</div></td>
+{% for m, v in f.valores %}<td class="num"><input name="p_{{ f.c.id }}_{{ m|date:'Ym' }}" value="{% if v is not None %}{{ v|floatformat:'-2u' }}{% endif %}" placeholder="—" style="width:10rem;text-align:right" inputmode="decimal"></td>{% endfor %}</tr>{% endfor %}</tbody>
+<tfoot><tr><td><b>Total</b></td>{% for t in totales %}<td class="num"><b>{{ t|pesos }}</b></td>{% endfor %}</tr></tfoot></table></div>
+<button class="btn" style="margin-top:1rem">{% icono 'check' 'sm' %} Guardar presupuestos</button></form>
+{% endblock %}

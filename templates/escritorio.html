@@ -4,7 +4,18 @@
   <aside class="sidebar" id="sidebar" aria-label="Menú principal">
     <a class="marca" href="{% url 'tablero:inicio' %}"><img class="logo" src="{% static 'img/icono.svg' %}" alt=""><span><b>Virguel</b><small>Control de personal y operación</small></span></a>
     <nav class="nav">
-      {% if es_deposito %}
+      {% if es_contabilidad %}
+      <details open class="nav-grupo" {% grupo_abierto 'finanzas:panel' 'finanzas:egresos' 'finanzas:egreso_nuevo' 'finanzas:egreso' 'finanzas:gastos_campo' 'finanzas:presupuestos' 'finanzas:configuracion' 'tablero:finanzas' %}>
+        <summary>Finanzas {% icono 'abajo' %}</summary>
+        {% nav 'finanzas:panel' 'Panel y presupuesto' 'billetera' %}
+        {% nav 'finanzas:egresos' 'Egresos y comprobantes' 'documento' %}
+        {% nav 'finanzas:egreso_nuevo' 'Cargar egreso' 'mas' %}
+        {% nav 'finanzas:gastos_campo' 'Reintegros a técnicos' 'check' %}
+        {% nav 'finanzas:presupuestos' 'Presupuestos' 'calendario' %}
+        {% nav 'tablero:finanzas' 'Histórico y proyección' 'tendencia' %}
+        {% nav 'finanzas:configuracion' 'Costos fijos y categorías' 'ajustes' %}
+      </details>
+      {% elif es_deposito %}
       <div class="nav-grupo">
         {% nav 'tablero:pedidos' 'Pedidos de partes' 'carrito' %}
         {% nav 'tablero:deudas' 'Partes adeudadas' 'alerta' %}
@@ -67,10 +78,20 @@
       <details class="nav-grupo" {% grupo_abierto 'tablero:flota' 'tablero:finanzas' %}>
         <summary>Recursos {% icono 'abajo' %}</summary>
         {% nav 'tablero:flota' 'Flota' 'camioneta' %}
-        {% if es_gerencia %}{% nav 'tablero:finanzas' 'Finanzas' 'billetera' %}{% endif %}
+
       </details>
 
       {% if es_gerencia %}
+      <details class="nav-grupo" {% grupo_abierto 'finanzas:panel' 'finanzas:egresos' 'finanzas:egreso_nuevo' 'finanzas:egreso' 'finanzas:gastos_campo' 'finanzas:presupuestos' 'finanzas:configuracion' 'tablero:finanzas' %}>
+        <summary>Finanzas {% icono 'abajo' %}</summary>
+        {% nav 'finanzas:panel' 'Panel y presupuesto' 'billetera' %}
+        {% nav 'finanzas:egresos' 'Egresos y comprobantes' 'documento' %}
+        {% nav 'finanzas:egreso_nuevo' 'Cargar egreso' 'mas' %}
+        {% nav 'finanzas:gastos_campo' 'Reintegros a técnicos' 'check' %}
+        {% nav 'finanzas:presupuestos' 'Presupuestos' 'calendario' %}
+        {% nav 'tablero:finanzas' 'Histórico y proyección' 'tendencia' %}
+        {% nav 'finanzas:configuracion' 'Costos fijos y categorías' 'ajustes' %}
+      </details>
       <details class="nav-grupo" {% grupo_abierto 'tablero:importar' 'tablero:powerbi' 'personal:usuarios' 'personal:usuario' 'personal:accesos' %}>
         <summary>Administración {% icono 'abajo' %}</summary>
         {% nav 'personal:usuarios' 'Usuarios y accesos' 'llave' %}
@@ -104,10 +125,10 @@
           <button type="button" role="menuitemradio" data-tema="auto">{% icono 'auto' %}Automático</button>
         </div>
       </div>
-      <a class="icono-btn" href="{% url 'tablero:alertas' %}" aria-label="Alertas ({{ alertas_abiertas|default:0 }})" title="Alertas">{% icono 'campana' %}{% if alertas_criticas %}<span class="badge">{{ alertas_criticas }}</span>{% endif %}</a>
+      {% if es_gerencia or es_supervisor %}<a class="icono-btn" href="{% url 'tablero:alertas' %}" aria-label="Alertas ({{ alertas_abiertas|default:0 }})" title="Alertas">{% icono 'campana' %}{% if alertas_criticas %}<span class="badge">{{ alertas_criticas }}</span>{% endif %}</a>{% endif %}
       <div class="usuario">
         <span class="avatar" aria-hidden="true">{% firstof request.user.first_name|slice:":1" request.user.username|slice:":1" %}{{ request.user.last_name|slice:":1" }}</span>
-        <span class="quien">{{ request.user.get_full_name|default:request.user.username }}<small>{% if es_gerencia %}Gerencia{% elif es_supervisor %}Supervisor{% elif es_deposito %}Depósito{% endif %} · <a href="{% url 'cambiar_clave' %}">cambiar clave</a></small></span>
+        <span class="quien">{{ request.user.get_full_name|default:request.user.username }}<small>{% if es_gerencia %}Gerencia{% elif es_supervisor %}Supervisor{% elif es_deposito %}Depósito{% elif es_contabilidad %}Contabilidad{% endif %} · <a href="{% url 'cambiar_clave' %}">cambiar clave</a></small></span>
         <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="icono-btn" aria-label="Salir" title="Salir">{% icono 'salir' %}</button></form>
       </div>
     </header>
