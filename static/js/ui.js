@@ -77,6 +77,7 @@
     document.querySelector(".nav-item.activo")?.scrollIntoView({ block: "nearest" });
   }
 
+
   document.addEventListener("DOMContentLoaded", () => {
     aplicar(temaGuardado());
     prepararMenu();

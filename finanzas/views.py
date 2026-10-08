@@ -3,10 +3,9 @@
 Resumen en 4 bloques (sueldos, horas extra, materiales, otros gastos) · comprobantes (facturas,
 tickets, recibos) y cuentas a pagar · sueldos por empleado · materiales · reintegros · presupuesto.
 """
-import re
 from collections import defaultdict
 from datetime import date, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from io import BytesIO
 
 from django import forms
@@ -17,6 +16,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from core.models import Parametros, Persona
+from core.numeros import CampoPesos, a_decimal
+from core.templatetags.formato import pesos
 from core.notificaciones import notificar
 from core.roles import CONTABILIDAD, GERENCIA, requiere_rol
 from operaciones.models import GastoOrden
@@ -39,17 +40,7 @@ def _nav_mes(mes):
     return {"mes": mes, "anterior": sumar_meses(mes, -1), "siguiente": sumar_meses(mes, 1)}
 
 
-def _dec(v):
-    """Número como lo escribe la gente acá: 125.000,50 · 125000,5 · 125000.50 · 10.000"""
-    v = (v or "").strip().replace("$", "").replace(" ", "")
-    if not v:
-        return None
-    if "," in v or re.fullmatch(r"-?\d{1,3}(\.\d{3})+", v):
-        v = v.replace(".", "").replace(",", ".")
-    try:
-        return Decimal(v)
-    except InvalidOperation:
-        return False
+_dec = a_decimal
 
 
 # ------------------------------------------------------------------ resumen
@@ -151,7 +142,7 @@ class ComprobanteForm(forms.ModelForm):
         model = Egreso
         fields = ["comprobante", "tipo_comprobante", "numero_comprobante", "fecha", "vencimiento", "categoria",
                   "monto", "descripcion", "pagado", "fecha_pago", "medio_pago"]
-        labels = {"comprobante": "Archivo (foto o PDF)", "monto": "Total ($)", "descripcion": "Concepto", "categoria": "Categoría",
+        labels = {"comprobante": "Archivo (foto o PDF)", "descripcion": "Concepto", "categoria": "Categoría",
                   "fecha_pago": "Fecha de pago", "medio_pago": "Medio de pago",
                   "pagado": "Ya está pagado"}
         widgets = {"fecha": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
@@ -164,13 +155,12 @@ class ComprobanteForm(forms.ModelForm):
         self.fields["categoria"].required = False
         self.fields["categoria"].empty_label = "— la habitual del proveedor —"
         self.fields["descripcion"].required = False
-        self.fields["monto"] = forms.CharField(label="Total ($)", widget=forms.TextInput(attrs={"inputmode": "decimal",
-                                                                                              "placeholder": "125.000,50"}))
+        self.fields["monto"] = CampoPesos(label="Total")
         if self.instance.pk and self.instance.proveedor_ref:
             self.fields["proveedor_nombre"].initial = self.instance.proveedor_ref.nombre
 
     def clean_monto(self):
-        v = _dec(self.cleaned_data["monto"])
+        v = self.cleaned_data["monto"]
         if not v:
             raise forms.ValidationError("Poné el total del comprobante (ej. 125.000,50).")
         return v
@@ -248,8 +238,7 @@ def comprobante_form(request, pk=None):
         f = ComprobanteForm(request.POST, request.FILES, instance=e)
         if f.is_valid():
             guardado = f.save(usuario=request.user)
-            messages.success(request, f"Comprobante guardado: {guardado.proveedor or guardado.descripcion} "
-                                      f"${guardado.monto:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+            messages.success(request, f"Comprobante guardado: {guardado.proveedor or guardado.descripcion} {pesos(guardado.monto)}")
             return redirect("finanzas:comprobante_nuevo" if "otro" in request.POST else "finanzas:comprobantes")
     else:
         f = ComprobanteForm(instance=e, initial={} if e else {"fecha": timezone.localdate(), "pagado": False})
@@ -374,7 +363,7 @@ def gastos_campo(request):
         g.estado = "aprobado" if request.POST.get("accion") == "aprobar" else "rechazado"
         g.save()  # el egreso se actualiza solo (rechazado = se quita)
         notificar(g.tecnico, f"Gasto {'aprobado' if g.estado == 'aprobado' else 'rechazado'}: {g.descripcion}",
-                  f"${g.monto:,.0f}" + (f" · {request.POST.get('motivo')}" if request.POST.get("motivo") else ""), "/app/")
+                  pesos(g.monto) + (f" · {request.POST.get('motivo')}" if request.POST.get("motivo") else ""), "/app/")
         messages.success(request, f"Gasto {g.get_estado_display().lower()}.")
         return redirect("finanzas:gastos_campo")
     estado = request.GET.get("estado", "pendiente")

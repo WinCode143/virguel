@@ -30,8 +30,8 @@
 <td class="num">{% if l.dias_descuento %}-{{ l.descuento_dias|pesos }}<br><small class="muted">{{ l.dias_descuento|num }} día(s)</small>{% else %}—{% endif %}</td>
 <td class="num">{% if l.estado == 'borrador' %}<details><summary style="cursor:pointer">{% if l.otros_adicionales or l.otros_descuentos %}+{{ l.otros_adicionales|pesos }} / -{{ l.otros_descuentos|pesos }}{% else %}agregar{% endif %}</summary>
   <form method="post" style="display:grid;gap:.3rem;margin-top:.4rem;text-align:left">{% csrf_token %}<input type="hidden" name="accion" value="fila"><input type="hidden" name="liq" value="{{ l.id }}"><input type="hidden" name="mes" value="{{ mes|date:'Y-m' }}">
-  <label style="font-size:.78rem">Otros adicionales<input name="otros_adicionales" value="{{ l.otros_adicionales|unlocalize }}" style="width:8rem"></label>
-  <label style="font-size:.78rem">Otros descuentos<input name="otros_descuentos" value="{{ l.otros_descuentos|unlocalize }}" style="width:8rem"></label>
+  <label style="font-size:.78rem">Otros adicionales<input data-moneda name="otros_adicionales" value="{{ l.otros_adicionales|unlocalize }}" style="width:8rem"></label>
+  <label style="font-size:.78rem">Otros descuentos<input data-moneda name="otros_descuentos" value="{{ l.otros_descuentos|unlocalize }}" style="width:8rem"></label>
   <label style="font-size:.78rem">Observación<input name="observaciones" value="{{ l.observaciones }}" style="width:8rem"></label>
   <button class="btn sec">Guardar</button></form></details>
   {% else %}{% if l.otros_adicionales %}+{{ l.otros_adicionales|pesos }}{% endif %}{% if l.otros_descuentos %} -{{ l.otros_descuentos|pesos }}{% endif %}{% endif %}
@@ -57,6 +57,6 @@
 <h2>Sueldos básicos</h2><p class="muted" style="margin-top:-.5rem;font-size:.82rem">Básico mensual de cada persona (sólo lo ven Gerencia y Contabilidad). Al cambiarlos, recalculá las liquidaciones en borrador.</p>
 <div class="tabla-scroll" style="max-height:60vh"><table><thead><tr><th>Legajo</th><th>Persona</th><th>Rol</th><th>Categoría</th><th class="num">Básico mensual</th></tr></thead>
 <tbody>{% for p in personas %}<tr><td>{{ p.legajo }}</td><td>{{ p.apellido }}, {{ p.nombre }}</td><td>{{ p.get_rol_display }}</td><td>{{ p.categoria_laboral|default:"—" }}</td>
-<td class="num"><input name="b_{{ p.id }}" value="{{ p.sueldo_basico|default_if_none:''|unlocalize }}" style="width:10rem;text-align:right" placeholder="sin cargar"></td></tr>{% endfor %}</tbody></table></div>
+<td class="num"><input data-moneda name="b_{{ p.id }}" value="{{ p.sueldo_basico|default_if_none:''|unlocalize }}" style="width:10rem;text-align:right" placeholder="sin cargar"></td></tr>{% endfor %}</tbody></table></div>
 <div style="margin-top:1rem"><button class="btn">{% icono 'check' 'sm' %} Guardar básicos</button></div></form>{% endif %}
 {% endblock %}

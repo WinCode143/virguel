@@ -4,6 +4,7 @@ from django import forms
 from django.utils import timezone
 
 from core.models import Persona
+from core.numeros import CampoCantidad, CampoPesos
 from flota.models import Vehiculo
 from incidentes.models import Siniestro
 from inventario.models import Material
@@ -107,13 +108,11 @@ class CerrarOrdenForm(forms.Form):
         for i in range(1, FILAS_MATERIAL + 1):
             self.fields[f"material_{i}"] = forms.TypedChoiceField(choices=opciones, required=False, coerce=int,
                                                                   empty_value=None, label=f"Material {i}")
-            self.fields[f"cantidad_{i}"] = forms.DecimalField(min_value=0, required=False, label="Cantidad",
-                                                              max_digits=10, decimal_places=2)
+            self.fields[f"cantidad_{i}"] = CampoCantidad(required=False, label="Cantidad")
         # Gastos extra (expensas): qué, cuánto y comprobante
         for i in range(1, FILAS_GASTO + 1):
             self.fields[f"gasto_desc_{i}"] = forms.CharField(required=False, max_length=200, label="Qué compraste")
-            self.fields[f"gasto_monto_{i}"] = forms.DecimalField(required=False, min_value=0, max_digits=12,
-                                                                 decimal_places=2, label="Monto ($)")
+            self.fields[f"gasto_monto_{i}"] = CampoPesos(required=False, min_value=0, max_digits=12, label="Monto")
             self.fields[f"gasto_comp_{i}"] = forms.FileField(
                 required=False, label="Foto de la factura / ticket",
                 widget=forms.ClearableFileInput(attrs={"accept": "image/*,application/pdf"}))
@@ -159,8 +158,7 @@ class PedidoForm(forms.Form):
         for i in range(1, FILAS_MATERIAL + 1):
             self.fields[f"material_{i}"] = forms.TypedChoiceField(choices=opciones, required=False, coerce=int,
                                                                   empty_value=None, label=f"Parte {i}")
-            self.fields[f"cantidad_{i}"] = forms.DecimalField(min_value=0, required=False, label="Cantidad",
-                                                              max_digits=10, decimal_places=2)
+            self.fields[f"cantidad_{i}"] = CampoCantidad(required=False, label="Cantidad")
 
     def items(self):
         filas = []
@@ -183,6 +181,7 @@ class SiniestroMovilForm(forms.ModelForm):
         fields = ["tipo", "gravedad", "direccion", "descripcion", "costo_estimado"]
         labels = {"costo_estimado": "Costo estimado del daño ($, si lo sabés)"}
         widgets = {"descripcion": forms.Textarea(attrs={"placeholder": "Qué pasó, dónde y cómo."})}
+        field_classes = {"costo_estimado": CampoPesos}
 
 
 class EncuestaForm(forms.ModelForm):

@@ -5,7 +5,11 @@
   try { var t = localStorage.getItem("tema") || "auto"; localStorage.setItem("theme", t);
         document.documentElement.dataset.theme = t; } catch (e) {}</script>
 <link rel="icon" href="{% static 'img/icono.svg' %}">
+<script src="{% static 'js/numeros.js' %}" defer></script>
 <style>
+  .campo-moneda { position: relative; display: inline-block; }
+  .campo-moneda::before { content: "$"; position: absolute; left: .55rem; top: 50%; transform: translateY(-50%); opacity: .6; pointer-events: none; }
+  .campo-moneda > input { padding-left: 1.4rem !important; text-align: right; }
   /* Identidad Virguel sobre el admin de Django (respeta su modo oscuro) */
   :root, html[data-theme="light"] {
     --primary: #2a78d6; --secondary: #1f68c2; --accent: #ffd36b; --primary-fg: #fff;

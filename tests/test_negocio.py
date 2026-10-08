@@ -1198,3 +1198,35 @@ class SueldosTests(TestCase):
         persona("S1", rol="supervisor", usuario=sup)
         self.client.force_login(sup)
         self.assertEqual(self.client.get(url).status_code, 403)
+
+
+class CamposNumericosTests(TestCase):
+    """Montos en pesos con formato argentino; cantidades de partes sólo enteras."""
+
+    def test_cantidades_enteras_y_montos(self):
+        from django import forms as djforms
+
+        from core.numeros import CampoCantidad, CampoPesos, a_entero
+        self.assertEqual([a_entero(x) for x in ("3", "3,0", "1.000", "1,5", "-2", "abc", "")],
+                         [3, 3, 1000, False, False, False, None])
+        c = CampoCantidad(required=False)
+        self.assertEqual(c.clean("4"), 4)
+        for malo in ("1,5", "abc", "-1"):
+            with self.assertRaises(djforms.ValidationError):
+                c.clean(malo)
+        self.assertEqual(CampoPesos().clean("$ 125.000,50"), Decimal("125000.50"))
+        with self.assertRaises(djforms.ValidationError):
+            CampoPesos().clean("asdsad")
+
+    def test_admin_usa_enteros_para_partes_y_pesos_para_costos(self):
+        from core.numeros import CampoCantidad, CampoPesos, campo_para
+        from inventario.models import LoteIngreso, MovimientoStockTecnico
+        self.assertIsInstance(campo_para(LoteIngreso._meta.get_field("cantidad")), CampoCantidad)
+        self.assertIsInstance(campo_para(LoteIngreso._meta.get_field("costo_unitario")), CampoPesos)
+        self.assertTrue(campo_para(MovimientoStockTecnico._meta.get_field("cantidad")).negativos)  # ajustes
+
+    def test_pedido_de_partes_no_acepta_decimales(self):
+        from movil.forms import PedidoForm
+        m = Material.objects.create(codigo="X", nombre="Conector", unidad="u")
+        self.assertFalse(PedidoForm({"material_1": m.id, "cantidad_1": "1,5"}).is_valid())
+        self.assertTrue(PedidoForm({"material_1": m.id, "cantidad_1": "2"}).is_valid())

@@ -10,7 +10,7 @@
 {% if es_gerencia %}<form method="post" class="card filtros">{% csrf_token %}
 <label>Técnico<select name="tecnico" required>{% for t in tecnicos %}<option value="{{ t.id }}">{{ t.apellido }}, {{ t.nombre }}</option>{% endfor %}</select></label>
 <label>Parte<select name="material" required>{% for m in materiales %}<option value="{{ m.id }}">{{ m.nombre }}</option>{% endfor %}</select></label>
-<label>Cantidad<input name="cantidad" type="number" step="0.01" min="0" required style="width:7rem"></label>
+<label>Cantidad<input data-entero name="cantidad" type="number" step="1" min="1" required style="width:7rem"></label>
 <button class="btn" name="accion" value="entregar">Entregar</button><button class="btn sec" name="accion" value="devolver">Registrar devolución</button></form>{% endif %}
 {% if paradas %}<div class="card"><h2>Partes paradas en técnicos</h2><table><thead><tr><th>Técnico</th><th>Parte</th><th class="num">Cantidad</th><th class="num">Días</th><th class="num">Valor</th></tr></thead><tbody>
 {% for f in paradas %}<tr><td>{{ f.tecnico.apellido }}, {{ f.tecnico.nombre }}</td><td>{{ f.material.nombre }}</td><td class="num">{{ f.cantidad|cant }}</td><td class="num"><span class="estado {% if f.dias >= 90 %}critico{% else %}aviso{% endif %}">{{ f.dias }}</span></td><td class="num">{{ f.valor|pesos }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}

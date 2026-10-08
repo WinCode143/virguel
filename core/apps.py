@@ -8,3 +8,5 @@ class CoreConfig(AppConfig):
 
     def ready(self):
         from . import autenticacion, signals  # noqa: F401
+        from .numeros import instalar_en_admin
+        instalar_en_admin()

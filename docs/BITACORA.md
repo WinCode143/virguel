@@ -465,3 +465,24 @@ carga de facturas, recibos, etc."
 - Demo: básicos por persona, liquidaciones (pagadas, la del mes anterior aprobada, la actual en
   borrador), proveedores con CUIT, facturas pendientes con vencimiento, suspensiones con días.
 - Tests: **86**, todos pasan.
+
+---
+
+## 2026-10-07 — Campos numéricos: montos con "$" y partes sólo enteras
+
+Pedido: "hay tablas que permiten poner letras donde sólo van números; en partes sólo van enteros;
+los precios deben llevar símbolo pesos".
+
+### Hecho
+- `core/numeros.py`: `a_decimal` (acepta `125.000,50`, `125000.50`, `$ 10.000`), `a_entero`,
+  `CampoPesos` y `CampoCantidad` (sólo enteros ≥ 0). Se usan en el cierre de llamadas (material y
+  gastos), pedido de partes, siniestro desde la app, comprobantes, depósito (entregas, devoluciones,
+  regularizaciones) y sueldos/presupuesto/configuración.
+- Carga de datos (admin): toda cantidad de partes es entera y todo costo/monto se carga como pesos,
+  sin tocar cada pantalla (`instalar_en_admin`, regla por nombre de campo).
+- `static/js/numeros.js`: `data-moneda` muestra "$" fijo, separa miles y no deja tipear letras;
+  `data-numero` sólo números; `data-entero` sólo enteros. Si algo inválido llega al envío, avisa en el
+  campo. Las cantidades que la app propone (receta del trabajo, faltantes) se redondean hacia arriba.
+- Mensajes con importes en formato argentino ($ 125.000). Caché de la app v4 para que los celulares
+  tomen los cambios.
+- Tests: **89**, todos pasan.

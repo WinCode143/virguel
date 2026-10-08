@@ -1,5 +1,5 @@
 """Depósito: pedidos de partes de los técnicos y stock en manos de cada técnico."""
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from django.contrib import messages
 from django.db import transaction
@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from core.models import Persona
 from core.notificaciones import notificar
+from core.numeros import a_entero
 from core.roles import DEPOSITO, GERENCIA, SUPERVISOR, persona_de, requiere_rol, rol_de
 from inventario.models import Material, MovimientoStockTecnico, PedidoMaterial
 from inventario.services import StockInsuficiente
@@ -16,10 +17,9 @@ from inventario.stock_tecnico import devolver, entregar, partes_paradas
 
 
 def _dec(v):
-    try:
-        return Decimal(str(v).replace(",", "."))
-    except (InvalidOperation, ValueError):
-        return None
+    """Cantidad de partes: sólo enteros (None si no es válida)."""
+    n = a_entero(v)
+    return None if n is False else n
 
 
 @requiere_rol(GERENCIA, DEPOSITO)
@@ -132,6 +132,9 @@ def deudas(request):
                 t = get_object_or_404(tecnicos, pk=request.POST.get("tecnico"))
                 m = get_object_or_404(Material, pk=request.POST.get("material"))
                 cant = _dec(request.POST.get("cantidad"))
+                if not cant:
+                    messages.error(request, "La cantidad tiene que ser un número entero.")
+                    return redirect("tablero:deudas")
                 entregar(t, m, cant, permitir_negativo=True)
                 notificar(t, "Parte regularizada", f"Se registró la entrega de {cant:g} {m.unidad} de {m.nombre}.", "/app/stock/")
                 messages.success(request, f"Registrada la entrega a {t.nombre_completo}.")
@@ -139,6 +142,9 @@ def deudas(request):
                 t = get_object_or_404(tecnicos, pk=request.POST.get("tecnico"))
                 m = get_object_or_404(Material, pk=request.POST.get("material"))
                 cant = _dec(request.POST.get("cantidad"))
+                if not cant:
+                    messages.error(request, "La cantidad tiene que ser un número entero.")
+                    return redirect("tablero:deudas")
                 devolver(t, m, cant, observaciones="Devolución de partes paradas")
                 notificar(t, "Devolución registrada", f"{cant:g} {m.unidad} de {m.nombre} volvieron al depósito.", "/app/stock/")
                 messages.success(request, f"Devolución de {t.nombre_completo} registrada.")

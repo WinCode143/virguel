@@ -1,8 +1,8 @@
 {% load static %}// Service worker de la app de campo.
 // - Archivos estáticos y pantallas de /app/: red primero; sin señal, lo último guardado.
 // - Al cerrar sesión se borran las pantallas guardadas (privacidad en celulares compartidos).
-const ESTATICO = "virguel-estatico-v3";
-const PAGINAS = "virguel-paginas-v3";
+const ESTATICO = "virguel-estatico-v4";
+const PAGINAS = "virguel-paginas-v4";
 const PREFIJO_STATIC = "{% get_static_prefix %}";
 const INICIALES = ["{% static 'css/app.css' %}", "{% static 'img/icono.svg' %}", "{% static 'js/offline.js' %}"];
 

@@ -33,11 +33,11 @@
     <td style="white-space:nowrap">{% if f.i.mayor_es_mejor %}↑ más es mejor{% else %}↓ menos es mejor{% endif %}<div class="muted" style="font-size:.78rem">{{ f.i.unidad }}</div></td>
     {% if equipo %}
       <td class="num muted">{{ f.i.meta|num:1 }} / {{ f.i.minimo|num:1 }}</td>
-      <td class="num">{% if sec.editable %}<input name="meta_{{ f.i.id }}" value="{% if f.propia %}{{ f.propia.meta|floatformat:"-2u" }}{% endif %}" placeholder="{{ f.i.meta|floatformat:"-2u" }}" style="width:7.5rem;text-align:right">{% else %}—{% endif %}</td>
-      <td class="num">{% if sec.editable %}<input name="lim_{{ f.i.id }}" value="{% if f.propia %}{{ f.propia.minimo|floatformat:"-2u" }}{% endif %}" placeholder="{{ f.i.minimo|floatformat:"-2u" }}" style="width:7.5rem;text-align:right">{% else %}—{% endif %}</td>
+      <td class="num">{% if sec.editable %}<input data-numero name="meta_{{ f.i.id }}" value="{% if f.propia %}{{ f.propia.meta|floatformat:"-2u" }}{% endif %}" placeholder="{{ f.i.meta|floatformat:"-2u" }}" style="width:7.5rem;text-align:right">{% else %}—{% endif %}</td>
+      <td class="num">{% if sec.editable %}<input data-numero name="lim_{{ f.i.id }}" value="{% if f.propia %}{{ f.propia.minimo|floatformat:"-2u" }}{% endif %}" placeholder="{{ f.i.minimo|floatformat:"-2u" }}" style="width:7.5rem;text-align:right">{% else %}—{% endif %}</td>
     {% else %}
-      <td class="num">{% if sec.editable %}<input name="meta_{{ f.i.id }}" value="{{ f.i.meta|floatformat:"-2u" }}" style="width:7.5rem;text-align:right">{% else %}{{ f.i.meta|num:1 }}{% endif %}</td>
-      <td class="num">{% if sec.editable %}<input name="lim_{{ f.i.id }}" value="{{ f.i.minimo|floatformat:"-2u" }}" style="width:7.5rem;text-align:right">{% else %}{{ f.i.minimo|num:1 }}{% endif %}</td>
+      <td class="num">{% if sec.editable %}<input data-numero name="meta_{{ f.i.id }}" value="{{ f.i.meta|floatformat:"-2u" }}" style="width:7.5rem;text-align:right">{% else %}{{ f.i.meta|num:1 }}{% endif %}</td>
+      <td class="num">{% if sec.editable %}<input data-numero name="lim_{{ f.i.id }}" value="{{ f.i.minimo|floatformat:"-2u" }}" style="width:7.5rem;text-align:right">{% else %}{{ f.i.minimo|num:1 }}{% endif %}</td>
       {% if editando_general and sec.rol != 'mando' %}<td class="num"><input name="peso_{{ f.i.id }}" type="number" min="0" max="100" value="{{ f.i.peso }}" style="width:4.5rem;text-align:right"></td>{% endif %}
     {% endif %}
     <td style="font-size:.8rem;min-width:240px">{{ f.regla }}</td>

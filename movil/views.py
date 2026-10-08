@@ -14,6 +14,7 @@ from django.utils import timezone
 
 from capacitacion.evaluacion import evaluar_tecnicos
 from core.models import Parametros
+from core.numeros import entero_arriba
 from core.roles import SUPERVISOR, TECNICO, persona_de, requiere_rol, rol_de
 from herramientas.models import Asignacion
 from incidentes.models import Siniestro
@@ -360,7 +361,7 @@ def orden_cierre(request, pk):
             if k > 6:
                 break
             inicial[f"material_{k}"] = r.material_id
-            inicial[f"cantidad_{k}"] = r.cantidad.normalize()
+            inicial[f"cantidad_{k}"] = entero_arriba(r.cantidad)
         if ot.inicio_trabajo:
             inicial["minutos_reales"] = max(1, int((timezone.now() - ot.inicio_trabajo).total_seconds() // 60))
         f = CerrarOrdenForm(orden=ot, stock=stock, initial=inicial)
@@ -425,13 +426,13 @@ def pedir_partes(request):
                 if falta > 0 and k < 6:
                     k += 1
                     inicial[f"material_{k}"] = r.material_id
-                    inicial[f"cantidad_{k}"] = falta.normalize()
+                    inicial[f"cantidad_{k}"] = entero_arriba(falta)
             inicial["motivo"] = f"Para la llamada {orden_lom.numero} ({orden_lom.tipo})"
         elif request.GET.get("faltante"):
             faltante, _ = faltante_para_ordenes(p)
             for k, fila in enumerate([x for x in faltante if x["falta"]][:6], 1):
                 inicial[f"material_{k}"] = fila["material"].id
-                inicial[f"cantidad_{k}"] = fila["falta"].normalize()
+                inicial[f"cantidad_{k}"] = entero_arriba(fila["falta"])
             inicial["motivo"] = "Para mis órdenes asignadas"
         f = PedidoForm(initial=inicial)
     return render(request, "movil/pedido.html", {"form": f, "tab": "stock", "orden_lom": orden_lom})
