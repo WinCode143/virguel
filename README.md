@@ -49,6 +49,7 @@ Abrir http://localhost:8000. Usuarios de demostración (contraseña `virguel2026
 |---|---|
 | `gerencia` | Gerencia: todos los tableros |
 | `admin` | Superusuario |
+| `deposito` | Depósito: pedidos, partes adeudadas, stock y herramientas |
 | `s001` … `s005` | Supervisores (`s004`: mal trato en encuestas; `s005`: casi no controla) |
 | `t001` … `t036` | Técnicos |
 

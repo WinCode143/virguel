@@ -196,6 +196,11 @@ class Command(BaseCommand):
                             first_name="Administrador")
         ger = User.objects.create(username="gerencia", password=hash_, is_staff=True, first_name="Gerencia")
         ger.groups.add(Group.objects.get(name="Gerencia"))
+        dep = User.objects.create(username="deposito", password=hash_, is_staff=True, first_name="Diego",
+                                  last_name="Depósito")
+        dep.groups.add(Group.objects.get(name="Depósito"))
+        Persona.objects.create(legajo="D001", nombre="Diego", apellido="Depósito", rol="administrativo",
+                               trabaja_sabados=False, usuario=dep)
         ger.user_permissions.set([])
         usados = set()
 
