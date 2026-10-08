@@ -73,7 +73,8 @@ class AccionCorrectiva(models.Model):
     tipo = models.CharField(max_length=20, choices=Tipo.choices)
     fecha = models.DateField(default=timezone.localdate)
     monto = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"),
-                                help_text="Solo para multas.")
+                                help_text="Sólo para multas. Ojo: no se descuentan del sueldo (art. 131 LCT).")
+    dias_suspension = models.PositiveSmallIntegerField(default=0, help_text="Sólo para suspensiones: días sin goce.")
     descripcion = models.TextField(blank=True)
     cumplida = models.BooleanField(default=False)
 

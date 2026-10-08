@@ -1,0 +1,35 @@
+{% extends "escritorio.html" %}{% load formato ui %}
+{% block titulo %}Comprobantes y pagos · Virguel{% endblock %}
+{% block encabezado %}<h1>Comprobantes y pagos</h1><p class="sub">Facturas, tickets, recibos y notas de crédito. Los que se generan solos desde la operación (compras de stock, services, EPP, siniestros, reintegros, sueldos) figuran como «Automático» y se corrigen en su origen.</p>{% endblock %}
+{% block contenido %}
+<div class="filtros" style="align-items:center">
+  <a class="btn {% if ver != 'a_pagar' %}{% else %}sec{% endif %}" href="?mes={{ mes|date:'Y-m' }}">Del mes</a>
+  <a class="btn {% if ver == 'a_pagar' %}{% else %}sec{% endif %}" href="?ver=a_pagar">A pagar ({{ cap.n }}){% if cap.vencidas %} <span class="estado critico">{{ cap.vencidas|length }} vencidas</span>{% endif %}</a>
+  <a class="btn" style="margin-left:auto" href="{% url 'finanzas:comprobante_nuevo' %}">{% icono 'subir' 'sm' %} Cargar comprobante</a>
+</div>
+{% if ver != 'a_pagar' %}{% include "finanzas/_mes.html" %}{% endif %}
+<form class="filtros" method="get"><input type="hidden" name="ver" value="{{ ver }}">{% if ver != 'a_pagar' %}<input type="hidden" name="mes" value="{{ mes|date:'Y-m' }}">{% endif %}
+  <label>Tipo<select name="tipo"><option value="">Todos</option>{% for v, n in tipos %}<option value="{{ v }}" {% if f.tipo == v %}selected{% endif %}>{{ n }}</option>{% endfor %}</select></label>
+  <label>Proveedor<select name="proveedor"><option value="">Todos</option>{% for p in proveedores %}<option value="{{ p.id }}" {% if f.proveedor == p.id|stringformat:'s' %}selected{% endif %}>{{ p.nombre }}</option>{% endfor %}</select></label>
+  <label>Origen<select name="origen"><option value="">Todos</option><option value="manual" {% if f.origen == 'manual' %}selected{% endif %}>Cargados a mano</option><option value="automatico" {% if f.origen == 'automatico' %}selected{% endif %}>Automáticos</option></select></label>
+  <label>Buscar<input name="q" value="{{ f.q }}" placeholder="Concepto, proveedor o número"></label>
+  <button class="btn sec">Filtrar</button>
+  <a class="btn sec" href="?{{ request.GET.urlencode }}&formato=excel">{% icono 'bajar' 'sm' %} Excel</a>
+</form>
+<div class="card"><div class="tabla-scroll" style="max-height:70vh"><table>
+<thead><tr><th>Fecha</th><th>Comprobante</th><th>Proveedor</th><th>Concepto</th><th class="num">Total</th><th>Pago</th><th></th></tr></thead>
+<tbody>{% for e in comprobantes %}<tr>
+<td>{{ e.fecha|date:"d/m/Y" }}</td>
+<td>{% if e.automatico %}<span class="estado info">Automático</span>{% else %}{{ e.get_tipo_comprobante_display }}{% endif %}
+  {% if e.comprobante %}<a href="{{ e.comprobante.url }}" target="_blank" title="Ver archivo">{% icono 'documento' 'sm' %} {{ e.numero_comprobante|default:"ver" }}</a>{% elif e.numero_comprobante %}{{ e.numero_comprobante }}{% elif not e.automatico %} <span class="estado aviso">sin archivo</span>{% endif %}</td>
+<td>{{ e.proveedor_ref.nombre|default:e.proveedor|default:"—" }}{% if e.proveedor_ref.cuit %}<br><small class="muted">{{ e.proveedor_ref.cuit }}</small>{% endif %}</td>
+<td>{{ e.descripcion }}<br><small class="muted">{{ e.categoria }}</small></td>
+<td class="num">{{ e.monto|pesos }}</td>
+<td>{% if e.pagado %}<span class="estado ok">Pagado</span>{% if e.fecha_pago %} <small class="muted">{{ e.fecha_pago|date:"d/m" }}{% if e.medio_pago %} · {{ e.get_medio_pago_display }}{% endif %}</small>{% endif %}
+  {% else %}{% if e.vencimiento and e.vencimiento < hoy %}<span class="estado critico">Vencida {{ e.vencimiento|date:"d/m" }}</span>{% elif e.vencimiento %}<span class="estado aviso">Vence {{ e.vencimiento|date:"d/m" }}</span>{% else %}<span class="estado aviso">A pagar</span>{% endif %}
+  <form method="post" style="display:flex;gap:.3rem;margin-top:.3rem">{% csrf_token %}<input type="hidden" name="accion" value="pagar"><input type="hidden" name="egreso" value="{{ e.id }}">
+  <select name="medio_pago" style="max-width:9rem">{% for v, n in medios %}<option value="{{ v }}">{{ n }}</option>{% endfor %}</select><button class="btn sec">{% icono 'check' 'sm' %} Pagado</button></form>{% endif %}</td>
+<td>{% if not e.automatico %}<a href="{% url 'finanzas:comprobante' e.id %}">editar</a>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="7" class="vacio">Sin comprobantes con estos filtros.</td></tr>{% endfor %}</tbody>
+<tfoot><tr><td colspan="4"><b>Total</b></td><td class="num"><b>{{ total|pesos }}</b></td><td colspan="2"></td></tr></tfoot></table></div></div>
+{% endblock %}

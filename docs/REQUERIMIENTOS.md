@@ -93,7 +93,9 @@ Sistema de indicadores IPT (técnicos) e IGS (supervisores) con metas configurab
 ## 7. Finanzas y flujo de fondos
 | Pedido | Implementación |
 |---|---|
-| Proyección de egresos según movimiento de materiales y logística, sin ingresos | Egresos **automáticos** desde compras de stock, services, EPP y siniestros + costos fijos mensuales. Proyección a 3 meses: demanda comercial × materiales por tarea × costo, services que vencen, EPP que vence, siniestros abiertos (`finanzas/proyeccion.py`). |
+| Proyección de egresos según movimiento de materiales y logística, sin ingresos | Egresos **automáticos** desde compras de stock, services, EPP y siniestros + costos fijos mensuales. Proyección a 3 meses: demanda comercial × materiales por tarea × costo, services que vencen, EPP que vence, siniestros abiertos, sueldos del último mes liquidado (`finanzas/proyeccion.py`). |
+| Sueldo por empleado y horas extra | Pre-liquidación mensual (`finanzas/sueldos.py`): básico, HE 50/100 % desde fichadas, presentismo, faltas y suspensiones; multas informativas (art. 131 LCT). Excel de novedades para el estudio. |
+| Carga de facturas y recibos | Comprobantes con proveedor/CUIT, archivo, vencimiento y pago; recibos de sueldo firmados por liquidación. |
 
 ## 8. Inventario, demanda y abastecimiento
 | Pedido | Implementación |

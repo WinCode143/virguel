@@ -436,3 +436,32 @@ Pedidos: "en finanzas veo la información pero no cómo cargar ni quién la mane
 - Datos demo: presupuestos, egresos manuales con comprobante, indicadores "Reclamos de clientes"
   (por técnico) y "Satisfacción de clientes" (empresa).
 - Tests: **82**, todos pasan.
+
+---
+
+## 2026-10-07 — Contabilidad simplificada: sueldos, horas extra, materiales y comprobantes
+
+Pedido: "mejora todo lo contable, simplifica, sueldo por empleado, horas extras, materiales,
+carga de facturas, recibos, etc."
+
+### Hecho
+- **Menú Finanzas reordenado**: Resumen · Comprobantes y pagos · Sueldos y horas extra · Materiales ·
+  Reintegros · Presupuesto · Configuración.
+- **Resumen en 4 bloques** (sueldos, horas extra, materiales, otros) con "Para hacer" y gráfico apilado
+  de 6 meses.
+- **Comprobantes**: modelo `Proveedor` (CUIT, contacto, categoría habitual; migración que convierte los
+  proveedores escritos a mano); `Egreso` con tipo (factura/ticket/recibo/nota de crédito), vencimiento,
+  pagado, fecha y medio de pago. Cuentas a pagar con semáforo de vencimiento. Números en formato
+  argentino (`125.000,50`).
+- **Sueldos** (`finanzas/sueldos.py`, modelo `Liquidacion`): `Persona.sueldo_basico` y
+  `categoria_laboral`; parámetros de liquidación en `Parametros`. Horas extra desde las fichadas
+  (domingo/feriado al 100 %), presentismo, descuento de faltas injustificadas y días de suspensión
+  (`AccionCorrectiva.dias_suspension`), cargas sociales. **Multas sólo informativas (art. 131 LCT)**.
+  Flujo borrador → aprobada (genera el egreso "Sueldos y cargas" a fin de mes) → pagada + recibo firmado.
+  Excel de novedades para el estudio contable. La proyección usa el costo del último mes liquidado
+  (se quitó el costo fijo "Sueldos" de la demo).
+- **Materiales**: compras vs. consumo valorizado, costo por técnico / tipo de trabajo / material,
+  stock inmovilizado.
+- Demo: básicos por persona, liquidaciones (pagadas, la del mes anterior aprobada, la actual en
+  borrador), proveedores con CUIT, facturas pendientes con vencimiento, suspensiones con días.
+- Tests: **86**, todos pasan.

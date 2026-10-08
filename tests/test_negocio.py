@@ -1012,16 +1012,39 @@ class ContabilidadTests(TestCase):
         self.assertEqual(self.client.get("/tablero/tecnicos/").status_code, 403)
         self.assertEqual(self.client.get("/personal/legajos/").status_code, 403)
 
-    def test_cargar_editar_y_eliminar_egreso_manual(self):
-        from finanzas.models import CategoriaEgreso, Egreso
+    def test_cargar_factura_con_proveedor_nuevo_pagarla_y_eliminarla(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from finanzas.models import CategoriaEgreso, Egreso, Proveedor
         cat = CategoriaEgreso.objects.create(nombre="Servicios", codigo="servicios")
-        self.client.post("/finanzas/egresos/nuevo/", {"fecha": HOY.isoformat(), "categoria": cat.id, "monto": "15000",
-                                                     "descripcion": "Luz", "proveedor": "Edesur",
-                                                     "numero_comprobante": "A-1"})
+        r = self.client.post("/finanzas/comprobantes/nuevo/", {
+            "tipo_comprobante": "factura", "numero_comprobante": "A-0001-00000012", "fecha": HOY.isoformat(),
+            "proveedor_nombre": "Edesur", "cuit": "30-65511620-2", "categoria": cat.id, "monto": "125.000,50",
+            "vencimiento": (HOY + timedelta(days=10)).isoformat(),
+            "comprobante": SimpleUploadedFile("f.pdf", b"%PDF-1.1", "application/pdf")})
+        self.assertEqual(r.status_code, 302)
         e = Egreso.objects.get()
-        self.assertEqual((e.monto, e.proveedor, e.cargado_por), (15000, "Edesur", self.cont))
-        self.client.post(f"/finanzas/egresos/{e.id}/", {"accion": "eliminar"})
-        self.assertFalse(Egreso.objects.exists())
+        self.assertEqual((e.monto, e.proveedor_ref.cuit, e.pagado, e.cargado_por), (Decimal("125000.50"), "30-65511620-2",
+                                                                                   False, self.cont))
+        self.assertTrue(e.comprobante.name.endswith(".pdf"))
+        self.assertEqual(Proveedor.objects.get().categoria, cat)  # queda como categoría habitual
+        # segunda factura del mismo proveedor sin categoría → se usa la habitual; la nota de crédito resta
+        self.client.post("/finanzas/comprobantes/nuevo/", {"tipo_comprobante": "nota_credito", "fecha": HOY.isoformat(),
+                                                          "proveedor_nombre": "Edesur", "monto": "5000", "pagado": "on"})
+        nc = Egreso.objects.get(tipo_comprobante="nota_credito")
+        self.assertEqual((nc.categoria, nc.monto, nc.fecha_pago), (cat, Decimal("-5000"), HOY))
+        self.assertEqual(Proveedor.objects.count(), 1)
+        self.assertContains(self.client.get("/finanzas/comprobantes/?ver=a_pagar"), "A-0001-00000012")
+        self.client.post("/finanzas/comprobantes/", {"accion": "pagar", "egreso": e.id, "medio_pago": "cheque"})
+        e.refresh_from_db()
+        self.assertEqual((e.pagado, e.fecha_pago, e.medio_pago), (True, HOY, "cheque"))
+        self.client.post(f"/finanzas/comprobantes/{e.id}/", {"accion": "eliminar"})
+        self.assertFalse(Egreso.objects.filter(pk=e.id).exists())
+
+    def test_numeros_como_se_escriben_aca(self):
+        from finanzas.views import _dec
+        self.assertEqual([_dec(x) for x in ("125.000,50", "10.000", "1135000.00", "27,5", "", "abc")],
+                         [Decimal("125000.50"), Decimal("10000"), Decimal("1135000.00"), Decimal("27.5"), None, False])
 
     def test_aprobar_y_rechazar_reintegro(self):
         from finanzas.models import Egreso
@@ -1044,7 +1067,7 @@ class ContabilidadTests(TestCase):
         for monto, esperado in ((900, "ok"), (150, "aviso"), (100, "critico")):  # 900 → 1050 → 1150
             Egreso.objects.create(categoria=c, fecha=mes, monto=monto, descripcion="x")
             self.assertEqual(presupuesto_vs_real(mes)[0]["estado"], esperado)
-        self.client.post(f"/finanzas/presupuestos/?mes={mes:%Y-%m}", {f"p_{c.id}_{mes:%Y%m}": "2.000,50"})
+        self.client.post(f"/finanzas/presupuesto/?mes={mes:%Y-%m}", {f"p_{c.id}_{mes:%Y%m}": "2.000,50"})
         self.assertEqual(Presupuesto.objects.get(categoria=c, mes=mes).monto, Decimal("2000.50"))
 
 
@@ -1093,3 +1116,85 @@ class IndicadoresEditablesTests(TestCase):
             "nombre": "x", "descripcion": "x", "unidad": "%", "mayor_es_mejor": "on", "meta": "50", "minimo": "80",
             "peso": "5", "activo": "on"})
         self.assertContains(r, "lado")  # meta incoherente con el límite
+
+
+class SueldosTests(TestCase):
+    """Pre-liquidación: horas extra 50/100, presentismo, multas informativas (art. 131 LCT), suspensiones."""
+
+    def setUp(self):
+        self.p = Parametros.actual()
+        self.p.horas_mensuales, self.p.recargo_extra_50, self.p.recargo_extra_100 = 200, 50, 100
+        self.p.adicional_presentismo, self.p.presentismo_tardanzas_max, self.p.cargas_sociales = Decimal("10"), 2, Decimal("25")
+        self.p.save()
+        self.t = persona("T1", sueldo_basico=Decimal("1000000"))
+        self.mes = (HOY.replace(day=1) - timedelta(days=1)).replace(day=1)  # mes anterior completo
+
+    def _fichar(self, dia, horas_extra):
+        from personal.models import Asistencia
+        entrada = timezone.make_aware(timezone.datetime.combine(dia, timezone.datetime.min.time())) + timedelta(hours=8)
+        a = Asistencia.objects.create(persona=self.t, fecha=dia, entrada=entrada, salida=entrada + timedelta(hours=9))
+        Asistencia.objects.filter(pk=a.pk).update(horas_extra=horas_extra)
+
+    def _calcular(self, tardanzas=0, injustificadas=0):
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from finanzas.sueldos import calcular
+        asis = SimpleNamespace(presentes=20, injustificadas=injustificadas, tardanzas=tardanzas)
+        with mock.patch("finanzas.sueldos.resumen", return_value=[asis]):
+            return calcular(self.t, self.mes)
+
+    def test_horas_extra_presentismo_multa_y_suspension(self):
+        dias = [self.mes + timedelta(days=i) for i in range(14)]
+        habil = next(d for d in dias if d.weekday() < 5)
+        domingo = next(d for d in dias if d.weekday() == 6)
+        self._fichar(habil, Decimal("4"))
+        self._fichar(domingo, Decimal("2"))
+        AccionCorrectiva.objects.create(tecnico=self.t, tipo="multa", monto=40000, fecha=habil, descripcion="x")
+        AccionCorrectiva.objects.create(tecnico=self.t, tipo="suspension", dias_suspension=2, fecha=habil, descripcion="x")
+        liq = self._calcular(tardanzas=1)
+        # valor hora 5.000 → 4 h al 50 % = 30.000 + 2 h al 100 % = 20.000
+        self.assertEqual((liq.horas_extra_50, liq.horas_extra_100, liq.monto_horas_extra), (4, 2, Decimal("50000.00")))
+        self.assertEqual(liq.presentismo, Decimal("100000.00"))
+        self.assertEqual(liq.multas, 40000)  # se informa…
+        self.assertEqual(liq.descuento_dias, Decimal("66666.67"))  # …pero sólo se descuentan los días de suspensión
+        self.assertEqual(liq.bruto, Decimal("1083333.33"))
+        self.assertEqual(liq.costo_total, Decimal("1354166.66"))
+
+    def test_pierde_presentismo_por_llegadas_tarde_o_faltas(self):
+        self.assertEqual(self._calcular(tardanzas=3).presentismo, 0)
+        liq = self._calcular(injustificadas=1)
+        self.assertEqual((liq.presentismo, liq.dias_descuento, liq.descuento_dias), (0, 1, Decimal("33333.33")))
+
+    def test_flujo_generar_ajustar_aprobar_y_gasto(self):
+        from django.core.management import call_command
+
+        from finanzas.models import Egreso, Liquidacion
+        from finanzas.views import bloques_del_mes
+        call_command("configurar_grupos", stdout=io.StringIO())
+        cont = User.objects.create_user("cont", password="x")
+        cont.groups.add(Group.objects.get(name="Contabilidad"))
+        self.client.force_login(cont)
+        url = f"/finanzas/sueldos/?mes={self.mes:%Y-%m}"
+        self.client.post(url, {"accion": "generar", "mes": f"{self.mes:%Y-%m}"})
+        liq = Liquidacion.objects.get(persona=self.t)
+        self.assertEqual(liq.estado, "borrador")
+        self.assertFalse(Egreso.objects.filter(origen=f"liquidacion:{liq.id}").exists())  # el borrador no es gasto
+        bruto = liq.bruto
+        self.client.post(url, {"accion": "fila", "liq": liq.id, "mes": f"{self.mes:%Y-%m}", "otros_adicionales": "10.000",
+                               "otros_descuentos": "", "estado": "borrador"})
+        liq.refresh_from_db()
+        self.assertEqual(liq.bruto, bruto + 10000)
+        self.client.post(url, {"accion": "aprobar_todas", "mes": f"{self.mes:%Y-%m}"})
+        liq.refresh_from_db()
+        e = Egreso.objects.get(origen=f"liquidacion:{liq.id}")
+        self.assertEqual((liq.estado, e.monto, e.categoria.codigo), ("aprobada", liq.costo_total, "sueldos"))
+        b = bloques_del_mes(self.mes)
+        self.assertEqual(b["sueldos"] + b["horas_extra"], liq.costo_total)
+        r = self.client.get(url + "&formato=excel")
+        self.assertEqual(r["Content-Type"].split(";")[0], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        # los supervisores no ven sueldos
+        sup = User.objects.create_user("sup", password="x")
+        persona("S1", rol="supervisor", usuario=sup)
+        self.client.force_login(sup)
+        self.assertEqual(self.client.get(url).status_code, 403)

@@ -1,7 +1,24 @@
 {% extends "escritorio.html" %}{% load formato ui l10n %}
-{% block titulo %}Costos fijos y categorías · Virguel{% endblock %}
-{% block encabezado %}<h1>Costos fijos y categorías</h1><p class="sub">Los costos fijos alimentan la proyección de los próximos meses. Las categorías ordenan los egresos y el presupuesto.</p>{% endblock %}
+{% block titulo %}Configuración de finanzas · Virguel{% endblock %}
+{% block encabezado %}<h1>Configuración</h1><p class="sub">Cómo se calculan los sueldos, los proveedores, los costos fijos (alquileres, seguros, abonos: alimentan la proyección) y las categorías de gasto.</p>{% endblock %}
 {% block contenido %}
+<div class="grid g2">
+<form method="post" class="card">{% csrf_token %}<input type="hidden" name="accion" value="sueldos"><h2>Cálculo de sueldos</h2>
+<div class="grid g2">
+<label class="form-movil" style="margin:0">Horas mensuales (valor hora = básico ÷ horas)<input name="horas_mensuales" type="number" min="1" value="{{ par.horas_mensuales }}"></label>
+<label class="form-movil" style="margin:0">Cargas sociales del empleador (%)<input name="cargas_sociales" value="{{ par.cargas_sociales|unlocalize }}"></label>
+<label class="form-movil" style="margin:0">Recargo horas extra comunes (%)<input name="recargo_extra_50" type="number" min="0" value="{{ par.recargo_extra_50 }}"></label>
+<label class="form-movil" style="margin:0">Recargo domingos y feriados (%)<input name="recargo_extra_100" type="number" min="0" value="{{ par.recargo_extra_100 }}"></label>
+<label class="form-movil" style="margin:0">Presentismo (% del básico)<input name="adicional_presentismo" value="{{ par.adicional_presentismo|unlocalize }}"></label>
+<label class="form-movil" style="margin:0">Llegadas tarde toleradas para cobrarlo<input name="presentismo_tardanzas_max" type="number" min="0" value="{{ par.presentismo_tardanzas_max }}"></label>
+</div><div style="margin-top:1rem"><button class="btn">{% icono 'check' 'sm' %} Guardar</button></div></form>
+<div class="card"><h2>Proveedores</h2><div class="tabla-scroll" style="max-height:50vh"><table><thead><tr><th>Proveedor</th><th class="num">Comprob.</th><th class="num">Total</th><th>CUIT · contacto · categoría habitual</th></tr></thead>
+<tbody>{% for p in proveedores %}<tr><td>{{ p.nombre }}</td><td class="num">{{ p.n }}</td><td class="num">{{ p.t|pesos }}</td>
+<td><form method="post" style="display:flex;gap:.3rem;flex-wrap:wrap">{% csrf_token %}<input type="hidden" name="accion" value="proveedor"><input type="hidden" name="proveedor" value="{{ p.id }}">
+<input name="cuit" value="{{ p.cuit }}" placeholder="CUIT" style="width:8.5rem"><input name="contacto" value="{{ p.contacto }}" placeholder="Teléfono / mail" style="width:9rem">
+<select name="categoria"><option value="">—</option>{% for c in categorias %}<option value="{{ c.id }}" {% if p.categoria_id == c.id %}selected{% endif %}>{{ c.nombre }}</option>{% endfor %}</select><button class="btn sec">Guardar</button></form></td></tr>
+{% empty %}<tr><td colspan="4" class="vacio">Se crean solos al cargar comprobantes.</td></tr>{% endfor %}</tbody></table></div></div>
+</div>
 <div class="grid g2">
 <div class="card"><h2>Costos fijos mensuales</h2><div class="tabla-scroll"><table><thead><tr><th>Descripción</th><th>Categoría</th><th class="num">Monto mensual</th><th></th></tr></thead>
 <tbody>{% for c in costos %}<tr {% if not c.activo %}style="opacity:.5"{% endif %}><td>{{ c.descripcion }}</td><td>{{ c.categoria }}</td>

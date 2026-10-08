@@ -134,14 +134,29 @@ En la PC (`/tablero/`): los mismos tableros que gerencia pero **sólo con su equ
 
 
 ## Contabilidad (rol Contabilidad y gerencia) — menú Finanzas
-- **Panel y presupuesto**: gastado vs. presupuesto por categoría con semáforo; reintegros pendientes;
-  egresos sin comprobante; proyección.
-- **Cargar egreso**: fecha, categoría, monto, descripción, proveedor, N° de factura y archivo.
-  Los egresos automáticos (compras de stock, services, EPP, siniestros, gastos de campo) no se cargan.
+- **Resumen**: el gasto del mes en 4 bloques — **sueldos y cargas**, **horas extra**, **materiales**
+  y **otros gastos** — más "Para hacer" (facturas vencidas o por vencer, sueldos sin aprobar,
+  reintegros por revisar, comprobantes sin archivo), gráfico de 6 meses, presupuesto con semáforo y
+  proyección.
+- **Comprobantes y pagos**: facturas, tickets, recibos y notas de crédito. "Cargar comprobante": subir
+  foto o PDF, tipo, número, fecha, proveedor (si es nuevo se crea con su CUIT y la próxima vez se
+  propone su categoría), total (se puede escribir `125.000,50`), vencimiento y pago. La vista
+  **A pagar** lista lo pendiente ordenado por vencimiento (rojo vencido, amarillo por vencer) y se
+  marca "Pagado" con el medio de pago. Excel con todo para el contador.
+- **Sueldos y horas extra**: "Generar liquidaciones del mes" arma una por empleado con su básico,
+  horas extra (de las fichadas: lunes a sábado al 50 %, domingos y feriados al 100 %), presentismo,
+  descuento por faltas sin justificar y días de suspensión, y el costo con cargas sociales. Se pueden
+  agregar otros adicionales/descuentos mientras está en borrador; luego **Aprobar** (pasa a gasto),
+  **Pagada** y subir el **recibo firmado**. "Novedades para el estudio" baja el Excel. "Sueldos
+  básicos" para cargar o cambiar el básico de cada persona. Las **multas se muestran pero no se
+  descuentan** (art. 131 de la Ley de Contrato de Trabajo). Es una pre-liquidación: el recibo legal
+  (aguinaldo, retenciones, F.931) lo sigue haciendo el estudio contable. Los supervisores no ven sueldos.
+- **Materiales**: comprado vs. usado en órdenes (valorizado a costo), costo por técnico y por tipo de
+  trabajo, lo más usado, valor del stock en depósito y en técnicos, partes paradas.
 - **Reintegros a técnicos**: aprobar o rechazar los gastos que cargan los técnicos al cerrar llamadas.
-- **Presupuestos**: monto previsto por categoría para este mes y los dos siguientes.
-- **Costos fijos y categorías**: alimentan la proyección; tolerancia de cada categoría.
-- **Excel**: los egresos del mes con totales, para el contador.
+- **Presupuesto**: monto previsto por categoría para este mes y los dos siguientes.
+- **Configuración**: parámetros de sueldos (horas mensuales, recargos, presentismo, cargas sociales),
+  proveedores (CUIT, contacto, categoría habitual), costos fijos y categorías con su tolerancia.
 
 ## Crear o modificar indicadores (gerencia) — Productividad → Metas y semáforos
 - "Editar" en cada indicador: nombre, descripción, meta, límite, peso; desmarcar "Activo" lo saca de uso.

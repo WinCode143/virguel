@@ -1,0 +1,27 @@
+{% extends "escritorio.html" %}{% load formato ui %}
+{% block titulo %}Materiales · Virguel{% endblock %}
+{% block encabezado %}<h1>Materiales</h1><p class="sub">Lo que se compró, lo que se usó en las órdenes (del depósito o del stock de cada técnico, valorizado a costo) y cuánta plata hay inmovilizada en partes.</p>{% endblock %}
+{% block contenido %}
+{% include "finanzas/_mes.html" %}
+<div class="grid g4">
+  <div class="card kpi"><div class="etq">Comprado en el mes</div><div class="valor">{{ total_compras|pesos }}</div><div class="det">ingresos al depósito</div></div>
+  <div class="card kpi"><div class="etq">Usado en órdenes</div><div class="valor">{{ total_consumo|pesos }}</div><div class="det">valorizado a costo</div></div>
+  <div class="card kpi"><div class="etq">Stock en depósito</div><div class="valor">{{ deposito|pesos }}</div><div class="det">en técnicos: {{ en_tecnicos|pesos }}</div></div>
+  <a class="card kpi" href="{% url 'tablero:deudas' %}"><div class="etq">Partes paradas en técnicos</div><div class="valor">{% if paradas %}<span class="estado aviso">{{ paradas|pesos }}</span>{% else %}$ 0{% endif %}</div><div class="det">sin usar hace más de lo permitido</div></a>
+</div>
+{% include "tablero/_grafico.html" with id="g-mat" datos=g titulo="Comprado vs. usado (6 meses)" %}
+<div class="grid g2">
+<div class="card"><h2>Costo por técnico</h2><div class="tabla-scroll" style="max-height:55vh"><table><thead><tr><th>Técnico</th><th class="num">Órdenes</th><th class="num">Material usado</th><th class="num">Por orden</th></tr></thead>
+<tbody>{% for t in por_tecnico %}<tr><td>{{ t.tecnico.nombre_completo }}</td><td class="num">{{ t.n }}</td><td class="num">{{ t.valor|pesos }}</td><td class="num">{{ t.por_orden|pesos }}</td></tr>
+{% empty %}<tr><td colspan="4" class="vacio">Sin consumos en el mes.</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="card"><h2>Costo por tipo de trabajo</h2><table><thead><tr><th>Tipo</th><th class="num">Órdenes</th><th class="num">Material</th><th class="num">Por orden</th></tr></thead>
+<tbody>{% for t in por_tipo %}<tr><td>{{ t.tipo }}</td><td class="num">{{ t.n }}</td><td class="num">{{ t.valor|pesos }}</td><td class="num">{{ t.por_orden|pesos }}</td></tr>
+{% empty %}<tr><td colspan="4" class="vacio">Sin consumos en el mes.</td></tr>{% endfor %}</tbody></table>
+<h2 style="margin-top:1.4rem">Lo más usado</h2><table><thead><tr><th>Material</th><th class="num">Cantidad</th><th class="num">Valor</th></tr></thead>
+<tbody>{% for nombre, v in por_material %}<tr><td>{{ nombre }}</td><td class="num">{{ v.0|cant }}</td><td class="num">{{ v.1|pesos }}</td></tr>
+{% empty %}<tr><td colspan="3" class="vacio">—</td></tr>{% endfor %}</tbody></table></div>
+</div>
+<div class="card"><h2>Compras del mes</h2><div class="tabla-scroll"><table><thead><tr><th>Fecha</th><th>Material</th><th>Proveedor</th><th class="num">Cantidad</th><th class="num">Costo unit.</th><th class="num">Total</th></tr></thead>
+<tbody>{% for l in compras %}<tr><td>{{ l.fecha|date:"d/m/Y" }}</td><td>{{ l.material.nombre }}</td><td>{{ l.proveedor|default:"—" }}</td><td class="num">{{ l.cantidad|cant }}</td><td class="num">{{ l.costo_unitario|pesos }}</td><td class="num">{{ l.total|pesos }}</td></tr>
+{% empty %}<tr><td colspan="6" class="vacio">Sin compras en el mes. Las compras se cargan como ingreso de stock en el depósito.</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

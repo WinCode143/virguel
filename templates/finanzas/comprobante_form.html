@@ -1,0 +1,40 @@
+{% extends "escritorio.html" %}{% load ui %}
+{% block titulo %}{% if e %}Editar comprobante{% else %}Cargar comprobante{% endif %} · Virguel{% endblock %}
+{% block encabezado %}<h1>{% if e %}Editar comprobante{% else %}Cargar comprobante{% endif %}</h1><p class="sub">Subí la foto o el PDF y completá lo que figura en el papel. Si el proveedor es nuevo se crea solo; la próxima vez se propone su categoría habitual.</p>{% endblock %}
+{% block contenido %}
+<form method="post" enctype="multipart/form-data" class="card" style="max-width:760px">{% csrf_token %}
+  {% if form.non_field_errors %}<div class="errorlist">{{ form.non_field_errors }}</div>{% endif %}
+  <div class="form-movil" style="margin:0 0 1rem;padding:1rem;border:2px dashed var(--border-strong);border-radius:12px">
+    {{ form.comprobante.label_tag }}{{ form.comprobante }}{% for err in form.comprobante.errors %}<p class="errorlist">{{ err }}</p>{% endfor %}
+    {% if e.comprobante %}<p style="margin:.4rem 0 0"><a href="{{ e.comprobante.url }}" target="_blank">{% icono 'documento' 'sm' %} Ver archivo actual</a></p>{% endif %}
+  </div>
+  <h3>Del comprobante</h3>
+  <div class="grid g3">
+    <div class="form-movil" style="margin:0">{{ form.tipo_comprobante.label_tag }}{{ form.tipo_comprobante }}{% for err in form.tipo_comprobante.errors %}<p class="errorlist">{{ err }}</p>{% endfor %}</div>
+    <div class="form-movil" style="margin:0">{{ form.numero_comprobante.label_tag }}{{ form.numero_comprobante }}{% for err in form.numero_comprobante.errors %}<p class="errorlist">{{ err }}</p>{% endfor %}</div>
+    <div class="form-movil" style="margin:0">{{ form.fecha.label_tag }}{{ form.fecha }}{% for err in form.fecha.errors %}<p class="errorlist">{{ err }}</p>{% endfor %}</div>
+    <div class="form-movil" style="margin:0">{{ form.proveedor_nombre.label_tag }}{{ form.proveedor_nombre }}{% for err in form.proveedor_nombre.errors %}<p class="errorlist">{{ err }}</p>{% endfor %}</div>
+    <div class="form-movil" style="margin:0">{{ form.cuit.label_tag }}{{ form.cuit }}{% for err in form.cuit.errors %}<p class="errorlist">{{ err }}</p>{% endfor %}</div>
+    <div class="form-movil" style="margin:0">{{ form.monto.label_tag }}{{ form.monto }}{% for err in form.monto.errors %}<p class="errorlist">{{ err }}</p>{% endfor %}</div>
+  </div>
+  <datalist id="proveedores">{% for p in proveedores %}<option value="{{ p.nombre }}">{% if p.cuit %}{{ p.cuit }}{% endif %}</option>{% endfor %}</datalist>
+  <div class="grid g2" style="margin-top:.8rem">
+    <div class="form-movil" style="margin:0">{{ form.descripcion.label_tag }}{{ form.descripcion }}</div>
+    <div class="form-movil" style="margin:0">{{ form.categoria.label_tag }}{{ form.categoria }}</div>
+  </div>
+  <h3 style="margin-top:1.2rem">Pago</h3>
+  <div class="grid g4" style="align-items:end">
+    <div class="form-movil" style="margin:0">{{ form.vencimiento.label_tag }}{{ form.vencimiento }}</div>
+    <label style="display:flex;gap:.4rem;align-items:center">{{ form.pagado }} {{ form.pagado.label }}</label>
+    <div class="form-movil" style="margin:0">{{ form.fecha_pago.label_tag }}{{ form.fecha_pago }}</div>
+    <div class="form-movil" style="margin:0">{{ form.medio_pago.label_tag }}{{ form.medio_pago }}</div>
+  </div>
+  <p class="muted" style="font-size:.82rem">Las notas de crédito se guardan en negativo (restan del gasto).</p>
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1.2rem">
+    <button class="btn">{% icono 'check' 'sm' %} Guardar</button>
+    {% if not e %}<button class="btn sec" name="otro" value="1">Guardar y cargar otro</button>{% endif %}
+    <a class="btn sec" href="{% url 'finanzas:comprobantes' %}">Cancelar</a>
+    {% if e %}<button class="btn peligro" name="accion" value="eliminar" formnovalidate onclick="return confirm('¿Eliminar este comprobante?')" style="margin-left:auto">Eliminar</button>{% endif %}
+  </div>
+</form>
+{% endblock %}

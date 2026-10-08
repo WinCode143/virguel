@@ -1,0 +1,62 @@
+{% extends "escritorio.html" %}{% load formato ui l10n %}
+{% block titulo %}Sueldos y horas extra · Virguel{% endblock %}
+{% block encabezado %}<h1>Sueldos y horas extra</h1><p class="sub">Pre-liquidación con lo que el sistema ya sabe: fichadas (horas extra, faltas, llegadas tarde) y sanciones. Sirve para controlar el costo y pasarle las novedades al estudio contable; no reemplaza el recibo legal (aguinaldo, retenciones, F.931).</p>{% endblock %}
+{% block contenido %}
+{% include "finanzas/_mes.html" %}
+<div class="grid g4">
+  <div class="card kpi"><div class="etq">Costo total para la empresa</div><div class="valor">{{ tot.costo_total|pesos }}</div><div class="det">{{ liqs|length }} empleado(s) · cargas {{ tot.cargas_sociales|pesos }}</div></div>
+  <a class="card kpi" href="#horas-extra"><div class="etq">Horas extra</div><div class="valor">{{ tot.monto_horas_extra|pesos }}</div><div class="det">{{ tot.horas_extra_50|num }} h al 50 % · {{ tot.horas_extra_100|num }} h al 100 %</div></a>
+  <div class="card kpi"><div class="etq">Descuentos por días no trabajados</div><div class="valor">{{ tot.descuento_dias|pesos }}</div><div class="det">presentismo pagado: {{ tot.presentismo|pesos }}</div></div>
+  <div class="card kpi"><div class="etq">Estado</div><div class="valor">{% if not liqs %}<span class="muted">sin generar</span>{% elif borradores %}<span class="estado aviso">{{ borradores }} en borrador</span>{% else %}<span class="estado ok">Aprobado</span>{% endif %}</div><div class="det">{% if sin_recibo %}{{ sin_recibo }} pagada(s) sin recibo firmado{% else %}&nbsp;{% endif %}</div></div>
+</div>
+
+<form method="post" class="card" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-top:1rem">{% csrf_token %}<input type="hidden" name="mes" value="{{ mes|date:'Y-m' }}">
+  <button class="btn" name="accion" value="generar">{% icono 'tendencia' 'sm' %} {% if liqs %}Recalcular borradores{% else %}Generar liquidaciones del mes{% endif %}</button>
+  {% if borradores %}<button class="btn sec" name="accion" value="aprobar_todas" onclick="return confirm('¿Aprobar todas las liquidaciones en borrador? Pasan a registrarse como gasto.')">{% icono 'check' 'sm' %} Aprobar todas</button>{% endif %}
+  {% if liqs %}<button class="btn sec" name="accion" value="pagar_todas" onclick="return confirm('¿Marcar todas como pagadas?')">{% icono 'billetera' 'sm' %} Marcar todas pagadas</button>
+  <a class="btn sec" href="?mes={{ mes|date:'Y-m' }}&formato=excel">{% icono 'bajar' 'sm' %} Novedades para el estudio (Excel)</a>{% endif %}
+  <a class="btn sec" style="margin-left:auto" href="?mes={{ mes|date:'Y-m' }}&basicos=1#basicos">{% icono 'ajustes' 'sm' %} Sueldos básicos</a>
+</form>
+
+<div class="card"><h2>Por empleado</h2>
+<p class="muted" style="margin-top:-.5rem;font-size:.82rem">Valor hora = básico ÷ {{ par.horas_mensuales }} h. Horas extra de lunes a sábado al {{ par.recargo_extra_50 }} %, domingos y feriados al {{ par.recargo_extra_100 }} %. Presentismo {{ par.adicional_presentismo|num }} % sin faltas injustificadas y hasta {{ par.presentismo_tardanzas_max }} llegadas tarde. Las multas se muestran pero <b>no se descuentan</b> (art. 131 LCT); las suspensiones y faltas sí, como días no trabajados.</p>
+<div class="tabla-scroll" style="max-height:72vh"><table>
+<thead><tr><th>Empleado</th><th class="num">Básico</th><th class="num">Horas extra</th><th class="num">Presentismo</th><th class="num">Días desc.</th><th class="num">Ajustes</th><th class="num">Bruto</th><th class="num">Costo empresa</th><th>Estado / recibo</th></tr></thead>
+<tbody>{% for l in liqs %}<tr>
+<td><b>{{ l.persona.apellido }}, {{ l.persona.nombre }}</b><br><small class="muted">{{ l.persona.get_rol_display }} · {{ l.dias_trabajados }} días{% if l.faltas_injustificadas %} · <span class="estado critico">{{ l.faltas_injustificadas }} falta(s)</span>{% endif %}{% if l.tardanzas %} · {{ l.tardanzas }} tarde{% endif %}{% if l.multas %} · <span title="Informativo: no se descuenta">multas {{ l.multas|pesos }}</span>{% endif %}</small></td>
+<td class="num">{{ l.basico|pesos }}</td>
+<td class="num">{{ l.monto_horas_extra|pesos }}{% if l.horas_extra_50 or l.horas_extra_100 %}<br><small class="muted">{{ l.horas_extra_50|num }} h · {{ l.horas_extra_100|num }} h dom/fer</small>{% endif %}</td>
+<td class="num">{% if l.presentismo %}{{ l.presentismo|pesos }}{% else %}<span class="muted">pierde</span>{% endif %}</td>
+<td class="num">{% if l.dias_descuento %}-{{ l.descuento_dias|pesos }}<br><small class="muted">{{ l.dias_descuento|num }} día(s)</small>{% else %}—{% endif %}</td>
+<td class="num">{% if l.estado == 'borrador' %}<details><summary style="cursor:pointer">{% if l.otros_adicionales or l.otros_descuentos %}+{{ l.otros_adicionales|pesos }} / -{{ l.otros_descuentos|pesos }}{% else %}agregar{% endif %}</summary>
+  <form method="post" style="display:grid;gap:.3rem;margin-top:.4rem;text-align:left">{% csrf_token %}<input type="hidden" name="accion" value="fila"><input type="hidden" name="liq" value="{{ l.id }}"><input type="hidden" name="mes" value="{{ mes|date:'Y-m' }}">
+  <label style="font-size:.78rem">Otros adicionales<input name="otros_adicionales" value="{{ l.otros_adicionales|unlocalize }}" style="width:8rem"></label>
+  <label style="font-size:.78rem">Otros descuentos<input name="otros_descuentos" value="{{ l.otros_descuentos|unlocalize }}" style="width:8rem"></label>
+  <label style="font-size:.78rem">Observación<input name="observaciones" value="{{ l.observaciones }}" style="width:8rem"></label>
+  <button class="btn sec">Guardar</button></form></details>
+  {% else %}{% if l.otros_adicionales %}+{{ l.otros_adicionales|pesos }}{% endif %}{% if l.otros_descuentos %} -{{ l.otros_descuentos|pesos }}{% endif %}{% endif %}
+  {% if l.observaciones %}<br><small class="muted">{{ l.observaciones }}</small>{% endif %}</td>
+<td class="num"><b>{{ l.bruto|pesos }}</b></td>
+<td class="num">{{ l.costo_total|pesos }}</td>
+<td style="white-space:nowrap"><form method="post" enctype="multipart/form-data" style="display:flex;gap:.3rem;align-items:center">{% csrf_token %}<input type="hidden" name="accion" value="fila"><input type="hidden" name="liq" value="{{ l.id }}"><input type="hidden" name="mes" value="{{ mes|date:'Y-m' }}">
+  <select name="estado" onchange="this.form.submit()" class="estado-sel">{% for v, n in l.Estado.choices %}<option value="{{ v }}" {% if l.estado == v %}selected{% endif %}>{{ n }}</option>{% endfor %}</select>
+  {% if l.recibo %}<a href="{{ l.recibo.url }}" target="_blank" title="Recibo firmado">{% icono 'documento' 'sm' %} recibo</a>{% elif l.estado != 'borrador' %}<label class="btn sec" style="cursor:pointer" title="Subir recibo firmado">{% icono 'subir' 'sm' %}<input type="file" name="recibo" accept="image/*,application/pdf" hidden onchange="this.form.submit()"></label>{% endif %}
+</form></td></tr>
+{% empty %}<tr><td colspan="9" class="vacio">Todavía no hay liquidaciones de este mes. Tocá «Generar liquidaciones del mes».</td></tr>{% endfor %}</tbody>
+{% if liqs %}<tfoot><tr><td><b>Total</b></td><td class="num">{{ tot.basico|pesos }}</td><td class="num">{{ tot.monto_horas_extra|pesos }}</td><td class="num">{{ tot.presentismo|pesos }}</td><td class="num">-{{ tot.descuento_dias|pesos }}</td><td></td><td class="num"><b>{{ tot.bruto|pesos }}</b></td><td class="num"><b>{{ tot.costo_total|pesos }}</b></td><td></td></tr></tfoot>{% endif %}
+</table></div></div>
+
+<div class="card" id="horas-extra"><h2>Horas extra del mes</h2>
+{% if he_ranking %}<p class="muted" style="margin-top:-.5rem;font-size:.82rem">Quiénes más horas extra cobran. Si son siempre los mismos, puede faltar gente en esa zona o la carga está mal repartida.</p>
+<table><thead><tr><th>Empleado</th><th>Supervisor</th><th class="num">Al 50 %</th><th class="num">Al 100 %</th><th class="num">Monto</th><th>Peso</th></tr></thead>
+<tbody>{% for l in he_ranking %}<tr><td>{{ l.persona.nombre_completo }}</td><td>{{ l.persona.supervisor.nombre_completo|default:"—" }}</td><td class="num">{{ l.horas_extra_50|num }} h</td><td class="num">{{ l.horas_extra_100|num }} h</td><td class="num">{{ l.monto_horas_extra|pesos }}</td>
+<td style="min-width:8rem"><div class="barra"><span style="width:{% widthratio l.monto_horas_extra tot.monto_horas_extra 100 %}%"></span></div></td></tr>{% endfor %}</tbody></table>
+{% else %}<p class="vacio">Sin horas extra registradas en el mes.</p>{% endif %}</div>
+
+{% if personas %}<form method="post" class="card" id="basicos">{% csrf_token %}<input type="hidden" name="accion" value="basicos"><input type="hidden" name="mes" value="{{ mes|date:'Y-m' }}">
+<h2>Sueldos básicos</h2><p class="muted" style="margin-top:-.5rem;font-size:.82rem">Básico mensual de cada persona (sólo lo ven Gerencia y Contabilidad). Al cambiarlos, recalculá las liquidaciones en borrador.</p>
+<div class="tabla-scroll" style="max-height:60vh"><table><thead><tr><th>Legajo</th><th>Persona</th><th>Rol</th><th>Categoría</th><th class="num">Básico mensual</th></tr></thead>
+<tbody>{% for p in personas %}<tr><td>{{ p.legajo }}</td><td>{{ p.apellido }}, {{ p.nombre }}</td><td>{{ p.get_rol_display }}</td><td>{{ p.categoria_laboral|default:"—" }}</td>
+<td class="num"><input name="b_{{ p.id }}" value="{{ p.sueldo_basico|default_if_none:''|unlocalize }}" style="width:10rem;text-align:right" placeholder="sin cargar"></td></tr>{% endfor %}</tbody></table></div>
+<div style="margin-top:1rem"><button class="btn">{% icono 'check' 'sm' %} Guardar básicos</button></div></form>{% endif %}
+{% endblock %}

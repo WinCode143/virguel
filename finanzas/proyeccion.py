@@ -9,6 +9,7 @@ Para cada mes futuro se suman:
   * Siniestros: costo pendiente de los siniestros abiertos (mes actual) +
     promedio histórico mensual (meses siguientes).
   * Costos fijos mensuales cargados.
+  * Sueldos: costo total del último mes liquidado.
 """
 from collections import defaultdict
 from datetime import date, timedelta
@@ -59,6 +60,11 @@ def proyectar(meses: int = 3, hoy: date | None = None):
     siniestros_hist = (Siniestro.objects.filter(fecha__gte=hace3, fecha__lt=primero)
                        .aggregate(t=Sum("costo_real"))["t"] or Decimal("0")) / 3
     fijos = CostoFijo.objects.filter(activo=True).aggregate(t=Sum("monto_mensual"))["t"] or Decimal("0")
+    # sueldos: el costo del último mes con liquidaciones (si se usan)
+    from .models import Liquidacion
+    ultimo = Liquidacion.objects.order_by("-periodo").values_list("periodo", flat=True).first()
+    sueldos = (Liquidacion.objects.filter(periodo=ultimo).aggregate(t=Sum("costo_total"))["t"] or Decimal("0")
+               if ultimo else Decimal("0"))
 
     services = []
     for v in Vehiculo.objects.exclude(estado=Vehiculo.Estado.FUERA):
@@ -96,6 +102,6 @@ def proyectar(meses: int = 3, hoy: date | None = None):
             sin = siniestros_hist
         resultado.append({
             "mes": ini, "materiales": mat, "origen_materiales": origen_mat, "flota": flota, "epp": epp,
-            "siniestros": sin, "fijos": fijos, "total": mat + flota + epp + sin + fijos,
+            "siniestros": sin, "fijos": fijos, "sueldos": sueldos, "resto": flota + epp + sin + fijos, "total": mat + flota + epp + sin + fijos + sueldos,
         })
     return resultado

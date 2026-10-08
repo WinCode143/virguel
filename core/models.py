@@ -30,6 +30,18 @@ class Parametros(models.Model):
         "Medir hectáreas cubiertas", default=False,
         help_text="Opcional. Si está apagado, la capacidad se calcula sólo por clientes por técnico.")
 
+    # ---- Sueldos (pre-liquidación)
+    horas_mensuales = models.PositiveSmallIntegerField(
+        "Horas mensuales de jornada completa", default=200, help_text="Para calcular el valor de la hora.")
+    recargo_extra_50 = models.PositiveSmallIntegerField("Recargo hora extra común (%)", default=50)
+    recargo_extra_100 = models.PositiveSmallIntegerField("Recargo hora extra domingo/feriado (%)", default=100)
+    adicional_presentismo = models.DecimalField("Adicional por presentismo (% del básico)", max_digits=5,
+                                                decimal_places=2, default=Decimal("8.33"))
+    presentismo_tardanzas_max = models.PositiveSmallIntegerField(
+        "Llegadas tarde toleradas para cobrar presentismo", default=2)
+    cargas_sociales = models.DecimalField("Cargas sociales del empleador (%)", max_digits=5, decimal_places=2,
+                                          default=Decimal("26"))
+
     # ---- Semáforo de los índices (IPT / IGS)
     indice_verde = models.PositiveSmallIntegerField("Índice: verde desde", default=75)
     indice_rojo = models.PositiveSmallIntegerField("Índice: rojo por debajo de", default=55)
@@ -125,6 +137,9 @@ class Persona(models.Model):
         ("renuncia", "Renuncia"), ("despido", "Despido"), ("despido_causa", "Despido con causa"),
         ("fin_contrato", "Fin de contrato"), ("jubilacion", "Jubilación"), ("otro", "Otro")])
     activo = models.BooleanField(default=True)
+    sueldo_basico = models.DecimalField("Sueldo básico mensual", max_digits=12, decimal_places=2, null=True,
+                                        blank=True, help_text="Sólo lo ven gerencia y contabilidad.")
+    categoria_laboral = models.CharField("Categoría / convenio", max_length=80, blank=True)
     hora_entrada = models.TimeField("Horario de entrada", default=time(8, 0))
     hora_salida = models.TimeField("Horario de salida", default=time(17, 0))
     trabaja_sabados = models.BooleanField(default=True)

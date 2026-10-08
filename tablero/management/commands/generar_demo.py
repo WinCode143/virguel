@@ -15,6 +15,7 @@ Perfiles de técnicos simulados, para validar el diagnóstico:
 """
 import math
 import random
+from pathlib import Path
 from collections import defaultdict
 from datetime import timedelta
 from decimal import Decimal
@@ -27,7 +28,7 @@ from django.utils import timezone
 
 from capacitacion.models import Capacitacion, Competencia, Curso, EvaluacionCompetencia, Participacion
 from core.models import Alerta, Cliente, Parametros, Persona, Zona
-from finanzas.models import CategoriaEgreso, CostoFijo, Egreso
+from finanzas.models import CategoriaEgreso, CostoFijo, Egreso, Liquidacion, Proveedor
 from finanzas.signals import sincronizar
 from flota.models import ServiceRealizado, TipoService, Vehiculo
 from herramientas.models import Asignacion, Elemento
@@ -124,6 +125,9 @@ class Command(BaseCommand):
             m.objects.all().delete()
         from finanzas.models import Presupuesto
         Presupuesto.objects.all().delete()
+        Liquidacion.objects.all().delete()
+        Egreso.objects.all().delete()
+        Proveedor.objects.all().delete()
         for m in (Egreso, CostoFijo, Alerta, AccionCorrectiva, InformeControl, EncuestaSupervisor, TareaSupervisor,
                   Siniestro, Salida, LoteIngreso, DemandaComercial, RecetaMaterial, Participacion, Capacitacion,
                   EvaluacionCompetencia, Curso, Competencia, Asignacion, Elemento, Jornada, OrdenTrabajo,
@@ -949,6 +953,7 @@ class Command(BaseCommand):
         AccionCorrectiva.objects.bulk_create([
             AccionCorrectiva(informe=inf, tecnico=t, aplicada_por=s, tipo=tipo, fecha=min(f, self.hoy),
                              monto=Decimal(r.choice([15000, 25000, 40000])) if tipo == "multa" else Decimal("0"),
+                             dias_suspension=r.choice([1, 2, 3]) if tipo == "suspension" else 0,
                              descripcion="Acción por desvío detectado en control.", cumplida=True)
             for inf, t, s, tipo, f in acciones_pend], batch_size=2000)
         EncuestaSupervisor.objects.bulk_create(encuestas, batch_size=5000)
@@ -1054,13 +1059,42 @@ class Command(BaseCommand):
             f += timedelta(days=7)
         self.stdout.write(f"  {n} semanas de historial de evaluación")
 
+    def sueldos(self):
+        """Básico por persona y liquidaciones: meses viejos pagados, el anterior aprobado, el actual en borrador."""
+        from finanzas.sueldos import generar
+        basicos = {"tecnico": (950_000, 1_200_000), "supervisor": (1_550_000, 1_750_000),
+                   "administrativo": (1_050_000, 1_250_000)}
+        for p in Persona.objects.exclude(rol="gerencia"):
+            lo, hi = basicos.get(p.rol, (1_000_000, 1_200_000))
+            p.sueldo_basico = Decimal(self.r.randint(lo // 10000, hi // 10000) * 10000)
+            p.categoria_laboral = {"tecnico": "Técnico instalador", "supervisor": "Supervisor de campo"}.get(p.rol, "Administrativo")
+            p.save(update_fields=["sueldo_basico", "categoria_laboral"])
+        actual = self.hoy.replace(day=1)
+        m = self.inicio.replace(day=1)
+        while m <= actual:
+            generar(m)
+            estado = "borrador" if m == actual else "aprobada" if m == (actual - timedelta(days=1)).replace(day=1) else "pagada"
+            if estado != "borrador":
+                for liq in Liquidacion.objects.filter(periodo=m):
+                    liq.estado = estado
+                    if estado == "pagada" and self.r.random() < .85:
+                        liq.recibo = "recibos/demo.pdf"
+                    liq.save()
+            m = (m + timedelta(days=32)).replace(day=1)
+
     def finanzas(self):
+        # archivos de muestra para los comprobantes y recibos de la demo
+        from django.conf import settings
+        pdf = (b"%PDF-1.1\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj "
+               b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 200]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n")
+        for ruta in ("egresos/demo.pdf", "recibos/demo.pdf"):
+            destino = Path(settings.MEDIA_ROOT) / ruta
+            destino.parent.mkdir(parents=True, exist_ok=True)
+            destino.write_bytes(pdf)
         cats = {c: CategoriaEgreso.objects.get_or_create(codigo=c, defaults={"nombre": n})[0] for c, n in
                 [("compras-stock", "Compras de stock"), ("flota", "Flota"), ("epp-herramientas", "EPP y herramientas"),
                  ("siniestros", "Siniestros"), ("sueldos", "Sueldos y cargas"), ("combustible", "Combustible"),
                  ("estructura", "Estructura (alquiler, servicios)")]}
-        CostoFijo.objects.create(categoria=cats["sueldos"], descripcion="Sueldos y cargas sociales",
-                                 monto_mensual=Decimal("68000000"))
         CostoFijo.objects.create(categoria=cats["combustible"], descripcion="Combustible flota (promedio)",
                                  monto_mensual=Decimal("9500000"))
         CostoFijo.objects.create(categoria=cats["estructura"], descripcion="Alquiler depósito y oficinas",
@@ -1069,19 +1103,30 @@ class Command(BaseCommand):
         for modelo in (LoteIngreso, ServiceRealizado, Asignacion, Siniestro):
             for obj in modelo.objects.all():
                 sincronizar(obj)
-        # egresos cargados a mano por Contabilidad (con proveedor y comprobante)
+        # facturas cargadas a mano por Contabilidad: proveedor con CUIT, archivo, vencimiento y pago
         cat_var = {c: CategoriaEgreso.objects.get_or_create(codigo=c, defaults={"nombre": n})[0] for c, n in
                    [("servicios", "Servicios (luz, gas, internet)"), ("honorarios", "Honorarios profesionales")]}
+        provs = [Proveedor.objects.create(nombre=n, cuit=cuit, categoria=c, contacto=contacto) for n, cuit, c, contacto in [
+            ("YPF", "30-54668997-9", cats["combustible"], "cuentas@ypf.example"),
+            ("Edesur", "30-65511620-2", cat_var["servicios"], "0800-333-7878"),
+            ("Telecom", "30-63945373-8", cat_var["servicios"], "empresas@telecom.example"),
+            ("Estudio Pérez", "20-22333444-5", cat_var["honorarios"], "Lic. Pérez 11-4567-8901")]]
+        conceptos = {"YPF": "Combustible flota", "Edesur": "Energía depósito", "Telecom": "Internet y telefonía",
+                     "Estudio Pérez": "Honorarios contables"}
         contable = User.objects.get(username="contable")
-        for k in range(18):
+        medios = ["transferencia", "transferencia", "debito", "cheque"]
+        for k in range(24):
             f = self.hoy - timedelta(days=self.r.randint(0, 120))
-            c = self.r.choice(list(cat_var.values()) + [cats["combustible"]])
-            Egreso.objects.create(fecha=f, categoria=c, monto=Decimal(self.r.randint(80, 900) * 1000),
-                                  descripcion=self.r.choice(["Factura mensual", "Carga de combustible flota",
-                                                             "Honorarios contador", "Servicio de internet oficina"]),
-                                  proveedor=self.r.choice(["YPF", "Edesur", "Telecom", "Estudio Pérez"]),
-                                  numero_comprobante=f"A-0003-{self.r.randint(10000, 99999)}",
+            prov = self.r.choice(provs)
+            pagado = (self.hoy - f).days > 25 or self.r.random() < .5
+            Egreso.objects.create(fecha=f, categoria=prov.categoria, monto=Decimal(self.r.randint(80, 900) * 1000),
+                                  descripcion=conceptos[prov.nombre], proveedor=prov.nombre, proveedor_ref=prov,
+                                  tipo_comprobante="factura", numero_comprobante=f"A-0003-{self.r.randint(10000, 99999):08d}",
+                                  vencimiento=f + timedelta(days=self.r.choice([10, 15, 30])), pagado=pagado,
+                                  fecha_pago=f + timedelta(days=self.r.randint(3, 20)) if pagado else None,
+                                  medio_pago=self.r.choice(medios) if pagado else "",
                                   comprobante="egresos/demo.pdf" if self.r.random() < .8 else "", cargado_por=contable)
+        self.sueldos()
         # egresos fijos reales de meses anteriores
         f = self.inicio.replace(day=1)
         while f <= self.hoy:

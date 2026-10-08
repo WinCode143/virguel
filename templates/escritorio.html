@@ -5,15 +5,15 @@
     <a class="marca" href="{% url 'tablero:inicio' %}"><img class="logo" src="{% static 'img/icono.svg' %}" alt=""><span><b>Virguel</b><small>Control de personal y operación</small></span></a>
     <nav class="nav">
       {% if es_contabilidad %}
-      <details open class="nav-grupo" {% grupo_abierto 'finanzas:panel' 'finanzas:egresos' 'finanzas:egreso_nuevo' 'finanzas:egreso' 'finanzas:gastos_campo' 'finanzas:presupuestos' 'finanzas:configuracion' 'tablero:finanzas' %}>
+      <details open class="nav-grupo" {% grupo_abierto 'finanzas:panel' 'finanzas:comprobantes' 'finanzas:comprobante_nuevo' 'finanzas:comprobante' 'finanzas:sueldos' 'finanzas:materiales' 'finanzas:gastos_campo' 'finanzas:presupuestos' 'finanzas:configuracion' %}>
         <summary>Finanzas {% icono 'abajo' %}</summary>
-        {% nav 'finanzas:panel' 'Panel y presupuesto' 'billetera' %}
-        {% nav 'finanzas:egresos' 'Egresos y comprobantes' 'documento' %}
-        {% nav 'finanzas:egreso_nuevo' 'Cargar egreso' 'mas' %}
+        {% nav 'finanzas:panel' 'Resumen' 'billetera' %}
+        {% nav 'finanzas:comprobantes' 'Comprobantes y pagos' 'documento' %}
+        {% nav 'finanzas:sueldos' 'Sueldos y horas extra' 'personas' %}
+        {% nav 'finanzas:materiales' 'Materiales' 'caja' %}
         {% nav 'finanzas:gastos_campo' 'Reintegros a técnicos' 'check' %}
-        {% nav 'finanzas:presupuestos' 'Presupuestos' 'calendario' %}
-        {% nav 'tablero:finanzas' 'Histórico y proyección' 'tendencia' %}
-        {% nav 'finanzas:configuracion' 'Costos fijos y categorías' 'ajustes' %}
+        {% nav 'finanzas:presupuestos' 'Presupuesto' 'calendario' %}
+        {% nav 'finanzas:configuracion' 'Configuración' 'ajustes' %}
       </details>
       {% elif es_deposito %}
       <div class="nav-grupo">
@@ -82,15 +82,15 @@
       </details>
 
       {% if es_gerencia %}
-      <details class="nav-grupo" {% grupo_abierto 'finanzas:panel' 'finanzas:egresos' 'finanzas:egreso_nuevo' 'finanzas:egreso' 'finanzas:gastos_campo' 'finanzas:presupuestos' 'finanzas:configuracion' 'tablero:finanzas' %}>
+      <details class="nav-grupo" {% grupo_abierto 'finanzas:panel' 'finanzas:comprobantes' 'finanzas:comprobante_nuevo' 'finanzas:comprobante' 'finanzas:sueldos' 'finanzas:materiales' 'finanzas:gastos_campo' 'finanzas:presupuestos' 'finanzas:configuracion' %}>
         <summary>Finanzas {% icono 'abajo' %}</summary>
-        {% nav 'finanzas:panel' 'Panel y presupuesto' 'billetera' %}
-        {% nav 'finanzas:egresos' 'Egresos y comprobantes' 'documento' %}
-        {% nav 'finanzas:egreso_nuevo' 'Cargar egreso' 'mas' %}
+        {% nav 'finanzas:panel' 'Resumen' 'billetera' %}
+        {% nav 'finanzas:comprobantes' 'Comprobantes y pagos' 'documento' %}
+        {% nav 'finanzas:sueldos' 'Sueldos y horas extra' 'personas' %}
+        {% nav 'finanzas:materiales' 'Materiales' 'caja' %}
         {% nav 'finanzas:gastos_campo' 'Reintegros a técnicos' 'check' %}
-        {% nav 'finanzas:presupuestos' 'Presupuestos' 'calendario' %}
-        {% nav 'tablero:finanzas' 'Histórico y proyección' 'tendencia' %}
-        {% nav 'finanzas:configuracion' 'Costos fijos y categorías' 'ajustes' %}
+        {% nav 'finanzas:presupuestos' 'Presupuesto' 'calendario' %}
+        {% nav 'finanzas:configuracion' 'Configuración' 'ajustes' %}
       </details>
       <details class="nav-grupo" {% grupo_abierto 'tablero:importar' 'tablero:powerbi' 'personal:usuarios' 'personal:usuario' 'personal:accesos' %}>
         <summary>Administración {% icono 'abajo' %}</summary>

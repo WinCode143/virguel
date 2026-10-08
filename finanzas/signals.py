@@ -8,6 +8,8 @@ from incidentes.models import Siniestro
 from inventario.models import LoteIngreso
 from operaciones.models import GastoOrden
 
+from .models import Liquidacion
+
 from .models import Egreso, registrar_egreso_automatico
 
 
@@ -24,6 +26,11 @@ def egreso_de(instancia):
         return (f"asignacion:{instancia.pk}", "epp-herramientas", instancia.fecha_entrega,
                 instancia.elemento.costo * instancia.cantidad,
                 f"Entrega {instancia.elemento} a {instancia.persona.nombre_completo}")
+    if isinstance(instancia, Liquidacion):
+        from .sueldos import fin_de_mes
+        monto = instancia.costo_total if instancia.estado != "borrador" else 0
+        return (f"liquidacion:{instancia.pk}", "sueldos", fin_de_mes(instancia.periodo), monto,
+                f"Sueldo {instancia.periodo:%m/%Y} {instancia.persona.nombre_completo} (con cargas)")
     if isinstance(instancia, GastoOrden):
         monto = instancia.monto if instancia.estado != "rechazado" else 0
         return (f"gasto_orden:{instancia.pk}", "gastos-de-campo", instancia.fecha, monto,
@@ -40,7 +47,7 @@ def sincronizar(instancia):
         registrar_egreso_automatico(*datos)
 
 
-MODELOS = (LoteIngreso, ServiceRealizado, Asignacion, Siniestro, GastoOrden)
+MODELOS = (LoteIngreso, ServiceRealizado, Asignacion, Siniestro, GastoOrden, Liquidacion)
 
 
 @receiver(post_save)
