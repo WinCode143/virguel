@@ -493,8 +493,10 @@ los precios deben llevar símbolo pesos".
 "Subir el repo con instrucciones de uso a GitHub para que lo baje un compañero".
 
 ### Hecho
-- Repositorio **privado** https://github.com/WinCode143/virguel (rama `master`). El `.env`, `media/`
+- Repositorio **público** https://github.com/WinCode143/virguel (rama `master`). El `.env`, `media/`
   y `capturas/` no se suben (están en `.gitignore`).
 - README: nueva sección "Bajarlo y correrlo en otra PC" con pasos para Linux/Mac y Windows usando
   `venv` + `pip` (sin depender de `uv`), cómo actualizar con `git pull` y problemas comunes.
-- Para que el compañero pueda bajarlo hay que invitarlo como colaborador (repo privado).
+- Antes de hacerlo público se revisó todo el historial (sin claves) y se reemplazó el mail personal
+  de los commits por el mail privado de GitHub (`git filter-repo --mailmap`); el repo local quedó
+  configurado con ese mail para los commits nuevos.
