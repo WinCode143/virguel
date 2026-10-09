@@ -19,7 +19,70 @@ Documentación (índice completo en [docs/README.md](docs/README.md)):
 - [docs/BITACORA.md](docs/BITACORA.md) — registro de lo que se fue haciendo.
 - [docs/TECNOLOGIAS.md](docs/TECNOLOGIAS.md) — tecnologías usadas.
 
-## Verlo funcionando (un comando)
+## Bajarlo y correrlo en otra PC (paso a paso)
+
+Necesitás instalado: **Git**, **Python 3.12 o más nuevo** y **Docker** (Docker Desktop en
+Windows/Mac). Docker sólo se usa para la base de datos PostgreSQL.
+
+**1. Bajar el código**
+```bash
+git clone https://github.com/WinCode143/virguel.git
+cd virguel
+```
+
+**2. Crear el archivo de configuración** (copia del ejemplo; para probar en local no hace falta
+cambiar nada, pero conviene poner una contraseña propia en `POSTGRES_PASSWORD`)
+```bash
+cp .env.example .env          # Windows (PowerShell): copy .env.example .env
+```
+
+**3. Levantar la base de datos** (queda en el puerto 5434)
+```bash
+docker compose up -d
+```
+
+**4. Instalar dependencias de Python**
+```bash
+# Linux / Mac
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+
+# Windows (PowerShell)
+py -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+```
+
+**5. Crear las tablas y cargar datos de prueba**
+```bash
+# Linux / Mac  (en Windows reemplazar .venv/bin/python por .venv\Scripts\python)
+.venv/bin/python manage.py migrate
+.venv/bin/python manage.py configurar_grupos
+.venv/bin/python manage.py generar_demo --reset
+.venv/bin/python manage.py tareas_diarias
+```
+
+**6. Arrancar el servidor**
+```bash
+.venv/bin/python manage.py runserver
+```
+Abrir http://localhost:8000 y entrar con `gerencia` / `virguel2026` (más usuarios en la tabla de
+abajo). La app del celular está en http://localhost:8000/app/ (probar con `t014` o `s002`).
+
+**Para actualizar** cuando haya cambios nuevos:
+```bash
+git pull
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python manage.py migrate
+```
+
+**Problemas comunes**
+- *"connection refused" al migrar*: la base todavía no arrancó; esperar unos segundos o revisar
+  `docker compose ps`.
+- *Puerto 5434 ocupado*: cambiar `POSTGRES_PORT` en `.env` y volver a `docker compose up -d`.
+- *Cambié `POSTGRES_PASSWORD` después de crear la base*: borrar el volumen con
+  `docker compose down -v` (borra los datos) y repetir desde el paso 3.
+
+## Verlo funcionando (un comando, Linux)
 
 ```bash
 scripts/ver.sh
