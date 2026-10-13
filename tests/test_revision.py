@@ -785,3 +785,70 @@ class PrevisionComprasTests(TestCase):
         self.demanda(3)
         self.assertContains(self.client.get("/tablero/stock/"), "Libre en técnicos")
         self.assertEqual(self.client.get("/tablero/planificacion/").status_code, 200)
+
+
+class LiquidacionClaroTests(TestCase):
+    """Liquidación esperada de Claro desde las órdenes completadas (supuestos configurables)."""
+
+    def setUp(self):
+        from operaciones.models import OrdenTrabajo, TipoTarea
+        self.mes = HOY.replace(day=1)
+        fo = TipoTarea.objects.create(codigo="FO", nombre="Fibra", precio_claro=Decimal("1000"))
+        rep = TipoTarea.objects.create(codigo="REP", nombre="Reparación", precio_claro=Decimal("400"))
+        t = persona("T1")
+        for i in range(3):
+            OrdenTrabajo.objects.create(numero=f"F{i}", tipo=fo, tecnico=t, estado="completada", fecha_ejecucion=self.mes)
+        OrdenTrabajo.objects.create(numero="R1", tipo=rep, tecnico=t, estado="completada", fecha_ejecucion=self.mes)
+        OrdenTrabajo.objects.create(numero="RT", tipo=rep, tecnico=t, estado="completada", fecha_ejecucion=self.mes,
+                                    es_retrabajo=True)
+        OrdenTrabajo.objects.create(numero="X", tipo=fo, tecnico=t, estado="fallida", fecha_ejecucion=self.mes)
+
+    def test_calculo_y_registro(self):
+        from core.models import Parametros
+        from finanzas.liquidacion_claro import calcular, registrar
+        c = calcular(self.mes)
+        self.assertEqual((c["bruto"], c["retencion"], c["neto"]), (Decimal("3400"), Decimal("102.00"), Decimal("3298.00")))
+        i = registrar(self.mes)
+        registrar(self.mes)  # recalcular no duplica
+        from finanzas.models import Ingreso
+        self.assertEqual(Ingreso.objects.count(), 1)
+        self.assertGreater(i.fecha_esperada_cobro, self.mes)
+        p = Parametros.actual()
+        p.claro_paga_retrabajos = True
+        p.save()
+        self.assertEqual(calcular(self.mes)["bruto"], Decimal("3800"))
+
+    def test_pantalla_y_comando(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from finanzas.models import Ingreso
+        u = User.objects.create_user("cont", password="x")
+        u.groups.add(Group.objects.create(name="Contabilidad"))
+        self.client.force_login(u)
+        r = self.client.get(f"/finanzas/ingresos/?mes_claro={self.mes:%Y-%m}")
+        self.assertContains(r, "Liquidación esperada de Claro")
+        self.client.post("/finanzas/ingresos/", {"accion": "liquidacion_claro", "mes_claro": f"{self.mes:%Y-%m}"})
+        self.assertEqual(Ingreso.objects.get().monto, Decimal("3298.00"))
+        call_command("liquidacion_claro", "--mes", f"{self.mes:%Y-%m}", stdout=StringIO())
+        self.assertEqual(Ingreso.objects.count(), 1)
+
+
+class AlternativasPagoTests(TestCase):
+    def test_valor_presente(self):
+        from finanzas.alternativas import comparar, valor_presente
+        self.assertEqual(valor_presente(1, Decimal("103"), Decimal("3")), Decimal("100.00"))
+        filas = comparar([{"nombre": "Contado", "anticipo": Decimal("1000")},
+                          {"nombre": "6 cuotas", "cuotas": 6, "monto_cuota": Decimal("180")}], Decimal("3"))
+        self.assertEqual(filas[0]["nombre"], "6 cuotas")  # 6 × 180 = 1080, pero a valor de hoy ≈ 975
+        self.assertTrue(filas[0]["mejor"])
+
+    def test_pantalla(self):
+        u = User.objects.create_user("cont", password="x")
+        u.groups.add(Group.objects.create(name="Contabilidad"))
+        self.client.force_login(u)
+        r = self.client.get("/finanzas/alternativas-de-pago/", {"tasa": "3", "nombre_1": "Contado", "anticipo_1": "1.000",
+                                                                "nombre_2": "Cuotas", "cuotas_2": "6",
+                                                                "monto_cuota_2": "180"})
+        self.assertContains(r, "más conveniente")

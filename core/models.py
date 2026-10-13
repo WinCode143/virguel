@@ -86,6 +86,17 @@ class Parametros(models.Model):
         help_text="Con menos órdenes (y sin controles suficientes) la calidad queda sin dato.")
     evidencia_min_controles = models.PositiveIntegerField(
         "Evaluación: controles mínimos para medir calidad", default=2)
+    claro_retencion = models.DecimalField(
+        "Claro: retenciones y débitos (% del bruto)", max_digits=5, decimal_places=2, default=Decimal("3"),
+        help_text="Se descuenta del bruto de la liquidación esperada (retenciones impositivas, débitos por calidad).")
+    claro_dias_cobro = models.PositiveIntegerField(
+        "Claro: días desde fin de mes hasta el cobro", default=45)
+    claro_paga_retrabajos = models.BooleanField(
+        "Claro paga las visitas de retrabajo", default=False,
+        help_text="Si está apagado, las órdenes de retrabajo no suman a la liquidación esperada.")
+    tasa_descuento_mensual = models.DecimalField(
+        "Costo del dinero (% mensual)", max_digits=5, decimal_places=2, default=Decimal("3"),
+        help_text="Para comparar alternativas de pago (contado vs. cuotas) a valor presente.")
     controles_verificacion_accion = models.PositiveIntegerField(
         "Acciones correctivas: controles posteriores para verificarlas", default=2,
         help_text="Una acción cumplida se considera efectiva sólo si después hubo al menos estos controles sin "

@@ -1,0 +1,19 @@
+{% extends "escritorio.html" %}{% load formato ui %}
+{% block titulo %}Alternativas de pago · Virguel{% endblock %}
+{% block encabezado %}<h1>Alternativas de pago</h1><p class="sub">Compará pagar de contado, en cuotas o con un plan: cada pago futuro se lleva a valor de hoy con el costo del dinero. La opción más barata es la de menor valor presente.</p>{% endblock %}
+{% block contenido %}
+<form method="get" class="card">
+  <label>Costo del dinero (% mensual) <input name="tasa" value="{{ tasa }}" inputmode="decimal" style="max-width:6rem"></label>
+  <div class="tabla-scroll"><table><thead><tr><th>Alternativa</th><th>Anticipo / contado</th><th>Cuotas</th><th>Monto de cada cuota</th><th>Primera cuota (meses)</th></tr></thead>
+  <tbody>{% for k in rango %}<tr>
+    <td><input name="nombre_{{ k }}" value="{% cycle f.nombre_1 f.nombre_2 f.nombre_3 f.nombre_4 %}" placeholder="{% if k == 1 %}Contado{% elif k == 2 %}6 cuotas{% else %}Otra{% endif %}"></td>
+    <td><input name="anticipo_{{ k }}" value="{% cycle f.anticipo_1 f.anticipo_2 f.anticipo_3 f.anticipo_4 %}" inputmode="decimal"></td>
+    <td><input type="number" min="0" name="cuotas_{{ k }}" value="{% cycle f.cuotas_1 f.cuotas_2 f.cuotas_3 f.cuotas_4 %}" style="max-width:5rem"></td>
+    <td><input name="monto_cuota_{{ k }}" value="{% cycle f.monto_cuota_1 f.monto_cuota_2 f.monto_cuota_3 f.monto_cuota_4 %}" inputmode="decimal"></td>
+    <td><input type="number" min="0" name="primera_{{ k }}" value="{% cycle f.primera_1 f.primera_2 f.primera_3 f.primera_4 %}" placeholder="1" style="max-width:5rem"></td></tr>{% endfor %}</tbody></table></div>
+  <button class="btn">Comparar</button>
+</form>
+{% if filas %}<div class="card"><h2>Resultado</h2><table><thead><tr><th>Alternativa</th><th class="num">Total a pagar</th><th class="num">Valor presente</th><th class="num">Diferencia con la mejor</th></tr></thead>
+<tbody>{% for f in filas %}<tr><td>{{ f.nombre }} {% if f.mejor %}<span class="estado ok">más conveniente</span>{% endif %}</td><td class="num">{{ f.total|pesos }}</td><td class="num">{{ f.valor_presente|pesos }}</td><td class="num">{% if f.mejor %}—{% else %}{{ f.diferencia|pesos }}{% endif %}</td></tr>{% endfor %}</tbody></table>
+<p class="muted" style="font-size:.82rem">No considera inflación por separado ni beneficios impositivos; el costo del dinero por defecto sale de Parámetros.</p></div>{% endif %}
+{% endblock %}

@@ -11,6 +11,7 @@ urlpatterns = [
     path("comprobantes/<int:pk>/pagos/", views.pagos_egreso, name="pagos_egreso"),
     path("caja/", views.caja, name="caja"),
     path("ingresos/", views.ingresos, name="ingresos"),
+    path("alternativas-de-pago/", views.alternativas, name="alternativas"),
     path("sueldos/", views.sueldos, name="sueldos"),
     path("materiales/", views.materiales, name="materiales"),
     path("reintegros/", views.gastos_campo, name="gastos_campo"),

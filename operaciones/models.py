@@ -13,6 +13,9 @@ class TipoTarea(models.Model):
         default=60, help_text="Tiempo estándar esperado para completar la tarea.")
     puede_requerir_decodificador = models.BooleanField(
         default=False, help_text="Si en esta tarea el cliente puede pedir decodificador para TV.")
+    precio_claro = models.DecimalField(
+        "Precio que paga Claro", max_digits=12, decimal_places=2, default=Decimal("0"),
+        help_text="Por orden completada (baremo). Se usa para calcular la liquidación esperada de Claro.")
     activo = models.BooleanField(default=True)
 
     class Meta:

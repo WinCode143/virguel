@@ -2,6 +2,13 @@
 {% block titulo %}Ingresos y cobros · Virguel{% endblock %}
 {% block encabezado %}<h1>Ingresos y cobros</h1><p class="sub">Lo que la empresa factura o liquida (por ejemplo, la liquidación de Claro por los trabajos del mes) y lo que efectivamente se cobra, total o en partes.</p>{% endblock %}
 {% block contenido %}
+<div class="card"><h2>Liquidación esperada de Claro</h2>
+<form class="filtros" method="get"><label>Mes<input type="month" name="mes_claro" value="{{ claro.mes|date:'Y-m' }}"></label><button class="btn sec">Ver</button></form>
+<div class="tabla-scroll"><table><thead><tr><th>Tipo de tarea</th><th class="num">Órdenes completadas</th><th class="num">Precio Claro</th><th class="num">Importe</th></tr></thead>
+<tbody>{% for f in claro.filas %}<tr><td>{{ f.tipo }}</td><td class="num">{{ f.ordenes }}</td><td class="num">{% if f.precio %}{{ f.precio|pesos }}{% else %}<span class="estado aviso">sin precio</span>{% endif %}</td><td class="num">{{ f.importe|pesos }}</td></tr>{% empty %}<tr><td class="muted" colspan="4">Sin órdenes completadas en el mes.</td></tr>{% endfor %}</tbody>
+<tfoot><tr><td colspan="3">Bruto</td><td class="num">{{ claro.bruto|pesos }}</td></tr><tr><td colspan="3">Retenciones y débitos</td><td class="num">− {{ claro.retencion|pesos }}</td></tr><tr><td colspan="3"><b>Neto a cobrar</b> <small class="muted">(se espera el {{ claro.cobro|date:"d/m/Y" }})</small></td><td class="num"><b>{{ claro.neto|pesos }}</b></td></tr></tfoot></table></div>
+<form method="post" style="margin-top:.6rem">{% csrf_token %}<input type="hidden" name="accion" value="liquidacion_claro"><input type="hidden" name="mes_claro" value="{{ claro.mes|date:'Y-m' }}"><button class="btn">Registrar como ingreso a cobrar</button></form>
+<p class="muted" style="font-size:.82rem">Supuestos editables: precio por tipo de tarea (admin → Tipos de tarea), % de retenciones, días hasta el cobro y si se pagan los retrabajos (Parámetros). Si la liquidación real difiere, se corrige el monto del ingreso.</p></div>
 <div class="grid g2">
 <form method="post" class="card form-movil" style="align-self:start">{% csrf_token %}
   <h2>Nuevo ingreso a cobrar</h2>

@@ -122,7 +122,10 @@ Sistema de indicadores IPT (técnicos) e IGS (supervisores) con metas configurab
 ## Revisión funcional y técnica del 12/10/2026
 
 Se corrigieron los hallazgos H01–H10 (detalle y estado en `docs/PLAN_CORRECCIONES.md`). Quedan
-supuestos a validar con la empresa:
+supuestos a validar con la empresa. Mientras tanto, `generar_demo` carga **valores de prueba
+inventados** para todos ellos (precios de Claro, cuentas y saldos, cobros, un plan de pagos fiscal y
+un préstamo en cuotas, compras en camino, compras del pañol y atribuciones confirmadas), para poder
+probar el sistema completo. Se corrigen en el admin y en Parámetros cuando lleguen los reales:
 
 - **Liquidación de Claro**: frecuencia, base (por orden, por puntos/baremo), retenciones, débitos por
   calidad y plazo de cobro. Hoy el ingreso se carga a mano con su fecha esperada de cobro.
