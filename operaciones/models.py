@@ -47,6 +47,35 @@ class Jornada(models.Model):
         return f"{self.fecha} - {self.tecnico}"
 
 
+class Atribucion(models.TextChoices):
+    """A quién se atribuye que una orden no se haya resuelto."""
+    TECNICO = "tecnico", "Técnico (desempeño)"
+    CLIENTE = "cliente", "Cliente / datos de la orden"
+    SUMINISTRO = "suministro", "Empresa / abastecimiento"
+    EXTERNO = "externo", "Externo (red, clima)"
+    A_INVESTIGAR = "a_investigar", "A investigar"
+
+
+class MotivoNoResolucion(models.Model):
+    """Catálogo común de motivos de no resolución y su atribución por defecto.
+
+    Lo usan la evaluación de técnicos y los indicadores (IPT/IGS): una orden no resuelta sólo
+    cuenta contra el técnico si la atribución es "técnico" (por catálogo o confirmada por el
+    supervisor). Lo dudoso queda "a investigar" y no penaliza hasta que se confirme."""
+
+    codigo = models.CharField(max_length=20, unique=True)
+    nombre = models.CharField(max_length=80)
+    atribucion = models.CharField(max_length=15, choices=Atribucion.choices, default=Atribucion.A_INVESTIGAR)
+
+    class Meta:
+        ordering = ["nombre"]
+        verbose_name = "Motivo de no resolución"
+        verbose_name_plural = "Motivos de no resolución"
+
+    def __str__(self):
+        return f"{self.nombre} ({self.get_atribucion_display()})"
+
+
 class OrdenTrabajo(models.Model):
     class Estado(models.TextChoices):
         PENDIENTE = "pendiente", "Pendiente"
@@ -78,6 +107,11 @@ class OrdenTrabajo(models.Model):
         ("cliente_ausente", "Cliente ausente"), ("falta_material", "Faltó material"),
         ("problema_red", "Problema de red / externo"), ("direccion", "Dirección errónea"),
         ("clima", "Clima"), ("rechazo", "Cliente rechazó el trabajo"), ("otro", "Otro")])
+    atribucion_confirmada = models.CharField(
+        "Atribución confirmada", max_length=15, choices=Atribucion.choices, blank=True,
+        help_text="La confirma el supervisor; si está vacía vale la del catálogo de motivos.")
+    atribucion_confirmada_por = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL,
+                                                  related_name="+")
     minutos_viaje = models.PositiveIntegerField("Tiempo de viaje (min)", null=True, blank=True)
     minutos_retorno = models.PositiveIntegerField("Tiempo de retorno (min)", null=True, blank=True)
     inicio_trabajo = models.DateTimeField(null=True, blank=True)

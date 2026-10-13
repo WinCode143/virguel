@@ -16,12 +16,12 @@ from django.utils import timezone
 from core.models import Indicador, Parametros, Persona
 from incidentes.models import Siniestro
 from inventario.models import PedidoMaterial, RecetaMaterial, Salida
+from operaciones.criterios import q_falla_tecnico
 from operaciones.models import Jornada, OrdenTrabajo
 from personal.indicadores import resumen as resumen_asistencia
 from personal.models import Asistencia, Novedad
 from supervision.models import AccionCorrectiva, InformeControl
 
-EVITABLES = ("falta_material", "otro")
 
 
 @dataclass
@@ -155,9 +155,9 @@ def valores_tecnicos(desde: date, hasta: date, tecnicos) -> dict:
 
     ejecutadas = dict(OrdenTrabajo.objects.filter(tecnico_id__in=ids, fecha_ejecucion__range=(desde, hasta))
                       .values_list("tecnico_id").annotate(n=Count("id")))
-    evitables = dict(OrdenTrabajo.objects.filter(tecnico_id__in=ids, fecha_ejecucion__range=(desde, hasta),
-                                                 estado__in=["fallida", "reprogramada"],
-                                                 motivo_no_resuelto__in=EVITABLES)
+    # Mismo criterio que la evaluación: sólo lo atribuido al técnico (operaciones/criterios.py)
+    evitables = dict(OrdenTrabajo.objects.filter(q_falla_tecnico(), tecnico_id__in=ids,
+                                                 fecha_ejecucion__range=(desde, hasta))
                      .values_list("tecnico_id").annotate(n=Count("id")))
     controles = dict(InformeControl.objects.filter(tecnico_id__in=ids, fecha__range=(desde, hasta))
                      .values_list("tecnico_id").annotate(p=Avg("puntaje")))

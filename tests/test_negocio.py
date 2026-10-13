@@ -666,6 +666,9 @@ class IndicadoresProductividadTests(TestCase):
         for k, motivo in enumerate(["cliente_ausente", "clima", "falta_material"]):
             OrdenTrabajo.objects.create(numero=f"f{k}", tipo=self.tipo, tecnico=self.t, estado="fallida",
                                         motivo_no_resuelto=motivo, fecha_programada=d, fecha_ejecucion=d)
+        # Falta de material no se atribuye sola al técnico (puede ser un pedido no atendido): queda a investigar
+        self.assertEqual(self.valores([self.t])[self.t.id]["no_resueltas_evitables"], 0)
+        OrdenTrabajo.objects.filter(numero="f2").update(atribucion_confirmada="tecnico")  # el supervisor lo confirma
         self.assertAlmostEqual(self.valores([self.t])[self.t.id]["no_resueltas_evitables"], 100 / 23)  # 1 de 23
 
     def test_cierre_en_sitio_por_distancia_gps(self):

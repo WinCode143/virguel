@@ -4,7 +4,10 @@ Idea central (pedido del cliente): no alcanza con saber si alguien produce
 hoy. Se separan cuatro dimensiones y se mira la tendencia:
 
   * Productividad   - órdenes completadas por día en calle, relativo a la mediana del equipo.
-  * Calidad         - retrabajos que causó, órdenes fallidas y puntaje en controles.
+  * Calidad         - retrabajos que causó, órdenes no resueltas ATRIBUIDAS al técnico
+                      (catálogo común de motivos, operaciones/criterios.py) y puntaje en controles.
+                      Un cliente ausente o un problema de red no cuentan; lo dudoso queda
+                      "a investigar" y no penaliza hasta que el supervisor lo confirme.
   * Disciplina      - apercibimientos, multas y suspensiones.
   * Seguridad       - siniestros causados (ponderados por gravedad) y EPP faltante/vencido.
 
@@ -24,7 +27,8 @@ from django.utils import timezone
 from core.models import Parametros, Persona
 from herramientas.models import Asignacion, Elemento
 from incidentes.models import Siniestro
-from operaciones.models import Jornada, OrdenTrabajo
+from operaciones.criterios import NO_RESUELTAS, atribuciones_por_motivo
+from operaciones.models import Atribucion, Jornada, OrdenTrabajo
 from supervision.models import AccionCorrectiva, InformeControl
 
 from .models import Participacion
@@ -57,7 +61,9 @@ class EvaluacionTecnico:
     tecnico: Persona
     dias_calle: int = 0
     completadas: int = 0
-    fallidas: int = 0
+    fallidas: int = 0                    # no resueltas atribuidas al técnico
+    fallidas_a_investigar: int = 0       # no resueltas cuya atribución falta confirmar
+    no_resueltas_ajenas: int = 0         # cliente ausente, red, clima, abastecimiento
     retrabajos_causados: int = 0
     productividad: float = 0.0           # OT completadas por día en calle
     indice_productividad: float = 0.0    # relativo a la mediana del equipo (1.0 = mediana)
@@ -124,15 +130,23 @@ def evaluar_tecnicos(hasta: date | None = None, dias: int | None = None, tecnico
     ots = OrdenTrabajo.objects.filter(tecnico_id__in=ids, fecha_ejecucion__range=(desde, hasta))
     serie = defaultdict(lambda: defaultdict(int))
     tiempos = defaultdict(list)
-    for tid, estado, fecha, mins, estandar in ots.values_list(
-            "tecnico_id", "estado", "fecha_ejecucion", "minutos_reales", "tipo__minutos_estandar"):
+    catalogo = atribuciones_por_motivo()
+    for tid, estado, fecha, mins, estandar, motivo, confirmada in ots.values_list(
+            "tecnico_id", "estado", "fecha_ejecucion", "minutos_reales", "tipo__minutos_estandar",
+            "motivo_no_resuelto", "atribucion_confirmada"):
         if estado == OrdenTrabajo.Estado.COMPLETADA:
             evs[tid].completadas += 1
             serie[tid][fecha] += 1
             if mins:
                 tiempos[tid].append(estandar / mins)
-        elif estado == OrdenTrabajo.Estado.FALLIDA:
-            evs[tid].fallidas += 1
+        elif estado in NO_RESUELTAS:
+            a = confirmada or catalogo.get(motivo or "", Atribucion.A_INVESTIGAR)
+            if a == Atribucion.TECNICO:
+                evs[tid].fallidas += 1
+            elif a == Atribucion.A_INVESTIGAR:
+                evs[tid].fallidas_a_investigar += 1
+            else:
+                evs[tid].no_resueltas_ajenas += 1
     for r in (OrdenTrabajo.objects.filter(es_retrabajo=True, orden_original__tecnico_id__in=ids,
                                           fecha_programada__range=(desde, hasta))
               .values("orden_original__tecnico_id").annotate(n=Count("id"))):

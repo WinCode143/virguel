@@ -357,3 +357,64 @@ class CustodiaHerramientasTests(TestCase):
         casco = Elemento.objects.create(codigo="CAS", nombre="Casco", costo=Decimal("80"))
         Asignacion.objects.create(persona=persona("T1"), elemento=casco, cantidad=2, origen="compra")
         self.assertEqual(Egreso.objects.get().monto, Decimal("160"))
+
+
+class AtribucionNoResueltasTests(TestCase):
+    """H03: una orden no resuelta por causa ajena (cliente ausente) no penaliza al técnico."""
+
+    def setUp(self):
+        from operaciones.models import Jornada, OrdenTrabajo, TipoTarea
+        self.tipo = TipoTarea.objects.create(codigo="I", nombre="Inst", minutos_estandar=60)
+        self.sup = persona("S1", rol="supervisor", usuario=User.objects.create_user("sup", password="x"))
+        self.a = persona("TA", supervisor=self.sup)
+        self.b = persona("TB", supervisor=self.sup)
+        n = 0
+        for t in (self.a, self.b):
+            for d in range(5):
+                f = HOY - timedelta(days=d + 1)
+                Jornada.objects.create(tecnico=t, fecha=f, en_calle=True)
+                n += 1
+                OrdenTrabajo.objects.create(numero=f"OK{n}", tipo=self.tipo, tecnico=t, estado="completada",
+                                            fecha_ejecucion=f, fecha_programada=f)
+        for i in range(5):
+            OrdenTrabajo.objects.create(numero=f"F{i}", tipo=self.tipo, tecnico=self.a, estado="fallida",
+                                        motivo_no_resuelto="cliente_ausente", fecha_ejecucion=HOY - timedelta(days=1))
+
+    def ev(self, t):
+        from capacitacion.evaluacion import evaluar_tecnicos
+        return {e.tecnico.legajo: e for e in evaluar_tecnicos(HOY, tecnicos=[self.a, self.b])}[t.legajo]
+
+    def test_escenario_de_la_revision(self):
+        ea, eb = self.ev(self.a), self.ev(self.b)
+        self.assertEqual(ea.score_calidad, eb.score_calidad)
+        self.assertEqual(ea.score_calidad, 100)
+        self.assertEqual((ea.fallidas, ea.no_resueltas_ajenas), (0, 5))
+        self.assertEqual(ea.diagnostico, eb.diagnostico)
+
+    def test_falta_material_queda_a_investigar_hasta_confirmar(self):
+        from operaciones.models import OrdenTrabajo
+        OrdenTrabajo.objects.filter(numero__startswith="F").update(motivo_no_resuelto="falta_material")
+        ea = self.ev(self.a)
+        self.assertEqual((ea.fallidas, ea.fallidas_a_investigar, ea.score_calidad), (0, 5, 100))
+        # El supervisor confirma que dos fueron responsabilidad del técnico
+        self.client.force_login(self.sup.usuario)
+        for ot in OrdenTrabajo.objects.filter(numero__in=["F0", "F1"]):
+            self.client.post("/app/no-resueltas/", {"orden": ot.id, "atribucion": "tecnico"})
+        ea = self.ev(self.a)
+        self.assertEqual((ea.fallidas, ea.fallidas_a_investigar), (2, 3))
+        self.assertLess(ea.score_calidad, 100)
+
+    def test_indicadores_usan_el_mismo_criterio(self):
+        from operaciones.criterios import q_falla_tecnico
+        from operaciones.models import OrdenTrabajo
+        self.assertEqual(OrdenTrabajo.objects.filter(q_falla_tecnico()).count(), 0)
+        OrdenTrabajo.objects.filter(numero="F0").update(atribucion_confirmada="tecnico")
+        self.assertEqual(OrdenTrabajo.objects.filter(q_falla_tecnico()).count(), 1)
+
+    def test_supervisor_no_confirma_ordenes_de_otro_equipo(self):
+        from operaciones.models import OrdenTrabajo
+        otro = persona("S2", rol="supervisor", usuario=User.objects.create_user("s2", password="x"))
+        self.client.force_login(otro.usuario)
+        ot = OrdenTrabajo.objects.get(numero="F0")
+        r = self.client.post("/app/no-resueltas/", {"orden": ot.id, "atribucion": "tecnico"})
+        self.assertEqual(r.status_code, 404)
