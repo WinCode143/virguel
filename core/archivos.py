@@ -90,9 +90,10 @@ def puede_ver(user, ruta: str):
         return None
     yo = persona_de(user)
     for modelo, campo, permiso in _reglas().get(carpeta, []):
-        obj = modelo.objects.filter(**{campo: ruta}).first()
-        if obj is not None:
-            return getattr(obj, campo) if permiso(rol, yo, obj) else None
+        # Puede verlo si puede ver alguno de los registros que usan ese archivo
+        for obj in modelo.objects.filter(**{campo: ruta})[:50]:
+            if permiso(rol, yo, obj):
+                return getattr(obj, campo)
     return None
 
 

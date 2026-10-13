@@ -95,6 +95,11 @@ class ArchivosPrivadosTests(TestCase):
         r = self.client.get(self.url(self.novedad.certificado))
         self.assertTrue(r["Content-Disposition"].startswith("attachment"))
 
+    def test_archivo_compartido_por_varios_registros(self):
+        from personal.models import Novedad
+        Novedad.objects.create(persona=self.t2, tipo="enfermedad", certificado=self.novedad.certificado.name)
+        self.assertEqual(self.estado(self.t2.usuario, self.novedad.certificado), 200)  # es dueño de uno de ellos
+
     def test_ruta_inexistente_o_fuera_de_carpetas_conocidas(self):
         self.client.force_login(self.ger)
         self.assertEqual(self.client.get("/media/legajos/no-existe.pdf").status_code, 404)

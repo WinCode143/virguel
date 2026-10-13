@@ -142,29 +142,39 @@ def partes_paradas(tecnicos=None, hoy: date | None = None, dias: int | None = No
     """Partes en manos de técnicos hace más de N días sin usarse (FIFO sobre sus movimientos)."""
     hoy = hoy or timezone.localdate()
     dias = dias or Parametros.actual().dias_max_stock
-    qs = MovimientoStockTecnico.objects.select_related("material", "tecnico").order_by("fecha", "id")
+    qs = MovimientoStockTecnico.objects.order_by("fecha", "id")
     if tecnicos is not None:
         qs = qs.filter(tecnico__in=tecnicos)
-    colas = defaultdict(deque)  # (tecnico, material) -> [[fecha, cantidad]]
-    for m in qs:
-        cola = colas[(m.tecnico, m.material)]
-        if m.cantidad > 0:
-            cola.append([m.fecha, m.cantidad])
+    colas = defaultdict(deque)  # (tecnico_id, material_id) -> [[fecha, cantidad]]
+    # tuplas en vez de objetos: el libro de movimientos puede tener cientos de miles de filas
+    for tid, mid, fecha, cantidad in qs.values_list("tecnico_id", "material_id", "fecha", "cantidad").iterator(
+            chunk_size=5000):
+        cola = colas[(tid, mid)]
+        if cantidad > 0:
+            cola.append([fecha, cantidad])
         else:
-            resto = -m.cantidad
+            resto = -cantidad
             while resto > 0 and cola:
                 tomado = min(cola[0][1], resto)
                 cola[0][1] -= tomado
                 resto -= tomado
                 if cola[0][1] <= 0:
                     cola.popleft()
-    filas = []
-    for (tec, mat), cola in colas.items():
+    viejas_por_par = {}
+    for k, cola in colas.items():
         viejas = [(f, c) for f, c in cola if (hoy - f).days >= dias]
         if viejas:
-            cant = sum(c for _, c in viejas)
-            filas.append({"tecnico": tec, "material": mat, "cantidad": cant, "desde": viejas[0][0],
-                          "dias": (hoy - viejas[0][0]).days, "valor": cant * mat.costo_unitario})
+            viejas_por_par[k] = viejas
+    from core.models import Persona
+    from .models import Material
+    personas = Persona.objects.in_bulk({t for t, _ in viejas_por_par})
+    mats = Material.objects.in_bulk({m for _, m in viejas_por_par})
+    filas = []
+    for (tid, mid), viejas in viejas_por_par.items():
+        tec, mat = personas[tid], mats[mid]
+        cant = sum(c for _, c in viejas)
+        filas.append({"tecnico": tec, "material": mat, "cantidad": cant, "desde": viejas[0][0],
+                      "dias": (hoy - viejas[0][0]).days, "valor": cant * mat.costo_unitario})
     return sorted(filas, key=lambda f: -f["dias"])
 
 

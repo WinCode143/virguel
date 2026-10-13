@@ -53,6 +53,13 @@ def consumos(desde, hasta):
             .select_related("tecnico", "material", "orden__tipo")]
 
 
+def valor_consumos(desde, hasta) -> Decimal:
+    """Total valorizado de los consumos del período (sin traer cada salida)."""
+    from inventario.models import Salida
+    return (Salida.objects.filter(fecha__range=(desde, hasta), motivo="consumo")
+            .aggregate(t=Sum("costo_total"))["t"] or Decimal("0"))
+
+
 def compras(desde, hasta):
     from inventario.models import LoteIngreso
     return (LoteIngreso.objects.filter(fecha__range=(desde, hasta), origen=LoteIngreso.Origen.COMPRA)
@@ -71,7 +78,7 @@ def bloques_del_mes(mes):
     he = (liq.aggregate(t=Sum("monto_horas_extra"))["t"] or Decimal("0")) * (1 + par.cargas_sociales / 100)
     sueldos = (liq.aggregate(t=Sum("costo_total"))["t"] or Decimal("0")) - he
     estimado = liq.filter(estado="borrador").exists()
-    consumo = sum((f["valor"] for f in consumos(mes, fin)), Decimal("0"))
+    consumo = valor_consumos(mes, fin)
     egresos = Egreso.objects.filter(fecha__range=(mes, fin))
     compras = egresos.filter(categoria__codigo="compras-stock").aggregate(t=Sum("monto"))["t"] or Decimal("0")
     otros = egresos.exclude(categoria__codigo__in=["sueldos", "compras-stock"]).aggregate(t=Sum("monto"))["t"] or Decimal("0")
@@ -474,8 +481,8 @@ def materiales(request):
     meses = [sumar_meses(mes, -i) for i in range(5, -1, -1)]
     g = grafico("bar", [m.strftime("%m/%Y") for m in meses], [
         {"nombre": "Comprado", "datos": [_valor_compras(compras(m, fin_de_mes(m))) for m in meses], "serie": 1},
-        {"nombre": "Usado en órdenes", "datos": [sum((f["valor"] for f in consumos(m, fin_de_mes(m))), Decimal("0"))
-                                                 for m in meses], "serie": 3}], formato="pesos")
+        {"nombre": "Usado en órdenes", "datos": [valor_consumos(m, fin_de_mes(m)) for m in meses], "serie": 3}],
+        formato="pesos")
     return render(request, "finanzas/materiales.html", {
         **_nav_mes(mes), "total_compras": _valor_compras(comprado), "total_consumo": sum((f["valor"] for f in usados), Decimal("0")),
         "deposito": deposito, "en_tecnicos": en_tecnicos, "paradas": sum((f["valor"] for f in partes_paradas()), Decimal("0")),
