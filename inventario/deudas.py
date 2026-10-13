@@ -61,20 +61,26 @@ class Deuda:
 
 def _usos_sin_cargo(tecnicos) -> list[Deuda]:
     """Material con saldo negativo y desde qué día está en negativo (recorriendo sus movimientos)."""
+    from .models import Material
     deudas = []
     corrido = defaultdict(Decimal)
     negativo_desde = {}
-    for m in (MovimientoStockTecnico.objects.filter(tecnico__in=tecnicos).select_related("material", "tecnico")
-              .order_by("fecha", "id")):
-        k = (m.tecnico, m.material)
-        corrido[k] += m.cantidad
+    # tuplas en vez de objetos: el libro de movimientos puede tener cientos de miles de filas
+    for tid, mid, fecha, cantidad in (MovimientoStockTecnico.objects.filter(tecnico__in=tecnicos)
+                                      .order_by("fecha", "id").values_list("tecnico_id", "material_id", "fecha",
+                                                                           "cantidad").iterator(chunk_size=5000)):
+        k = (tid, mid)
+        corrido[k] += cantidad
         if corrido[k] < 0 and k not in negativo_desde:
-            negativo_desde[k] = m.fecha
+            negativo_desde[k] = fecha
         elif corrido[k] >= 0:
             negativo_desde.pop(k, None)
-    for (t, mat), desde in negativo_desde.items():
-        deudas.append(Deuda("uso_sin_cargo", t, f"{(-corrido[(t, mat)]).normalize():f} {mat.unidad} de {mat.nombre}",
-                            desde, referencia=mat, cantidad=-corrido[(t, mat)]))
+    personas = {t.pk: t for t in tecnicos}
+    mats = Material.objects.in_bulk({m for _, m in negativo_desde})
+    for (tid, mid), desde in negativo_desde.items():
+        t, mat, debe = personas[tid], mats[mid], -corrido[(tid, mid)]
+        deudas.append(Deuda("uso_sin_cargo", t, f"{debe.normalize():f} {mat.unidad} de {mat.nombre}",
+                            desde, referencia=mat, cantidad=debe))
     return deudas
 
 

@@ -7,7 +7,7 @@
   <div class="card kpi"><div class="etq">Diagnóstico</div><div style="margin:.5rem 0"><span class="estado {{ ev.color }}">{{ ev.diagnostico }}</span></div><div class="det">{{ ev.motivos|join:"; "|default:"Sin observaciones" }}</div></div>
   <div class="card kpi"><div class="etq">Riesgo operativo</div><div class="valor">{{ ev.riesgo|num }}/100</div><div class="det">Nivel {{ ev.nivel_riesgo }}</div></div>
   <div class="card kpi"><div class="etq">Productividad</div><div class="valor">{{ ev.productividad|num:2 }} OT/día</div><div class="det">{{ ev.indice_productividad|pct }} de la mediana · tendencia {% if ev.tendencia > 0 %}+{% endif %}{{ ev.tendencia|num }}%</div></div>
-  <div class="card kpi"><div class="etq">Calidad</div><div class="valor">{{ ev.score_calidad|num }}/100</div><div class="det">{{ ev.retrabajos_causados }} retrabajos · {{ ev.fallidas }} fallidas · controles {{ ev.puntaje_controles|num:1 }}/5</div></div>
+  <div class="card kpi"><div class="etq">Calidad</div><div class="valor">{{ ev.score_calidad|num }}/100</div><div class="det">{{ ev.retrabajos_causados }} retrabajos · {{ ev.fallidas }} no resueltas por el técnico{% if ev.fallidas_a_investigar %} · {{ ev.fallidas_a_investigar }} a investigar (no cuentan){% endif %}{% if ev.no_resueltas_ajenas %} · {{ ev.no_resueltas_ajenas }} por causas ajenas{% endif %} · controles {{ ev.puntaje_controles|num:1 }}/5</div></div>
 </div>
 {% include "tablero/_grafico.html" with id="g-tec" datos=g titulo="Órdenes completadas por día en calle (semanal) vs. promedio del equipo" nota="Capacidad a largo plazo: lo que importa es hacia dónde va la curva, no un día aislado." %}
 {% if g_hist %}<div class="grid g2">

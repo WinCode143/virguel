@@ -5,3 +5,6 @@ class OperacionesConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'operaciones'
     verbose_name = "Operación: órdenes y jornadas"
+
+    def ready(self):
+        from . import signals  # noqa: F401

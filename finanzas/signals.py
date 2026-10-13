@@ -3,7 +3,7 @@ from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
 from flota.models import ServiceRealizado
-from herramientas.models import Asignacion
+from herramientas.models import Asignacion, CompraElemento
 from incidentes.models import Siniestro
 from inventario.models import LoteIngreso
 from operaciones.models import GastoOrden
@@ -16,15 +16,23 @@ from .models import Egreso, registrar_egreso_automatico
 def egreso_de(instancia):
     """Devuelve (origen, categoria, fecha, monto, descripcion) para un registro operativo."""
     if isinstance(instancia, LoteIngreso):
+        if instancia.origen != LoteIngreso.Origen.COMPRA:
+            # Devoluciones y ajustes son movimientos internos: no son una compra.
+            return (f"lote:{instancia.pk}", "compras-stock", instancia.fecha, 0, "")
         return (f"lote:{instancia.pk}", "compras-stock", instancia.fecha,
                 instancia.cantidad * instancia.costo_unitario,
                 f"Compra {instancia.cantidad} {instancia.material.unidad} {instancia.material.nombre}")
     if isinstance(instancia, ServiceRealizado):
         return (f"service:{instancia.pk}", "flota", instancia.fecha, instancia.costo,
                 f"Service {instancia.tipo} {instancia.vehiculo.patente}")
+    if isinstance(instancia, CompraElemento):
+        return (f"compra_elemento:{instancia.pk}", "epp-herramientas", instancia.fecha,
+                instancia.costo_unitario * instancia.cantidad,
+                f"Compra {instancia.cantidad} × {instancia.elemento}")
     if isinstance(instancia, Asignacion):
-        return (f"asignacion:{instancia.pk}", "epp-herramientas", instancia.fecha_entrega,
-                instancia.elemento.costo * instancia.cantidad,
+        # Entregar algo del pañol o reasignarlo es custodia: el gasto fue la compra.
+        monto = instancia.elemento.costo * instancia.cantidad if instancia.es_gasto else 0
+        return (f"asignacion:{instancia.pk}", "epp-herramientas", instancia.fecha_entrega, monto,
                 f"Entrega {instancia.elemento} a {instancia.persona.nombre_completo}")
     if isinstance(instancia, Liquidacion):
         from .sueldos import fin_de_mes
@@ -47,7 +55,7 @@ def sincronizar(instancia):
         registrar_egreso_automatico(*datos)
 
 
-MODELOS = (LoteIngreso, ServiceRealizado, Asignacion, Siniestro, GastoOrden, Liquidacion)
+MODELOS = (LoteIngreso, ServiceRealizado, Asignacion, CompraElemento, Siniestro, GastoOrden, Liquidacion)
 
 
 @receiver(post_save)

@@ -54,7 +54,6 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - static:/srv/static:ro
-      - media:/srv/media:ro
       - caddy_data:/data
     depends_on: [web]
 

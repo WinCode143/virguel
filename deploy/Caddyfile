@@ -1,12 +1,10 @@
 # Caddy obtiene y renueva el certificado HTTPS solo (Let's Encrypt).
 {$DOMINIO} {
+	# /media/ NO se sirve desde acá: certificados, legajos, recibos y firmas
+	# pasan por Django, que controla usuario, rol y registro antes de entregarlos.
 	encode gzip
 	handle_path /static/* {
 		root * /srv/static
-		file_server
-	}
-	handle_path /media/* {
-		root * /srv/media
 		file_server
 	}
 	reverse_proxy web:8000

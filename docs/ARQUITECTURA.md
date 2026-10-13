@@ -90,7 +90,16 @@ mails se guardan como archivos en `media/mails/`. Se envía con la tarea diaria 
 - Acceso por rol (`core/roles.py`): técnico, supervisor, gerencia. El supervisor ve sólo su equipo.
 - La encuesta usa un token UUID por técnico y día; no requiere login para poder enviarse por mensaje.
   El supervisor nunca ve respuestas individuales.
-- El service worker de la PWA sólo guarda archivos estáticos (no páginas con datos personales).
+- **Archivos subidos** (certificados, legajos, recibos, firmas, fotos, comprobantes): nunca se sirven
+  directo. `/media/<ruta>` pasa por `core/archivos.py`, que busca el registro dueño y aplica las reglas
+  de rol (gerencia todo; contabilidad, finanzas; supervisor, su equipo; cada empleado, lo propio).
+  Sin permiso responde 404; `Cache-Control: private, no-store`; lo que no es imagen o PDF se descarga.
+  Caddy no expone `/media/`.
+- El service worker de la PWA guarda archivos estáticos y pantallas de `/app/`, y las borra al cerrar sesión.
+- **Sin señal** (`static/js/offline.js` + `core/offline.py`): cada envío lleva un identificador; el
+  servidor no aplica dos veces el mismo y, en la sincronización, confirma con JSON. El celular borra un
+  pendiente sólo con confirmación; los rechazados quedan para corregir o descartar; cada pendiente es
+  del usuario que lo cargó.
 - Power BI usa un usuario PostgreSQL de sólo lectura limitado al esquema `powerbi`.
 - Exportaciones CSV: sesión de gerencia o `?token=` (variable `POWERBI_TOKEN`).
 

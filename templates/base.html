@@ -13,7 +13,7 @@
   <link rel="icon" href="{% static 'img/icono.svg' %}">
   {% block head %}{% endblock %}
 </head>
-<body>{% block cuerpo %}{% endblock %}
+<body{% if request.user.is_authenticated %} data-usuario="{{ request.user.pk }}"{% endif %}>{% block cuerpo %}{% endblock %}
 <script src="{% static 'js/ui.js' %}"></script>
 <script src="{% static 'js/numeros.js' %}" defer></script>
 {% block scripts %}{% endblock %}

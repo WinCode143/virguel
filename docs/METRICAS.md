@@ -44,7 +44,7 @@ de productividad**. Se calculan en `tablero/metricas.py`.
 | **Resuelto en la primera visita** | Órdenes completadas sin visita de corrección posterior. | 95 % | 80 % | 20 | Equilibra la velocidad: hacer rápido y mal genera retrabajos que cuestan otra visita. |
 | **Cumplimiento de la agenda** | Órdenes asignadas para días ya terminados, resueltas o intentadas ese mismo día. | 90 % | 70 % | 10 | Que el cliente sea atendido el día prometido. |
 | **Calidad en los controles** | Puntaje promedio del supervisor en los controles en calle (5/5 = 100 %). | 90 % | 60 % | 10 | Mirada externa de la calidad del trabajo. |
-| **No resueltas por causa propia** | Órdenes no resueltas por "faltó material" u "otro" ÷ ejecutadas. | ≤ 2 % | 10 % | 5 | Sólo lo evitable por el técnico (pedir partes a tiempo, planificar). |
+| **No resueltas por causa propia** | Visitas no resueltas atribuidas al técnico ÷ visitas ejecutadas. Catálogo común de motivos (`operaciones/criterios.py`): cliente ausente, clima o red no cuentan; falta de material, rechazo u otro sólo si el supervisor confirma que fue por el técnico. | ≤ 2 % | 10 % | 5 | Sólo lo evitable por el técnico, sin culparlo por causas ajenas o no investigadas. |
 | **Órdenes por día vs. el equipo** | Órdenes completadas por día en calle, como % de la mediana del plantel. | 100 % | 60 % | 5 | Referencia simple y entendible; pesa poco porque no distingue tipos de trabajo. |
 | **Cierres documentados** | Completadas con foto y conformidad del cliente (nombre o firma). | 90 % | 50 % | 5 | Respaldo ante reclamos y siniestros. |
 | **Cierres en el domicilio** | Cierres con GPS a menos de 300 m del domicilio del cliente. | 95 % | 70 % | 5 | Verifica que el trabajo se cerró en el lugar. |
@@ -55,9 +55,13 @@ de productividad**. Se calculan en `tablero/metricas.py`.
 | *Tiempo por orden vs. estándar* | Minutos reales ÷ minutos estándar. | 100 % | 140 % | info | Ya está dentro de la eficiencia. |
 
 **IPT vs. diagnóstico de riesgo:** el IPT mide productividad. El diagnóstico de "Técnicos y
-riesgo" (capacitar / evaluar desvinculación) mira además sanciones, siniestros y la tendencia
-de 90 días. Se usan juntos: IPT bajo + riesgo bajo = **capacitar**; IPT bajo + riesgo alto =
-**evaluar desvinculación**.
+riesgo" mira además sanciones, siniestros y la tendencia de 90 días. Se usan juntos: IPT bajo +
+riesgo bajo = **capacitar**; IPT bajo + riesgo alto = **revisión del supervisor**. El índice de
+riesgo es orientativo (pesos versionados, a validar con la empresa) y no reemplaza la revisión
+del caso. Con pocas jornadas en la ventana la persona figura "Sin evidencia suficiente".
+
+Ambos (IPT y evaluación) leen la **historia de visitas** (`Intento`): una visita fallida queda con
+quien la hizo aunque la orden se reasigne o se reabra.
 
 ---
 
@@ -70,7 +74,7 @@ de 90 días. Se usan juntos: IPT bajo + riesgo bajo = **capacitar**; IPT bajo + 
 | **Mejora del equipo** | Órdenes por día del equipo: últimas 4 semanas vs. las 4 anteriores. | +5 % | −10 % | 5 | Un buen supervisor hace crecer a su equipo, no sólo lo mantiene. |
 | **Cobertura de control** | Semanas-técnico con al menos un control en calle ÷ semanas-técnico trabajadas. | 100 % | 60 % | 15 | Que ningún técnico pase una semana sin ser controlado. Pesa más porque el supervisor ausente se detecta aquí. |
 | **Desvíos resueltos en 2 días** | Desvíos detectados con acción correctiva en ≤ 2 días (con 3+ desvíos). | 90 % | 50 % | 10 | Corregir rápido (recapacitar al día siguiente). |
-| **Efectividad de las correcciones** | Técnicos corregidos (hace 30–60 días) que no repitieron un desvío en los 30 días siguientes. | 80 % | 40 % | 10 | No alcanza con sancionar: la corrección tiene que funcionar. |
+| **Efectividad de las correcciones** | De las acciones de hace 30–60 días que se **cumplieron**, las **verificadas** (con al menos 2 controles posteriores, configurable) en las que no se repitió el mismo tipo de problema. Sin controles suficientes la acción queda "no verificada" y no suma (`supervision/efectividad.py`). Requiere 3 verificadas. | 80 % | 40 % | 10 | No alcanza con sancionar ni con dejar de controlar: la corrección tiene que funcionar y verse. |
 | **Clima del equipo** | Encuesta diaria + evaluación semanal de sus técnicos, llevadas a 0–100. | 80 % | 50 % | 15 | Trato, claridad, apoyo, justicia: lo que pidió el cliente. |
 | **Faltas sin aviso del equipo** | Faltas injustificadas cada 100 jornadas esperadas. | ≤ 0,5 | 3 | 5 | El supervisor debe contener el ausentismo de su gente. |
 | **Siniestros del equipo** | Siniestros cada 1000 jornadas en calle. | ≤ 2 | 10 | 5 | Seguridad y responsabilidad civil. |
@@ -99,3 +103,7 @@ de 90 días. Se usan juntos: IPT bajo + riesgo bajo = **capacitar**; IPT bajo + 
 - **Metas**: arrancar con la mediana real del plantel como meta durante el primer trimestre y
   subirla gradualmente.
 - **Pesos**: validarlos con gerencia (qué importa más para Virguel).
+
+**Equipos en el período:** los indicadores de cada supervisor usan la composición de su equipo
+**en el período** (`AsignacionSupervisor`), no la actual: cambiar a un técnico de supervisor no
+reescribe los meses anteriores del supervisor previo.

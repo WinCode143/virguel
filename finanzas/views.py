@@ -22,7 +22,7 @@ from core.notificaciones import notificar
 from core.roles import CONTABILIDAD, GERENCIA, requiere_rol
 from operaciones.models import GastoOrden
 
-from .models import CategoriaEgreso, CostoFijo, Egreso, Liquidacion, Presupuesto, Proveedor
+from .models import CategoriaEgreso, Cobro, CostoFijo, Cuenta, Egreso, Ingreso, Liquidacion, Pago, Presupuesto, Proveedor
 from .proyeccion import inicio_mes, proyectar, sumar_meses
 from .sueldos import fin_de_mes, generar
 
@@ -53,9 +53,16 @@ def consumos(desde, hasta):
             .select_related("tecnico", "material", "orden__tipo")]
 
 
+def valor_consumos(desde, hasta) -> Decimal:
+    """Total valorizado de los consumos del período (sin traer cada salida)."""
+    from inventario.models import Salida
+    return (Salida.objects.filter(fecha__range=(desde, hasta), motivo="consumo")
+            .aggregate(t=Sum("costo_total"))["t"] or Decimal("0"))
+
+
 def compras(desde, hasta):
     from inventario.models import LoteIngreso
-    return (LoteIngreso.objects.filter(fecha__range=(desde, hasta)).exclude(proveedor__startswith="Devolución")
+    return (LoteIngreso.objects.filter(fecha__range=(desde, hasta), origen=LoteIngreso.Origen.COMPRA)
             .select_related("material"))
 
 
@@ -71,7 +78,7 @@ def bloques_del_mes(mes):
     he = (liq.aggregate(t=Sum("monto_horas_extra"))["t"] or Decimal("0")) * (1 + par.cargas_sociales / 100)
     sueldos = (liq.aggregate(t=Sum("costo_total"))["t"] or Decimal("0")) - he
     estimado = liq.filter(estado="borrador").exists()
-    consumo = sum((f["valor"] for f in consumos(mes, fin)), Decimal("0"))
+    consumo = valor_consumos(mes, fin)
     egresos = Egreso.objects.filter(fecha__range=(mes, fin))
     compras = egresos.filter(categoria__codigo="compras-stock").aggregate(t=Sum("monto"))["t"] or Decimal("0")
     otros = egresos.exclude(categoria__codigo__in=["sueldos", "compras-stock"]).aggregate(t=Sum("monto"))["t"] or Decimal("0")
@@ -100,11 +107,14 @@ def presupuesto_vs_real(mes):
 
 
 def cuentas_a_pagar():
+    """Saldo pendiente (monto − pagos parciales) de los egresos."""
+    from .caja import egresos_a_pagar
     hoy = timezone.localdate()
-    pend = Egreso.objects.filter(pagado=False)
-    return {"vencidas": pend.filter(vencimiento__lt=hoy), "semana": pend.filter(vencimiento__range=(hoy, hoy + timedelta(days=7))),
-            "total": pend.aggregate(t=Sum("monto"))["t"] or Decimal("0"), "n": pend.count(),
-            "monto_vencido": pend.filter(vencimiento__lt=hoy).aggregate(t=Sum("monto"))["t"] or Decimal("0")}
+    pend = egresos_a_pagar()
+    vencidas = pend.filter(vencimiento__lt=hoy)
+    return {"vencidas": vencidas, "semana": pend.filter(vencimiento__range=(hoy, hoy + timedelta(days=7))),
+            "total": sum((e.saldo_pendiente for e in pend), Decimal("0")), "n": pend.count(),
+            "monto_vencido": sum((e.saldo_pendiente for e in vencidas), Decimal("0"))}
 
 
 @requiere_rol(*ROLES)
@@ -200,9 +210,10 @@ def comprobantes(request):
     ver = request.GET.get("ver", "mes")  # mes | a_pagar
     if request.method == "POST" and request.POST.get("accion") == "pagar":
         e = get_object_or_404(Egreso, pk=request.POST.get("egreso"))
-        e.pagado, e.fecha_pago = True, timezone.localdate()
-        e.medio_pago = request.POST.get("medio_pago") or e.medio_pago
-        e.save(update_fields=["pagado", "fecha_pago", "medio_pago"])
+        medio = request.POST.get("medio_pago") or e.medio_pago
+        if e.saldo > 0:  # se paga el saldo pendiente (respeta pagos parciales ya cargados)
+            Pago.objects.create(egreso=e, fecha=timezone.localdate(), monto=e.saldo, medio=medio)
+        Egreso.objects.filter(pk=e.pk).update(medio_pago=medio)
         messages.success(request, f"Marcado como pagado: {e.proveedor or e.descripcion}.")
         return redirect(request.get_full_path())
     if ver == "a_pagar":
@@ -242,7 +253,134 @@ def comprobante_form(request, pk=None):
             return redirect("finanzas:comprobante_nuevo" if "otro" in request.POST else "finanzas:comprobantes")
     else:
         f = ComprobanteForm(instance=e, initial={} if e else {"fecha": timezone.localdate(), "pagado": False})
-    return render(request, "finanzas/comprobante_form.html", {"form": f, "e": e, "proveedores": Proveedor.objects.all()})
+    return render(request, "finanzas/comprobante_form.html", {
+        "form": f, "e": e, "proveedores": Proveedor.objects.all(),
+        "pagos": e.pagos.select_related("cuenta") if e else [], "cuotas": _cuotas_con_estado(e) if e else [],
+        "cuentas": Cuenta.objects.filter(activa=True), "medios": Egreso.Medio.choices, "hoy": timezone.localdate()})
+
+
+def _cuotas_con_estado(e):
+    pagado = e.pagado_monto
+    filas = []
+    for c in e.cuotas.all():
+        cubre = min(c.monto, pagado)
+        pagado -= cubre
+        filas.append({"c": c, "pagado": cubre, "saldo": c.monto - cubre})
+    return filas
+
+
+def _decimal(texto):
+    from tablero.importar import ErrorFila, decimal_
+    try:
+        return decimal_(texto)
+    except ErrorFila:
+        return None
+
+
+def _fecha(texto, defecto=None):
+    try:
+        return date.fromisoformat(texto)
+    except (TypeError, ValueError):
+        return defecto
+
+
+@requiere_rol(*ROLES)
+def pagos_egreso(request, pk):
+    """Pagos parciales, plan de cuotas y eliminación de pagos de un egreso (manual o automático)."""
+    from .caja import generar_cuotas
+    e = get_object_or_404(Egreso, pk=pk)
+    if request.method == "POST":
+        accion = request.POST.get("accion")
+        if accion == "pago":
+            monto = _decimal(request.POST.get("monto"))
+            if not monto or monto <= 0:
+                messages.error(request, "Indicá el monto pagado.")
+            else:
+                Pago.objects.create(egreso=e, fecha=_fecha(request.POST.get("fecha"), timezone.localdate()), monto=monto,
+                                    cuenta=Cuenta.objects.filter(pk=request.POST.get("cuenta") or None).first(),
+                                    medio=request.POST.get("medio", ""), observaciones=request.POST.get("observaciones", "")[:200])
+                e.refresh_from_db()
+                messages.success(request, f"Pago de {pesos(monto)} registrado. Saldo: {pesos(e.saldo)}.")
+        elif accion == "borrar_pago":
+            get_object_or_404(Pago, pk=request.POST.get("pago"), egreso=e).delete()
+            messages.success(request, "Pago eliminado.")
+        elif accion == "cuotas":
+            try:
+                n = int(request.POST.get("cantidad", ""))
+            except ValueError:
+                n = 0
+            primero = _fecha(request.POST.get("primer_vencimiento"))
+            if n < 1 or n > 120 or not primero:
+                messages.error(request, "Indicá la cantidad de cuotas (1 a 120) y el primer vencimiento.")
+            else:
+                generar_cuotas(e, n, primero)
+                messages.success(request, f"Plan de {n} cuota{'s' if n > 1 else ''} armado.")
+    # Los egresos automáticos no tienen ficha editable: se vuelve a la caja.
+    return redirect("finanzas:caja") if e.automatico else redirect("finanzas:comprobante", pk=e.pk)
+
+
+# ------------------------------------------------------------------ caja e ingresos
+class IngresoForm(forms.ModelForm):
+    class Meta:
+        model = Ingreso
+        fields = ["fecha", "periodo", "pagador", "concepto", "numero_comprobante", "monto", "fecha_esperada_cobro",
+                  "observaciones"]
+        widgets = {k: forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d")
+                   for k in ("fecha", "periodo", "fecha_esperada_cobro")}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["monto"] = CampoPesos(label="Monto neto a cobrar")
+
+
+@requiere_rol(*ROLES)
+def caja(request):
+    """Saldo de las cuentas, a cobrar, a pagar y proyección semanal del flujo de fondos."""
+    from .caja import ingresos_a_cobrar, proyeccion_caja
+    semanas = 12
+    try:
+        semanas = max(4, min(52, int(request.GET.get("semanas", 12))))
+    except ValueError:
+        pass
+    proy = proyeccion_caja(semanas, estimados=request.GET.get("estimados", "1") == "1")
+    from tablero.views import grafico
+    g = grafico("line", [f["desde"].strftime("%d/%m") for f in proy["filas"]], [
+        {"nombre": "Saldo proyectado", "datos": [f["saldo"] for f in proy["filas"]], "serie": 1}], formato="pesos")
+    return render(request, "finanzas/caja.html", {
+        "proy": proy, "g": g, "semanas": semanas, "estimados": request.GET.get("estimados", "1") == "1",
+        "cuentas": [(c, c.saldo()) for c in Cuenta.objects.filter(activa=True)],
+        "a_cobrar": ingresos_a_cobrar().order_by("fecha_esperada_cobro", "fecha")[:30],
+        "cap": cuentas_a_pagar()})
+
+
+@requiere_rol(*ROLES)
+def ingresos(request):
+    form = IngresoForm(initial={"fecha": timezone.localdate()})
+    if request.method == "POST":
+        accion = request.POST.get("accion")
+        if accion == "cobro":
+            i = get_object_or_404(Ingreso, pk=request.POST.get("ingreso"))
+            monto = _decimal(request.POST.get("monto")) or i.saldo
+            if monto <= 0:
+                messages.error(request, "El ingreso ya está cobrado.")
+            else:
+                Cobro.objects.create(ingreso=i, fecha=_fecha(request.POST.get("fecha"), timezone.localdate()),
+                                     monto=monto, cuenta=Cuenta.objects.filter(pk=request.POST.get("cuenta") or None).first(),
+                                     observaciones=request.POST.get("observaciones", "")[:200])
+                messages.success(request, f"Cobro de {pesos(monto)} registrado.")
+            return redirect("finanzas:ingresos")
+        if accion == "borrar_cobro":
+            get_object_or_404(Cobro, pk=request.POST.get("cobro")).delete()
+            messages.success(request, "Cobro eliminado.")
+            return redirect("finanzas:ingresos")
+        form = IngresoForm(request.POST)
+        if form.is_valid():
+            i = form.save()
+            messages.success(request, f"Ingreso registrado: {i.concepto} {pesos(i.monto)}.")
+            return redirect("finanzas:ingresos")
+    qs = Ingreso.objects.prefetch_related("cobros__cuenta").order_by("-fecha")[:200]
+    return render(request, "finanzas/ingresos.html", {
+        "form": form, "ingresos": qs, "cuentas": Cuenta.objects.filter(activa=True), "hoy": timezone.localdate()})
 
 
 # ------------------------------------------------------------------ sueldos
@@ -343,8 +481,8 @@ def materiales(request):
     meses = [sumar_meses(mes, -i) for i in range(5, -1, -1)]
     g = grafico("bar", [m.strftime("%m/%Y") for m in meses], [
         {"nombre": "Comprado", "datos": [_valor_compras(compras(m, fin_de_mes(m))) for m in meses], "serie": 1},
-        {"nombre": "Usado en órdenes", "datos": [sum((f["valor"] for f in consumos(m, fin_de_mes(m))), Decimal("0"))
-                                                 for m in meses], "serie": 3}], formato="pesos")
+        {"nombre": "Usado en órdenes", "datos": [valor_consumos(m, fin_de_mes(m)) for m in meses], "serie": 3}],
+        formato="pesos")
     return render(request, "finanzas/materiales.html", {
         **_nav_mes(mes), "total_compras": _valor_compras(comprado), "total_consumo": sum((f["valor"] for f in usados), Decimal("0")),
         "deposito": deposito, "en_tecnicos": en_tecnicos, "paradas": sum((f["valor"] for f in partes_paradas()), Decimal("0")),

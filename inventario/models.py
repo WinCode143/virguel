@@ -38,7 +38,16 @@ class Material(models.Model):
 
 class LoteIngreso(models.Model):
     """Cada ingreso de mercadería es un lote. La antigüedad se mide por lote
-    y las salidas se descuentan en orden FIFO (primero lo más viejo)."""
+    y las salidas se descuentan en orden FIFO (primero lo más viejo).
+
+    Sólo un lote de origen "compra" es un gasto (genera egreso). Una devolución de un
+    técnico reingresa las mismas unidades: conserva la fecha de ingreso y el costo del
+    lote del que salieron (`lote_origen`)."""
+
+    class Origen(models.TextChoices):
+        COMPRA = "compra", "Compra / ingreso de proveedor"
+        DEVOLUCION = "devolucion", "Devolución de un técnico"
+        AJUSTE = "ajuste", "Ajuste de inventario"
 
     material = models.ForeignKey(Material, on_delete=models.PROTECT, related_name="lotes")
     fecha = models.DateField(default=timezone.localdate, db_index=True)
@@ -47,6 +56,9 @@ class LoteIngreso(models.Model):
     costo_unitario = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
     proveedor = models.CharField(max_length=120, blank=True)
     remito = models.CharField(max_length=50, blank=True)
+    origen = models.CharField(max_length=12, choices=Origen.choices, default=Origen.COMPRA)
+    lote_origen = models.ForeignKey("self", null=True, blank=True, on_delete=models.PROTECT, related_name="reingresos",
+                                    help_text="Para devoluciones: lote del que habían salido las unidades.")
 
     class Meta:
         ordering = ["fecha", "id"]
@@ -95,6 +107,24 @@ class Salida(models.Model):
         return f"{self.material.codigo} -{self.cantidad} ({self.fecha})"
 
 
+class ConsumoLote(models.Model):
+    """De qué lote(s) salió cada salida (FIFO): permite saber fecha de ingreso y costo de origen
+    de las unidades que tiene un técnico y devolverlas a su lote."""
+
+    salida = models.ForeignKey(Salida, on_delete=models.CASCADE, related_name="lotes_consumidos")
+    lote = models.ForeignKey(LoteIngreso, on_delete=models.PROTECT, related_name="consumos")
+    cantidad = models.DecimalField(max_digits=12, decimal_places=2)
+    costo_unitario = models.DecimalField(max_digits=12, decimal_places=2)
+
+    class Meta:
+        ordering = ["salida", "lote__fecha", "lote_id"]
+        verbose_name = "Unidades tomadas de un lote"
+        verbose_name_plural = "Unidades tomadas de lotes"
+
+    def __str__(self):
+        return f"{self.cantidad} de {self.lote}"
+
+
 class RecetaMaterial(models.Model):
     """Materiales que consume en promedio cada tipo de tarea (para prever compras)."""
 
@@ -129,6 +159,26 @@ class DemandaComercial(models.Model):
         return f"{self.fecha} {self.tipo_tarea} x{self.cantidad_clientes}"
 
 
+class CompraEnCamino(models.Model):
+    """Compra confirmada a un proveedor que todavía no ingresó: suma al suministro de la previsión
+    hasta que se recibe (al recibirla se carga el lote de ingreso y se marca recibida)."""
+
+    material = models.ForeignKey(Material, on_delete=models.PROTECT, related_name="compras_en_camino")
+    cantidad = models.DecimalField(max_digits=12, decimal_places=2)
+    fecha_esperada = models.DateField()
+    proveedor = models.CharField(max_length=120, blank=True)
+    observaciones = models.CharField(max_length=200, blank=True)
+    recibida = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["fecha_esperada"]
+        verbose_name = "Compra en camino"
+        verbose_name_plural = "Compras en camino"
+
+    def __str__(self):
+        return f"{self.cantidad} {self.material.unidad} {self.material.nombre} ({self.fecha_esperada:%d/%m})"
+
+
 class MovimientoStockTecnico(models.Model):
     """Libro de las partes que tiene cada técnico a su cargo (en la camioneta).
 
@@ -149,6 +199,8 @@ class MovimientoStockTecnico(models.Model):
     cantidad = models.DecimalField(max_digits=12, decimal_places=2, help_text="Positivo entra, negativo sale.")
     orden = models.ForeignKey(OrdenTrabajo, null=True, blank=True, on_delete=models.SET_NULL)
     pedido = models.ForeignKey("PedidoMaterial", null=True, blank=True, on_delete=models.SET_NULL)
+    salida = models.ForeignKey(Salida, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+                               help_text="Entrega: salida del depósito (con los lotes de origen).")
     observaciones = models.CharField(max_length=200, blank=True)
 
     class Meta:

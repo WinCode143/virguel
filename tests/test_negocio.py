@@ -666,6 +666,10 @@ class IndicadoresProductividadTests(TestCase):
         for k, motivo in enumerate(["cliente_ausente", "clima", "falta_material"]):
             OrdenTrabajo.objects.create(numero=f"f{k}", tipo=self.tipo, tecnico=self.t, estado="fallida",
                                         motivo_no_resuelto=motivo, fecha_programada=d, fecha_ejecucion=d)
+        # Falta de material no se atribuye sola al técnico (puede ser un pedido no atendido): queda a investigar
+        self.assertEqual(self.valores([self.t])[self.t.id]["no_resueltas_evitables"], 0)
+        from operaciones.models import Intento
+        Intento.objects.filter(orden__numero="f2").update(atribucion_confirmada="tecnico")  # el supervisor lo confirma
         self.assertAlmostEqual(self.valores([self.t])[self.t.id]["no_resueltas_evitables"], 100 / 23)  # 1 de 23
 
     def test_cierre_en_sitio_por_distancia_gps(self):
@@ -870,12 +874,12 @@ class PartesAdeudadasTests(TestCase):
     def test_supervisor_ve_su_equipo_pero_no_regulariza(self):
         from inventario.models import EquipoRetirado
         ajeno = persona("T2")
-        EquipoRetirado.objects.create(tecnico=ajeno, numero_serie="Z9")
-        e = EquipoRetirado.objects.create(tecnico=self.t, numero_serie="Y1")
+        EquipoRetirado.objects.create(tecnico=ajeno, numero_serie="SERIE-AJENA-0001")
+        e = EquipoRetirado.objects.create(tecnico=self.t, numero_serie="SERIE-PROPIA-0001")
         self.client.force_login(self.sup.usuario)
         r = self.client.get("/tablero/partes-adeudadas/")
-        self.assertContains(r, "Y1")
-        self.assertNotContains(r, "Z9")
+        self.assertContains(r, "SERIE-PROPIA-0001")
+        self.assertNotContains(r, "SERIE-AJENA-0001")
         self.client.post("/tablero/partes-adeudadas/", {"accion": "recibir", "equipo": e.id})
         e.refresh_from_db()
         self.assertEqual(e.estado, "en_tecnico")

@@ -75,6 +75,27 @@ class EvaluacionCompetencia(models.Model):
         verbose_name_plural = "Evaluaciones de competencias"
 
 
+class CriterioEvaluacion(models.Model):
+    """Versión de los pesos y reglas de la evaluación de técnicos.
+
+    Cambiar pesos crea una versión nueva (vigente desde una fecha): cada foto histórica guarda la
+    versión con la que se calculó, para poder comparar y revisar los criterios con la empresa.
+    Los pesos son una convención de gestión, no una probabilidad validada de riesgo."""
+
+    version = models.PositiveIntegerField(unique=True)
+    vigente_desde = models.DateField()
+    descripcion = models.CharField(max_length=200, blank=True)
+    parametros = models.JSONField(help_text="Pesos: dimensiones, acciones, siniestros, faltas y tardanzas.")
+
+    class Meta:
+        ordering = ["-vigente_desde", "-version"]
+        verbose_name = "Criterio de evaluación (versión)"
+        verbose_name_plural = "Criterios de evaluación (versiones)"
+
+    def __str__(self):
+        return f"v{self.version} desde {self.vigente_desde:%d/%m/%Y}"
+
+
 class EvaluacionHistorica(models.Model):
     """Foto semanal de la evaluación automática de cada técnico (capacidad a largo plazo)."""
 
@@ -83,11 +104,13 @@ class EvaluacionHistorica(models.Model):
     productividad = models.DecimalField(max_digits=6, decimal_places=2)
     indice_productividad = models.DecimalField(max_digits=6, decimal_places=3)
     score_productividad = models.DecimalField(max_digits=5, decimal_places=1)
-    score_calidad = models.DecimalField(max_digits=5, decimal_places=1)
+    score_calidad = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
     score_disciplina = models.DecimalField(max_digits=5, decimal_places=1)
     score_seguridad = models.DecimalField(max_digits=5, decimal_places=1)
     riesgo = models.DecimalField(max_digits=5, decimal_places=1)
     diagnostico = models.CharField(max_length=60)
+    criterio_version = models.PositiveIntegerField(null=True, blank=True,
+                                                   help_text="Versión del criterio con que se calculó.")
 
     class Meta:
         ordering = ["-fecha"]

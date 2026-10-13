@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import date
 
 from django.conf import settings
 from django.db import models
@@ -36,9 +37,43 @@ class Proveedor(models.Model):
         return self.nombre
 
 
+class Cuenta(models.Model):
+    """Dónde está el dinero (banco, efectivo, billetera). Con su saldo inicial y los cobros y pagos
+    registrados se calcula el saldo y se proyecta la caja."""
+
+    class Tipo(models.TextChoices):
+        BANCO = "banco", "Cuenta bancaria"
+        EFECTIVO = "efectivo", "Efectivo / caja chica"
+        BILLETERA = "billetera", "Billetera virtual"
+
+    nombre = models.CharField(max_length=80, unique=True)
+    tipo = models.CharField(max_length=10, choices=Tipo.choices, default=Tipo.BANCO)
+    saldo_inicial = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0"))
+    fecha_saldo_inicial = models.DateField(default=timezone.localdate,
+                                           help_text="Fecha del saldo inicial: se suman los movimientos posteriores.")
+    activa = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["nombre"]
+        verbose_name_plural = "Cuentas"
+
+    def __str__(self):
+        return self.nombre
+
+    def saldo(self, al: date | None = None) -> Decimal:
+        al = al or timezone.localdate()
+        f = {"fecha__gt": self.fecha_saldo_inicial, "fecha__lte": al}
+        entra = self.cobros.filter(**f).aggregate(t=models.Sum("monto"))["t"] or Decimal("0")
+        sale = self.pagos.filter(**f).aggregate(t=models.Sum("monto"))["t"] or Decimal("0")
+        return self.saldo_inicial + entra - sale
+
+
 class Egreso(models.Model):
-    """Gasto real. Los de compras de stock, services, EPP y siniestros se
-    generan automáticamente; el resto se carga a mano."""
+    """Obligación de pago (gasto devengado). Los de compras de stock, services, EPP y siniestros se
+    generan automáticamente; el resto se carga a mano.
+
+    El dinero que efectivamente sale está en `Pago` (uno o varios, parciales). `pagado` y `fecha_pago`
+    se mantienen a partir de los pagos; marcar "pagado" sin cargar pagos registra un pago por el saldo."""
 
     fecha = models.DateField(default=timezone.localdate, db_index=True)
     categoria = models.ForeignKey(CategoriaEgreso, on_delete=models.PROTECT, related_name="egresos")
@@ -84,6 +119,159 @@ class Egreso(models.Model):
 
     def __str__(self):
         return f"{self.fecha} {self.categoria}: ${self.monto}"
+
+    # ---- pagos (parciales) y saldo
+    @property
+    def pagado_monto(self) -> Decimal:
+        return self.pagos.aggregate(t=models.Sum("monto"))["t"] or Decimal("0")
+
+    @property
+    def saldo(self) -> Decimal:
+        return self.monto - self.pagado_monto
+
+    @property
+    def estado_pago(self) -> str:
+        pagado = self.pagado_monto
+        if self.monto <= 0 or pagado >= self.monto:
+            return "pagado"
+        return "parcial" if pagado > 0 else "pendiente"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        self._sincronizar_pago_total()
+
+    def _sincronizar_pago_total(self):
+        """Compatibilidad con el tilde "pagado": si no hay pagos cargados a mano, un pago automático
+        representa el pago total (y se borra si se destilda)."""
+        if self.monto <= 0:
+            return
+        manuales = self.pagos.filter(automatico=False)
+        if manuales.exists():
+            saldo = self.saldo
+            if self.pagado and saldo > 0:  # se marcó pagado con pagos parciales: se registra el resto
+                Pago.objects.create(egreso=self, fecha=self.fecha_pago or timezone.localdate(), monto=saldo,
+                                    medio=self.medio_pago, observaciones="Saldo (marcado como pagado)")
+            else:
+                self.actualizar_estado_pago()
+            return
+        if self.pagado:
+            Pago.objects.update_or_create(egreso=self, automatico=True, defaults={
+                "fecha": self.fecha_pago or self.fecha, "monto": self.monto, "medio": self.medio_pago})
+        else:
+            self.pagos.filter(automatico=True).delete()
+
+    def actualizar_estado_pago(self):
+        """Recalcula `pagado` y `fecha_pago` a partir de los pagos (sin disparar save)."""
+        ultimo = self.pagos.order_by("-fecha").values_list("fecha", flat=True).first()
+        pagado = self.monto <= 0 or self.pagado_monto >= self.monto
+        Egreso.objects.filter(pk=self.pk).update(pagado=pagado, fecha_pago=ultimo if pagado else None)
+        self.pagado, self.fecha_pago = pagado, (ultimo if pagado else None)
+
+
+class Pago(models.Model):
+    """Salida de dinero que cancela (total o parcialmente) un egreso."""
+
+    egreso = models.ForeignKey(Egreso, on_delete=models.CASCADE, related_name="pagos")
+    fecha = models.DateField(default=timezone.localdate, db_index=True)
+    monto = models.DecimalField(max_digits=14, decimal_places=2)
+    cuenta = models.ForeignKey(Cuenta, null=True, blank=True, on_delete=models.PROTECT, related_name="pagos")
+    medio = models.CharField(max_length=15, choices=Egreso.Medio.choices, blank=True)
+    observaciones = models.CharField(max_length=200, blank=True)
+    automatico = models.BooleanField(default=False, editable=False,
+                                     help_text="Generado por el tilde 'pagado' (pago total sin detalle).")
+
+    class Meta:
+        ordering = ["-fecha", "-id"]
+        verbose_name = "Pago"
+        verbose_name_plural = "Pagos"
+
+    def __str__(self):
+        return f"{self.fecha} ${self.monto} → {self.egreso.descripcion}"
+
+    def save(self, *args, **kwargs):
+        if not self.automatico:
+            # Un pago detallado reemplaza al pago total automático
+            Pago.objects.filter(egreso_id=self.egreso_id, automatico=True).delete()
+        super().save(*args, **kwargs)
+        self.egreso.actualizar_estado_pago()
+
+    def delete(self, *args, **kwargs):
+        egreso = self.egreso
+        r = super().delete(*args, **kwargs)
+        egreso.actualizar_estado_pago()
+        return r
+
+
+class Cuota(models.Model):
+    """Plan de pago de un egreso (deuda en cuotas). Los pagos se imputan a las cuotas en orden."""
+
+    egreso = models.ForeignKey(Egreso, on_delete=models.CASCADE, related_name="cuotas")
+    numero = models.PositiveSmallIntegerField()
+    vencimiento = models.DateField()
+    monto = models.DecimalField(max_digits=14, decimal_places=2)
+
+    class Meta:
+        ordering = ["egreso", "numero"]
+        unique_together = [("egreso", "numero")]
+        verbose_name_plural = "Cuotas"
+
+    def __str__(self):
+        return f"Cuota {self.numero} de {self.egreso.descripcion} ({self.vencimiento:%d/%m/%Y})"
+
+
+class Ingreso(models.Model):
+    """Ingreso devengado de la empresa (p. ej. la liquidación de Claro por los trabajos realizados).
+
+    La empresa no vende al público, pero cobra por su trabajo: esto es lo que se espera cobrar.
+    Lo que efectivamente entra está en `Cobro` (uno o varios, parciales)."""
+
+    fecha = models.DateField("Fecha (devengado)", default=timezone.localdate, db_index=True)
+    periodo = models.DateField("Período liquidado", null=True, blank=True, help_text="Primer día del mes.")
+    pagador = models.CharField(max_length=120, default="Claro")
+    concepto = models.CharField(max_length=200)
+    numero_comprobante = models.CharField("N° de factura / liquidación", max_length=40, blank=True)
+    monto = models.DecimalField(max_digits=14, decimal_places=2,
+                                help_text="Neto a cobrar (después de retenciones y débitos conocidos).")
+    fecha_esperada_cobro = models.DateField("Se espera cobrar el", null=True, blank=True)
+    observaciones = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ["-fecha"]
+        verbose_name = "Ingreso (a cobrar)"
+        verbose_name_plural = "Ingresos (a cobrar)"
+
+    def __str__(self):
+        return f"{self.fecha} {self.pagador}: {self.concepto} ${self.monto}"
+
+    @property
+    def cobrado(self) -> Decimal:
+        return self.cobros.aggregate(t=models.Sum("monto"))["t"] or Decimal("0")
+
+    @property
+    def saldo(self) -> Decimal:
+        return self.monto - self.cobrado
+
+    @property
+    def estado(self) -> str:
+        c = self.cobrado
+        return "cobrado" if c >= self.monto else "parcial" if c > 0 else "pendiente"
+
+
+class Cobro(models.Model):
+    """Entrada de dinero que cancela (total o parcialmente) un ingreso."""
+
+    ingreso = models.ForeignKey(Ingreso, on_delete=models.CASCADE, related_name="cobros")
+    fecha = models.DateField(default=timezone.localdate, db_index=True)
+    monto = models.DecimalField(max_digits=14, decimal_places=2)
+    cuenta = models.ForeignKey(Cuenta, null=True, blank=True, on_delete=models.PROTECT, related_name="cobros")
+    observaciones = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ["-fecha", "-id"]
+        verbose_name_plural = "Cobros"
+
+    def __str__(self):
+        return f"{self.fecha} ${self.monto} ← {self.ingreso.concepto}"
 
 
 class Presupuesto(models.Model):

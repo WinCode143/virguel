@@ -500,3 +500,29 @@ los precios deben llevar símbolo pesos".
 - Antes de hacerlo público se revisó todo el historial (sin claves) y se reemplazó el mail personal
   de los commits por el mail privado de GitHub (`git filter-repo --mailmap`); el repo local quedó
   configurado con ese mail para los commits nuevos.
+
+## 2026-10-13 — Correcciones de la revisión funcional y técnica (12/10)
+
+### Pedido
+Ejecutar el plan `docs/PLAN_CORRECCIONES.md` hasta donde no haga falta información de la empresa.
+
+### Hecho
+- H01 archivos privados con autorización; H05 importación sin reabrir ni duplicar, con registro y
+  reapertura auditada; H06 sincronización sin señal idempotente y con confirmación explícita.
+- H02 devoluciones con lote de origen (sin reiniciar antigüedad ni generar compras) y custodia de
+  herramientas/EPP separada de la compra.
+- H03 catálogo común de motivos con atribución; H04 efectividad sólo con acción cumplida y verificada;
+  H09 "sin evidencia suficiente", criterios versionados, recapacitación no resta.
+- H07 ingresos, cobros, pagos parciales, cuotas, cuentas y proyección de caja.
+- H10 historia de visitas (`Intento`) y de supervisores (`AsignacionSupervisor`); H08 previsión con
+  suministro reconciliado y compras en camino.
+- Rendimiento: partes adeudadas 17 s → 0,6 s; resumen de finanzas 12 s → 0,5 s (datos de demo).
+- Validado: 148 tests en PostgreSQL, CI, despliegue Docker + Caddy, recorrido Playwright.
+
+### Decisiones
+- El diagnóstico extremo pasa a "Requiere revisión del supervisor (riesgo alto)": el índice es
+  orientativo, no una decisión laboral.
+- Los egresos existentes marcados "pagado" conservan su estado con un pago automático; las
+  asignaciones de EPP existentes conservan su egreso (se migran como "compra").
+- Pendiente de la empresa: liquidación de Claro, saldos y cuentas, deudas, atribución de motivos,
+  pesos, propiedad de decodificadores, cuadrillas.

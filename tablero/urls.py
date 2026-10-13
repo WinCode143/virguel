@@ -35,4 +35,5 @@ urlpatterns = [
     path("powerbi/", exportar.indice, name="powerbi"),
     path("importar/", importar.vista, name="importar"),
     path("importar/plantilla/<slug:tipo>.csv", importar.plantilla, name="plantilla"),
+    path("ordenes/<str:numero>/reabrir/", importar.reabrir, name="reabrir_orden"),
 ]

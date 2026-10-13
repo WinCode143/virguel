@@ -1,0 +1,29 @@
+{% extends "escritorio.html" %}{% load formato ui %}
+{% block titulo %}Ingresos y cobros · Virguel{% endblock %}
+{% block encabezado %}<h1>Ingresos y cobros</h1><p class="sub">Lo que la empresa factura o liquida (por ejemplo, la liquidación de Claro por los trabajos del mes) y lo que efectivamente se cobra, total o en partes.</p>{% endblock %}
+{% block contenido %}
+<div class="grid g2">
+<form method="post" class="card form-movil" style="align-self:start">{% csrf_token %}
+  <h2>Nuevo ingreso a cobrar</h2>
+  {% for campo in form %}{{ campo.label_tag }}{{ campo }}{% for err in campo.errors %}<p class="errorlist">{{ err }}</p>{% endfor %}{% endfor %}
+  <button class="btn">{% icono 'check' 'sm' %} Guardar</button>
+</form>
+<div class="card"><h2>Ingresos</h2><div class="tabla-scroll" style="max-height:75vh"><table>
+<thead><tr><th>Fecha</th><th>Concepto</th><th class="num">Monto</th><th class="num">Cobrado</th><th>Estado / cobro</th></tr></thead>
+<tbody>{% for i in ingresos %}<tr>
+<td>{{ i.fecha|date:"d/m/Y" }}{% if i.periodo %}<br><small class="muted">período {{ i.periodo|date:"m/Y" }}</small>{% endif %}</td>
+<td>{{ i.pagador }} · {{ i.concepto }}{% if i.numero_comprobante %}<br><small class="muted">{{ i.numero_comprobante }}</small>{% endif %}
+  {% for c in i.cobros.all %}<br><small class="muted">cobro {{ c.fecha|date:"d/m" }} {{ c.monto|pesos }}{% if c.cuenta %} · {{ c.cuenta }}{% endif %}</small>
+  <form method="post" style="display:inline">{% csrf_token %}<input type="hidden" name="accion" value="borrar_cobro"><input type="hidden" name="cobro" value="{{ c.id }}"><button class="icono-btn" title="Eliminar cobro" onclick="return confirm('¿Eliminar este cobro?')">×</button></form>{% endfor %}</td>
+<td class="num">{{ i.monto|pesos }}</td><td class="num">{{ i.cobrado|pesos }}</td>
+<td>{% if i.estado == "cobrado" %}<span class="estado ok">Cobrado</span>{% else %}
+  <span class="estado {% if i.fecha_esperada_cobro and i.fecha_esperada_cobro < hoy %}critico{% else %}aviso{% endif %}">{% if i.estado == "parcial" %}Parcial{% else %}Pendiente{% endif %}{% if i.fecha_esperada_cobro %} · {{ i.fecha_esperada_cobro|date:"d/m" }}{% endif %}</span>
+  <form method="post" style="display:flex;gap:.3rem;margin-top:.3rem;flex-wrap:wrap">{% csrf_token %}<input type="hidden" name="accion" value="cobro"><input type="hidden" name="ingreso" value="{{ i.id }}">
+    <input name="monto" placeholder="{{ i.saldo|pesos }}" style="max-width:8rem" inputmode="decimal">
+    <input type="date" name="fecha" value="{{ hoy|date:'Y-m-d' }}" style="max-width:9.5rem">
+    <select name="cuenta" style="max-width:9rem"><option value="">Cuenta…</option>{% for c in cuentas %}<option value="{{ c.id }}">{{ c.nombre }}</option>{% endfor %}</select>
+    <button class="btn sec">Cobrado</button></form>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="5" class="vacio">Todavía no hay ingresos cargados.</td></tr>{% endfor %}</tbody></table></div>
+<p class="muted" style="font-size:.82rem">Sin monto se registra el cobro del saldo completo.</p></div>
+</div>
+{% endblock %}

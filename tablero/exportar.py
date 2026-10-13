@@ -31,15 +31,20 @@ def _sql(consulta):
 def _tecnicos():
     yield ["legajo", "tecnico", "supervisor", "dias_calle", "ot_completadas", "ot_fallidas", "retrabajos_causados",
            "productividad_ot_dia", "indice_vs_mediana", "tendencia_pct", "puntaje_controles", "score_productividad",
-           "score_calidad", "score_disciplina", "score_seguridad", "riesgo", "nivel_riesgo", "diagnostico", "motivos"]
+           "score_calidad", "score_disciplina", "score_seguridad", "riesgo", "nivel_riesgo", "diagnostico", "motivos",
+           "ot_no_resueltas_a_investigar", "ot_no_resueltas_causa_ajena", "criterio_version"]
+
+    def r(v, d):
+        return "" if v is None else round(v, d)
     for e in evaluar_tecnicos():
         t = e.tecnico
         yield [t.legajo, t.nombre_completo, t.supervisor.nombre_completo if t.supervisor else "", e.dias_calle,
                e.completadas, e.fallidas, e.retrabajos_causados, round(e.productividad, 3),
                round(e.indice_productividad, 3), round(e.tendencia, 1),
-               round(e.puntaje_controles, 2) if e.puntaje_controles else "", round(e.score_productividad, 1),
-               round(e.score_calidad, 1), round(e.score_disciplina, 1), round(e.score_seguridad, 1), e.riesgo,
-               e.nivel_riesgo, e.diagnostico, " | ".join(e.motivos)]
+               round(e.puntaje_controles, 2) if e.puntaje_controles else "", r(e.score_productividad, 1),
+               r(e.score_calidad, 1), r(e.score_disciplina, 1), r(e.score_seguridad, 1), r(e.riesgo, 1),
+               e.nivel_riesgo, e.diagnostico, " | ".join(e.motivos), e.fallidas_a_investigar,
+               e.no_resueltas_ajenas, e.criterio_version or ""]
 
 
 def _supervisores():
@@ -71,6 +76,10 @@ DATASETS = {
     "encuestas": ("Encuestas diarias a supervisores", _sql("SELECT * FROM powerbi.encuestas")),
     "siniestros": ("Siniestros / incidentes", _sql("SELECT * FROM powerbi.siniestros")),
     "egresos": ("Egresos", _sql("SELECT * FROM powerbi.egresos")),
+    "pagos": ("Pagos (salidas de dinero)", _sql("SELECT * FROM powerbi.pagos")),
+    "cuotas": ("Cuotas de planes de pago", _sql("SELECT * FROM powerbi.cuotas")),
+    "ingresos": ("Ingresos a cobrar", _sql("SELECT * FROM powerbi.ingresos")),
+    "cobros": ("Cobros (entradas de dinero)", _sql("SELECT * FROM powerbi.cobros")),
     "services": ("Services de flota", _sql("SELECT * FROM powerbi.services")),
     "epp": ("Asignaciones de EPP / herramientas", _sql("SELECT * FROM powerbi.epp")),
     "evaluacion_historica": ("Historial semanal de evaluación de técnicos", _sql("SELECT * FROM powerbi.evaluacion_historica")),

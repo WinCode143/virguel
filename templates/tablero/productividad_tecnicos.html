@@ -11,5 +11,5 @@
 <tbody>{% for tb in tbs %}<tr><td style="white-space:nowrap"><a href="{% url 'tablero:prod_ficha' tb.persona.id %}">{{ tb.persona.apellido }}, {{ tb.persona.nombre }}</a></td>
 <td class="num"><span class="estado {{ tb.estado }}">{{ tb.indice|num:0 }}</span></td>
 {% for m in tb.mediciones %}{% if m.indicador.peso %}<td class="num">{% include "tablero/_indicador_valor.html" %}</td>{% endif %}{% endfor %}</tr>{% endfor %}</tbody></table></div>
-<p class="muted" style="font-size:.8rem;margin-bottom:0">Verde: cerca o por encima de la meta · amarillo: intermedio · rojo: cerca o por debajo del mínimo. El IPT mide productividad; el riesgo de desvinculación se ve en "Técnicos y riesgo".</p></div>
+<p class="muted" style="font-size:.8rem;margin-bottom:0">Verde: cerca o por encima de la meta · amarillo: intermedio · rojo: cerca o por debajo del mínimo. El IPT mide productividad; el índice de riesgo (orientativo) se ve en "Técnicos y riesgo".</p></div>
 {% endblock %}

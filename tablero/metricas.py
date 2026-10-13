@@ -16,12 +16,13 @@ from django.utils import timezone
 from core.models import Indicador, Parametros, Persona
 from incidentes.models import Siniestro
 from inventario.models import PedidoMaterial, RecetaMaterial, Salida
+from operaciones.criterios import atribucion, atribuciones_por_motivo, visitas
 from operaciones.models import Jornada, OrdenTrabajo
 from personal.indicadores import resumen as resumen_asistencia
 from personal.models import Asistencia, Novedad
+from supervision.efectividad import resumir
 from supervision.models import AccionCorrectiva, InformeControl
 
-EVITABLES = ("falta_material", "otro")
 
 
 @dataclass
@@ -153,12 +154,14 @@ def valores_tecnicos(desde: date, hasta: date, tecnicos) -> dict:
         if fe == fp and estado in ("completada", "fallida"):
             agenda[t][1] += 1
 
-    ejecutadas = dict(OrdenTrabajo.objects.filter(tecnico_id__in=ids, fecha_ejecucion__range=(desde, hasta))
-                      .values_list("tecnico_id").annotate(n=Count("id")))
-    evitables = dict(OrdenTrabajo.objects.filter(tecnico_id__in=ids, fecha_ejecucion__range=(desde, hasta),
-                                                 estado__in=["fallida", "reprogramada"],
-                                                 motivo_no_resuelto__in=EVITABLES)
-                     .values_list("tecnico_id").annotate(n=Count("id")))
+    # Mismo criterio que la evaluación, sobre las visitas (operaciones/criterios.py): sólo lo atribuido
+    # al técnico cuenta como evitable; la visita fallida sigue siendo de quien la hizo.
+    ejecutadas, evitables = defaultdict(int), defaultdict(int)
+    catalogo = atribuciones_por_motivo()
+    for vis in visitas(desde, hasta, ids):
+        ejecutadas[vis.tecnico_id] += 1
+        if atribucion(vis.resultado, vis.motivo, vis.confirmada, catalogo) == "tecnico":
+            evitables[vis.tecnico_id] += 1
     controles = dict(InformeControl.objects.filter(tecnico_id__in=ids, fecha__range=(desde, hasta))
                      .values_list("tecnico_id").annotate(p=Avg("puntaje")))
 
@@ -241,10 +244,17 @@ def tableros_supervisores(desde=None, hasta=None, dias=30, supervisores=None) ->
     hasta = hasta or timezone.localdate()
     desde = desde or hasta - timedelta(days=dias - 1)
     sups = list(supervisores if supervisores is not None else Persona.objects.filter(rol="supervisor", activo=True))
+    # Composición de cada equipo EN EL PERÍODO (historial), no la actual: cambiar a un técnico de
+    # supervisor no reescribe los indicadores de meses anteriores del supervisor previo.
+    from core.historial import HistorialSupervisores
+    hist = HistorialSupervisores(desde, hasta)
+    tecnicos = Persona.objects.in_bulk(set().union(*(hist.equipo(s.id) for s in sups)) if sups else set())
     equipos = defaultdict(list)
-    for t in Persona.objects.filter(rol="tecnico", activo=True, supervisor__in=sups):
-        equipos[t.supervisor_id].append(t)
-    todos = [t for ts in equipos.values() for t in ts]
+    for s in sups:
+        equipos[s.id] = [tecnicos[i] for i in sorted(hist.equipo(s.id)) if i in tecnicos
+                         and tecnicos[i].rol == "tecnico" and (tecnicos[i].activo or tecnicos[i].fecha_egreso
+                                                              and tecnicos[i].fecha_egreso >= desde)]
+    todos = list({t.id: t for ts in equipos.values() for t in ts}.values())
     vt = valores_tecnicos(desde, hasta, todos)
     asis = {r.persona.id: r for r in resumen_asistencia(desde, hasta, todos)}
     evs = {e.supervisor.id: e for e in evaluar_supervisores(hasta, (hasta - desde).days + 1)}
@@ -286,16 +296,12 @@ def tableros_supervisores(desde=None, hasta=None, dias=30, supervisores=None) ->
         rapidos = sum(1 for i in desvios if any((a.fecha - i.fecha).days <= 2 for a in i.acciones.all()))
         x["respuesta_desvios"] = _pct(rapidos, len(desvios)) if len(desvios) >= 3 else None
 
-        # Efectividad: acciones de hace 30-60 días; ¿el técnico volvió a tener un desvío en los 30 días siguientes?
+        # Efectividad: acciones de hace 30-60 días, CUMPLIDAS y VERIFICADAS con controles posteriores
+        # (supervision/efectividad.py). Sin seguimiento suficiente quedan "no verificadas" y no suman.
         acciones = AccionCorrectiva.objects.filter(tecnico_id__in=ids, fecha__range=(hasta - timedelta(days=60),
                                                                                     hasta - timedelta(days=30)))
-        total = sin_repetir = 0
-        for a in acciones:
-            total += 1
-            repite = InformeControl.objects.filter(tecnico_id=a.tecnico_id, desvio_detectado=True,
-                                                   fecha__gt=a.fecha, fecha__lte=a.fecha + timedelta(days=30)).exists()
-            sin_repetir += not repite
-        x["efectividad_correccion"] = _pct(sin_repetir, total) if total >= 3 else None
+        res_acciones = resumir(acciones.select_related("informe"), hasta)
+        x["efectividad_correccion"] = res_acciones.efectividad
 
         ev = evs.get(s.id)
         notas = [n for n in ((ev.nota_encuesta, ev.nota_semanal) if ev else ()) if n]

@@ -151,6 +151,14 @@ En la PC (`/tablero/`): los mismos tableros que gerencia pero **sólo con su equ
   básicos" para cargar o cambiar el básico de cada persona. Las **multas se muestran pero no se
   descuentan** (art. 131 de la Ley de Contrato de Trabajo). Es una pre-liquidación: el recibo legal
   (aguinaldo, retenciones, F.931) lo sigue haciendo el estudio contable. Los supervisores no ven sueldos.
+- **Caja y flujo de fondos**: saldo de las cuentas, lo que hay que cobrar y pagar, y la proyección
+  semana a semana (cobros esperados − pagos comprometidos − gasto estimado). Las cuentas (banco,
+  efectivo) se cargan una vez con su saldo inicial en el admin (Finanzas → Cuentas).
+- **Ingresos y cobros**: cargar lo que se factura o liquida (p. ej. la liquidación de Claro del mes) con
+  la fecha en que se espera cobrar, y registrar cada cobro (total o parcial) con la cuenta.
+- **Pagos parciales y cuotas**: en la ficha de un comprobante se registran pagos parciales (con cuenta y
+  medio) y se arma un plan de cuotas mensuales; los pagos se imputan a las cuotas en orden. El tilde
+  "Ya está pagado" sigue funcionando: registra el pago del saldo.
 - **Materiales**: comprado vs. usado en órdenes (valorizado a costo), costo por técnico y por tipo de
   trabajo, lo más usado, valor del stock en depósito y en técnicos, partes paradas.
 - **Reintegros a técnicos**: aprobar o rechazar los gastos que cargan los técnicos al cerrar llamadas.
@@ -162,3 +170,21 @@ En la PC (`/tablero/`): los mismos tableros que gerencia pero **sólo con su equ
 - "Editar" en cada indicador: nombre, descripción, meta, límite, peso; desmarcar "Activo" lo saca de uso.
 - "Nuevo indicador": para medir algo que el sistema no registra; se carga su valor cada mes en
   "cargar valores" (el supervisor carga los de su equipo).
+
+## Novedades de la revisión del 12/10/2026
+- **Supervisor (app)**: "No resueltas para revisar" — confirmar si una visita no resuelta por falta de
+  material, rechazo u otro fue responsabilidad del técnico (hasta confirmarlo no cuenta en su
+  evaluación). "Acciones correctivas sin cumplir" — marcar "Cumplida" cuando se ejecutó; la
+  efectividad se verifica con los controles siguientes.
+- **Técnico (app)**: si un envío sin señal es rechazado por el servidor, queda marcado "No aceptado"
+  con el motivo, para corregirlo, reintentarlo o descartarlo. Nunca se borra solo.
+- **Importar**: reimportar no reabre órdenes cerradas ni duplica stock; las diferencias se muestran
+  como conflictos y quedan registradas. Para devolver una orden cerrada a la agenda: "Reabrir" (sólo
+  gerencia, con motivo).
+- **Herramientas/EPP**: la compra (admin → Compras de herramientas / EPP) es el gasto; entregar del
+  pañol o reasignar es custodia y no vuelve a contar como gasto.
+- **Depósito**: una devolución vuelve con la fecha de ingreso y el costo del lote original y no es una
+  compra. Compras confirmadas que todavía no llegaron: admin → Compras en camino (suman a la previsión).
+- **Comandos**: `python manage.py recalcular_devoluciones` (informa y, con `--aplicar`, corrige
+  egresos generados por devoluciones anteriores) y `python manage.py evaluacion_retrospectiva`
+  (qué pasó después con cada diagnóstico, para calibrar los pesos).

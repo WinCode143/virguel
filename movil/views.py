@@ -20,7 +20,7 @@ from herramientas.models import Asignacion
 from incidentes.models import Siniestro
 from operaciones.models import Jornada, OrdenTrabajo
 from supervision.evaluacion import evaluar_supervisores
-from supervision.models import EncuestaSupervisor, InformeControl, TareaSupervisor
+from supervision.models import AccionCorrectiva, EncuestaSupervisor, InformeControl, TareaSupervisor
 
 from .forms import (AccionForm, CerrarOrdenForm, EncuestaForm, EncuestaSemanalForm, FinJornadaForm, InformeForm,
                     InicioJornadaForm, NotaForm, NovedadForm, PedidoForm, SiniestroMovilForm)
@@ -99,7 +99,20 @@ def _inicio_supervisor(request, p):
         "novedades_pendientes": Novedad.objects.filter(persona__supervisor=p, estado="pendiente").count(),
         "pedidos_pendientes": PedidoMaterial.objects.filter(tecnico__supervisor=p, estado="pendiente").count(),
         "deudas_equipo": deudas_equipo,
+        "a_investigar": _no_resueltas_a_investigar(p).count(),
+        "acciones_sin_cumplir": AccionCorrectiva.objects.filter(
+            tecnico__supervisor=p, cumplida=False, fecha__gte=hoy - timedelta(days=60))
+        .exclude(tipo__in=("charla",)).select_related("tecnico")[:10],
         "inicio_form": InicioJornadaForm(), "fin_form": FinJornadaForm()})
+
+
+def _no_resueltas_a_investigar(sup, dias=60):
+    """Visitas no resueltas de su equipo (en ese momento) cuya atribución falta confirmar."""
+    from operaciones.criterios import q_a_investigar
+    from operaciones.models import Intento
+    return (Intento.objects.filter(q_a_investigar(), supervisor=sup,
+                                   fecha__gte=timezone.localdate() - timedelta(days=dias))
+            .select_related("tecnico", "orden__tipo", "orden__cliente").order_by("-fecha"))
 
 
 # ---------------------------------------------------------------- técnico
@@ -225,6 +238,47 @@ def novedades_equipo(request):
         .select_related("persona")[:15], "tab": "asistencia"})
 
 
+@requiere_rol(SUPERVISOR)
+def accion_cumplida(request, pk):
+    """El supervisor registra que la acción correctiva se ejecutó (desde ahí corre el seguimiento)."""
+    p = _persona(request)
+    a = get_object_or_404(AccionCorrectiva, pk=pk, tecnico__supervisor=p)
+    if request.method == "POST" and not a.cumplida:
+        a.cumplida = True
+        a.fecha_cumplida = fecha_operacion(request)
+        a.save(update_fields=["cumplida", "fecha_cumplida"])
+        messages.success(request, f"{a.get_tipo_display()} de {a.tecnico.nombre_completo}: cumplida. "
+                                  "Se verificará con los próximos controles.")
+    return redirect("movil:inicio")
+
+
+@requiere_rol(SUPERVISOR)
+def no_resueltas_equipo(request):
+    """El supervisor confirma a quién se atribuye cada visita no resuelta dudosa (falta de material,
+    rechazo, otro). Hasta que se confirme no cuenta en la evaluación del técnico."""
+    from operaciones.models import Atribucion, Intento, NotaOrden
+    p = _persona(request)
+    if request.method == "POST":
+        it = get_object_or_404(Intento, pk=request.POST.get("intento"), supervisor=p,
+                               resultado__in=("fallida", "reprogramada"))
+        valor = request.POST.get("atribucion")
+        if valor not in Atribucion.values:
+            messages.error(request, "Elegí a quién se atribuye.")
+        else:
+            it.atribucion_confirmada, it.atribucion_confirmada_por = valor, p
+            it.save(update_fields=["atribucion_confirmada", "atribucion_confirmada_por"])
+            NotaOrden.objects.create(orden=it.orden, autor=p, tipo=NotaOrden.Tipo.NOTA,
+                                     texto=f"Visita del {it.fecha:%d/%m}: atribución confirmada "
+                                           f"{it.get_atribucion_confirmada_display()}. "
+                                           f"{request.POST.get('comentario', '').strip()}".strip())
+            messages.success(request, f"Orden {it.orden.numero}: {it.get_atribucion_confirmada_display().lower()}.")
+        return redirect("movil:no_resueltas")
+    return render(request, "movil/no_resueltas.html", {
+        "pendientes": _no_resueltas_a_investigar(p), "opciones": Atribucion.choices,
+        "recientes": Intento.objects.filter(supervisor=p).exclude(atribucion_confirmada="")
+        .select_related("tecnico", "orden").order_by("-fecha")[:15], "tab": "inicio"})
+
+
 def _orden_del_tecnico(request, pk):
     p = _persona(request)
     ot = get_object_or_404(OrdenTrabajo.objects.select_related("tipo", "cliente", "zona"), pk=pk, tecnico=p)
@@ -297,7 +351,7 @@ def orden_cierre(request, pk):
     from operaciones.models import GastoOrden, NotaOrden
     p, ot = _orden_del_tecnico(request, pk)
     if ot.estado not in ("pendiente", "asignada"):
-        messages.info(request, "Esta llamada ya está cerrada.")
+        messages.error(request, "Esta llamada ya estaba cerrada: no se registró este cierre.")
         return redirect("movil:orden", pk=ot.pk)
     stock = saldos(p)
     if request.method == "POST" and request.POST.get("accion") != "empezar":

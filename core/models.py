@@ -78,6 +78,20 @@ class Parametros(models.Model):
         default=Decimal("0.60"), validators=[MinValueValidator(0), MaxValueValidator(1)])
     dias_ventana_evaluacion = models.PositiveIntegerField(
         "Ventana de evaluación de técnicos (días)", default=90)
+    evidencia_min_jornadas = models.PositiveIntegerField(
+        "Evaluación: jornadas en calle mínimas", default=10,
+        help_text="Con menos jornadas en la ventana el técnico figura 'Sin evidencia suficiente' (sin puntajes).")
+    evidencia_min_ordenes = models.PositiveIntegerField(
+        "Evaluación: órdenes ejecutadas mínimas para medir calidad", default=10,
+        help_text="Con menos órdenes (y sin controles suficientes) la calidad queda sin dato.")
+    evidencia_min_controles = models.PositiveIntegerField(
+        "Evaluación: controles mínimos para medir calidad", default=2)
+    controles_verificacion_accion = models.PositiveIntegerField(
+        "Acciones correctivas: controles posteriores para verificarlas", default=2,
+        help_text="Una acción cumplida se considera efectiva sólo si después hubo al menos estos controles sin "
+                  "repetir el desvío; con menos queda 'no verificada'.")
+    dias_verificacion_accion = models.PositiveIntegerField(
+        "Acciones correctivas: días de seguimiento", default=30)
     dias_cobertura_stock_min = models.PositiveIntegerField(
         "Días mínimos de cobertura de stock", default=7,
         help_text="Si el stock alcanza para menos días que esto, se alerta faltante.")
@@ -472,3 +486,43 @@ def valores_manuales(codigos, personas, hasta, meses=2):
     for codigo, pid, valor in qs:  # el más reciente pisa al anterior
         res[(codigo, pid)] = float(valor)
     return res
+
+
+class OperacionOffline(models.Model):
+    """Envío de la app de campo ya aceptado por el servidor (idempotencia de la sincronización).
+
+    El celular genera un identificador por envío; si el mismo envío llega dos veces (se cortó la
+    señal después de que el servidor lo guardó y el celular lo reintenta), no se aplica de nuevo."""
+
+    id_operacion = models.UUIDField(unique=True)
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    ruta = models.CharField(max_length=200)
+    recibida = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = "Envío sin señal recibido"
+        verbose_name_plural = "Envíos sin señal recibidos"
+
+    def __str__(self):
+        return f"{self.ruta} {self.recibida:%d/%m %H:%M}"
+
+
+class AsignacionSupervisor(models.Model):
+    """Historia de quién fue el supervisor de cada técnico y desde/hasta cuándo.
+
+    Persona.supervisor es la relación actual; esta tabla permite leer períodos pasados con la
+    composición de equipos de ese momento. Se mantiene sola al cambiar el supervisor (core/signals.py)."""
+
+    tecnico = models.ForeignKey(Persona, on_delete=models.CASCADE, related_name="historial_supervisores")
+    supervisor = models.ForeignKey(Persona, on_delete=models.CASCADE, related_name="historial_a_cargo")
+    desde = models.DateField()
+    hasta = models.DateField(null=True, blank=True, help_text="Vacío = vigente.")
+
+    class Meta:
+        ordering = ["tecnico", "desde"]
+        verbose_name = "Asignación a supervisor (historial)"
+        verbose_name_plural = "Asignaciones a supervisor (historial)"
+
+    def __str__(self):
+        hasta = f"{self.hasta:%d/%m/%Y}" if self.hasta else "hoy"
+        return f"{self.tecnico} → {self.supervisor} ({self.desde:%d/%m/%Y}–{hasta})"
