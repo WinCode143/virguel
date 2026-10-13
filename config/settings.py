@@ -59,6 +59,7 @@ MIDDLEWARE = [
     "core.autenticacion.SeguridadCuentaMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "core.offline.SincronizacionOfflineMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"

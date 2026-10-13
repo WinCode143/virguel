@@ -173,3 +173,79 @@ class ImportacionOrdenesTests(TestCase):
         self.client.force_login(sup.usuario)
         self.client.post("/tablero/ordenes/OT1/reabrir/", {"motivo": "x"})
         self.assertEqual(OrdenTrabajo.objects.get(numero="OT1").estado, "completada")
+
+
+class SincronizacionOfflineTests(TestCase):
+    """H06: un envío sin señal sólo se da por aceptado con confirmación explícita, y no se duplica."""
+
+    def setUp(self):
+        import uuid
+
+        from operaciones.models import OrdenTrabajo, TipoTarea
+        self.uuid = uuid
+        self.sup = persona("S1", rol="supervisor")
+        self.tec = persona("T1", supervisor=self.sup, usuario=User.objects.create_user("tec", password="x"))
+        tipo = TipoTarea.objects.create(codigo="R", nombre="Rep")
+        self.ot = OrdenTrabajo.objects.create(numero="1", tipo=tipo, tecnico=self.tec, estado="asignada")
+        self.client.force_login(self.tec.usuario)
+        self.url = f"/app/orden/{self.ot.id}/notas/"
+
+    def enviar(self, datos, sync=True):
+        extra = {"HTTP_X_VIRGUEL_SYNC": "1"} if sync else {}
+        return self.client.post(self.url, datos, **extra)
+
+    def test_envio_aceptado_confirma_y_no_se_duplica(self):
+        ident = str(self.uuid.uuid4())
+        r = self.enviar({"texto": "Llegué", "_id_operacion": ident})
+        self.assertEqual(r.json(), {"ok": True})
+        r = self.enviar({"texto": "Llegué", "_id_operacion": ident})
+        self.assertEqual(r.json()["ok"], True)
+        self.assertEqual(self.ot.notas.count(), 1)
+
+    def test_respuesta_perdida_y_reintento_no_duplica(self):
+        ident = str(self.uuid.uuid4())
+        self.enviar({"texto": "Nota", "_id_operacion": ident}, sync=False)  # online: el celular no vio la respuesta
+        r = self.enviar({"texto": "Nota", "_id_operacion": ident})           # la sincronización lo reintenta
+        self.assertTrue(r.json()["ok"])
+        self.assertEqual(self.ot.notas.count(), 1)
+
+    def test_formulario_con_errores_no_se_confirma(self):
+        r = self.enviar({"texto": "", "_id_operacion": str(self.uuid.uuid4())})
+        j = r.json()
+        self.assertFalse(j["ok"])
+        self.assertIn("<form", j["html"])
+        self.assertEqual(self.ot.notas.count(), 0)
+
+    def test_error_por_mensaje_y_redireccion_no_se_confirma(self):
+        from core.models import OperacionOffline
+        self.ot.estado = "completada"
+        self.ot.save()
+        # Cierre de una orden ya cerrada: la vista redirige con un aviso, no aplica nada.
+        r = self.client.post(f"/app/orden/{self.ot.id}/cierre/", {"resultado": "completada",
+                                                                  "_id_operacion": str(self.uuid.uuid4())},
+                             HTTP_X_VIRGUEL_SYNC="1")
+        self.assertEqual(r.json()["ok"], False)
+        self.assertIn("ya estaba cerrada", r.json()["mensaje"])
+        self.assertFalse(OperacionOffline.objects.exists())
+
+    def test_envio_de_otro_usuario_se_rechaza(self):
+        ident = str(self.uuid.uuid4())
+        self.enviar({"texto": "Mía", "_id_operacion": ident})
+        otro = persona("T2", supervisor=self.sup, usuario=User.objects.create_user("t2", password="x"))
+        self.client.force_login(otro.usuario)
+        r = self.enviar({"texto": "Mía", "_id_operacion": ident})
+        self.assertEqual(r.status_code, 409)
+
+    def test_sin_sesion_va_al_login_y_el_celular_lo_conserva(self):
+        self.client.logout()
+        r = self.enviar({"texto": "x", "_id_operacion": str(self.uuid.uuid4())})
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("/login/", r["Location"])
+
+    def test_el_script_solo_borra_con_confirmacion(self):
+        from pathlib import Path
+
+        from django.conf import settings
+        js = (Path(settings.BASE_DIR) / "static/js/offline.js").read_text()
+        self.assertIn("j.ok === true", js)
+        self.assertIn('"X-Virguel-Sync": "1"', js)

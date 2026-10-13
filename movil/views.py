@@ -297,7 +297,7 @@ def orden_cierre(request, pk):
     from operaciones.models import GastoOrden, NotaOrden
     p, ot = _orden_del_tecnico(request, pk)
     if ot.estado not in ("pendiente", "asignada"):
-        messages.info(request, "Esta llamada ya está cerrada.")
+        messages.error(request, "Esta llamada ya estaba cerrada: no se registró este cierre.")
         return redirect("movil:orden", pk=ot.pk)
     stock = saldos(p)
     if request.method == "POST" and request.POST.get("accion") != "empezar":

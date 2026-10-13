@@ -472,3 +472,22 @@ def valores_manuales(codigos, personas, hasta, meses=2):
     for codigo, pid, valor in qs:  # el más reciente pisa al anterior
         res[(codigo, pid)] = float(valor)
     return res
+
+
+class OperacionOffline(models.Model):
+    """Envío de la app de campo ya aceptado por el servidor (idempotencia de la sincronización).
+
+    El celular genera un identificador por envío; si el mismo envío llega dos veces (se cortó la
+    señal después de que el servidor lo guardó y el celular lo reintenta), no se aplica de nuevo."""
+
+    id_operacion = models.UUIDField(unique=True)
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    ruta = models.CharField(max_length=200)
+    recibida = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = "Envío sin señal recibido"
+        verbose_name_plural = "Envíos sin señal recibidos"
+
+    def __str__(self):
+        return f"{self.ruta} {self.recibida:%d/%m %H:%M}"
