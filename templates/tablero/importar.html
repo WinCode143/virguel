@@ -1,8 +1,11 @@
 {% extends "escritorio.html" %}
 {% block titulo %}Importar · Virguel{% endblock %}
-{% block encabezado %}<h1>Importar datos desde Excel o CSV</h1><p class="sub">Para la carga inicial. Si alguna fila tiene error no se guarda nada y se indica qué corregir. Las filas que ya existen (mismo legajo, patente, código o número) se actualizan.</p>{% endblock %}
+{% block encabezado %}<h1>Importar datos desde Excel o CSV</h1><p class="sub">Para la carga inicial. Si alguna fila tiene error no se guarda nada y se indica qué corregir. Las filas que ya existen (mismo legajo, patente, código o número) se actualizan; las órdenes ya cerradas y los ingresos de stock ya cargados no se modifican y se informan como conflicto.</p>{% endblock %}
 {% block contenido %}
-{% if resultado %}<div class="card" style="border-color:var(--critico)"><h2>No se importó: {{ resultado.errores|length }} fila{{ resultado.errores|length|pluralize }} con error ({{ resultado.tipo }})</h2>
+{% if resultado.conflictos %}<div class="card" style="border-color:var(--aviso)"><h2>{{ resultado.conflictos|length }} fila{{ resultado.conflictos|length|pluralize }} no aplicada{{ resultado.conflictos|length|pluralize }} ({{ resultado.tipo }})</h2>
+<p class="muted">El resto del archivo se importó. Estas diferencias quedan registradas; si una orden cerrada realmente debe volver a la agenda, usar "Reabrir".</p>
+<table><thead><tr><th>Fila</th><th>Registro</th><th>Campo</th><th>En el sistema</th><th>En el archivo</th><th>Motivo</th><th></th></tr></thead><tbody>{% for c in resultado.conflictos|slice:":200" %}<tr><td class="num">{{ c.fila }}</td><td>{{ c.clave }}</td><td>{{ c.campo }}</td><td>{{ c.valor_actual }}</td><td>{{ c.valor_importado }}</td><td class="muted">{{ c.motivo }}</td><td>{% if resultado.tipo_clave == "ordenes" %}<a href="{% url 'tablero:reabrir_orden' c.clave %}">Reabrir</a>{% endif %}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+{% if resultado.errores %}<div class="card" style="border-color:var(--critico)"><h2>No se importó: {{ resultado.errores|length }} fila{{ resultado.errores|length|pluralize }} con error ({{ resultado.tipo }})</h2>
 <table><thead><tr><th>Fila</th><th>Problema</th></tr></thead><tbody>{% for n, e in resultado.errores|slice:":100" %}<tr><td class="num">{{ n }}</td><td>{{ e }}</td></tr>{% endfor %}</tbody></table>
 {% if resultado.errores|length > 100 %}<p class="muted">… y {{ resultado.errores|length|add:"-100" }} más.</p>{% endif %}</div>{% endif %}
 <div class="grid g2">
@@ -19,4 +22,5 @@
 <tr><td><b>{{ nombre }}</b><div class="muted" style="font-size:.78rem">{{ cols|join:", " }}</div>{% if ayuda %}<div style="font-size:.8rem;color:var(--ink-2)">{{ ayuda }}</div>{% endif %}</td>
 <td style="white-space:nowrap"><a href="{% url 'tablero:plantilla' k %}">Descargar plantilla</a></td></tr>{% endfor %}</tbody></table></div>
 </div>
+{% if historial %}<div class="card"><h2>Últimas importaciones</h2><table><thead><tr><th>Fecha</th><th>Datos</th><th>Archivo</th><th>Usuario</th><th class="num">Nuevos</th><th class="num">Actualizados</th><th class="num">No aplicados</th></tr></thead><tbody>{% for i in historial %}<tr><td>{{ i.fecha|date:"d/m/Y H:i" }}</td><td>{{ i.tipo }}</td><td>{{ i.archivo }}</td><td>{{ i.usuario|default:"—" }}</td><td class="num">{{ i.creados }}</td><td class="num">{{ i.actualizados }}</td><td class="num">{{ i.omitidos }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
 {% endblock %}

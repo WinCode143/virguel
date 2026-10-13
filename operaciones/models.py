@@ -108,6 +108,7 @@ class NotaOrden(models.Model):
         NOTA = "nota", "Nota"
         CIERRE = "cierre", "Cierre (qué se hizo)"
         DESPACHO = "despacho", "Indicación de despacho"
+        CORRECCION = "correccion", "Corrección administrativa"
 
     orden = models.ForeignKey(OrdenTrabajo, on_delete=models.CASCADE, related_name="notas")
     autor = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL, related_name="notas_orden")

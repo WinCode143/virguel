@@ -1,0 +1,19 @@
+{% extends "escritorio.html" %}
+{% block titulo %}Reabrir orden · Virguel{% endblock %}
+{% block encabezado %}<h1>Reabrir la orden {{ ot.numero }}</h1><p class="sub">Corrección administrativa: la orden vuelve a la agenda. Queda registrado quién la reabrió, por qué y cómo estaba cerrada.</p>{% endblock %}
+{% block contenido %}
+<div class="grid g2">
+<form class="card form-movil" method="post" style="align-self:start">{% csrf_token %}
+  <h2>{{ ot.tipo }}</h2>
+  <p>Estado actual: <b>{{ ot.get_estado_display }}</b>{% if ot.fecha_ejecucion %} el {{ ot.fecha_ejecucion|date:"d/m/Y" }}{% endif %}{% if ot.tecnico %} · {{ ot.tecnico.nombre_completo }}{% endif %}</p>
+  {% if error %}<p class="estado critico">{{ error }}</p>{% endif %}
+  {% if ot.estado == "completada" or ot.estado == "fallida" %}
+  <label for="motivo">Motivo de la reapertura (obligatorio)</label>
+  <textarea name="motivo" id="motivo" rows="3" required></textarea>
+  <button class="btn">Reabrir orden</button>
+  {% else %}<p class="muted">La orden no está cerrada: no hace falta reabrirla.</p>{% endif %}
+  <p><a href="{% url 'tablero:importar' %}">Volver</a></p>
+</form>
+<div class="card"><h2>Notas de la orden</h2><table><tbody>{% for n in notas %}<tr><td>{{ n.creada|date:"d/m/Y H:i" }}</td><td>{{ n.get_tipo_display }}</td><td>{{ n.texto }}</td></tr>{% empty %}<tr><td class="muted">Sin notas.</td></tr>{% endfor %}</tbody></table></div>
+</div>
+{% endblock %}
