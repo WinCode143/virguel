@@ -107,10 +107,12 @@ def _inicio_supervisor(request, p):
 
 
 def _no_resueltas_a_investigar(sup, dias=60):
+    """Visitas no resueltas de su equipo (en ese momento) cuya atribución falta confirmar."""
     from operaciones.criterios import q_a_investigar
-    return (OrdenTrabajo.objects.filter(q_a_investigar(), tecnico__supervisor=sup,
-                                        fecha_ejecucion__gte=timezone.localdate() - timedelta(days=dias))
-            .select_related("tecnico", "tipo", "cliente"))
+    from operaciones.models import Intento
+    return (Intento.objects.filter(q_a_investigar(), supervisor=sup,
+                                   fecha__gte=timezone.localdate() - timedelta(days=dias))
+            .select_related("tecnico", "orden__tipo", "orden__cliente").order_by("-fecha"))
 
 
 # ---------------------------------------------------------------- técnico
@@ -252,29 +254,29 @@ def accion_cumplida(request, pk):
 
 @requiere_rol(SUPERVISOR)
 def no_resueltas_equipo(request):
-    """El supervisor confirma a quién se atribuye cada orden no resuelta dudosa (falta de material,
+    """El supervisor confirma a quién se atribuye cada visita no resuelta dudosa (falta de material,
     rechazo, otro). Hasta que se confirme no cuenta en la evaluación del técnico."""
-    from operaciones.models import Atribucion, NotaOrden
+    from operaciones.models import Atribucion, Intento, NotaOrden
     p = _persona(request)
     if request.method == "POST":
-        ot = get_object_or_404(OrdenTrabajo, pk=request.POST.get("orden"), tecnico__supervisor=p,
-                               estado__in=("fallida", "reprogramada"))
+        it = get_object_or_404(Intento, pk=request.POST.get("intento"), supervisor=p,
+                               resultado__in=("fallida", "reprogramada"))
         valor = request.POST.get("atribucion")
         if valor not in Atribucion.values:
             messages.error(request, "Elegí a quién se atribuye.")
         else:
-            ot.atribucion_confirmada, ot.atribucion_confirmada_por = valor, p
-            ot._sin_notificar = True
-            ot.save(update_fields=["atribucion_confirmada", "atribucion_confirmada_por"])
-            NotaOrden.objects.create(orden=ot, autor=p, tipo=NotaOrden.Tipo.NOTA,
-                                     texto=f"Atribución confirmada: {ot.get_atribucion_confirmada_display()}. "
+            it.atribucion_confirmada, it.atribucion_confirmada_por = valor, p
+            it.save(update_fields=["atribucion_confirmada", "atribucion_confirmada_por"])
+            NotaOrden.objects.create(orden=it.orden, autor=p, tipo=NotaOrden.Tipo.NOTA,
+                                     texto=f"Visita del {it.fecha:%d/%m}: atribución confirmada "
+                                           f"{it.get_atribucion_confirmada_display()}. "
                                            f"{request.POST.get('comentario', '').strip()}".strip())
-            messages.success(request, f"Orden {ot.numero}: {ot.get_atribucion_confirmada_display().lower()}.")
+            messages.success(request, f"Orden {it.orden.numero}: {it.get_atribucion_confirmada_display().lower()}.")
         return redirect("movil:no_resueltas")
     return render(request, "movil/no_resueltas.html", {
         "pendientes": _no_resueltas_a_investigar(p), "opciones": Atribucion.choices,
-        "recientes": OrdenTrabajo.objects.filter(tecnico__supervisor=p).exclude(atribucion_confirmada="")
-        .select_related("tecnico", "tipo").order_by("-fecha_ejecucion")[:15], "tab": "inicio"})
+        "recientes": Intento.objects.filter(supervisor=p).exclude(atribucion_confirmada="")
+        .select_related("tecnico", "orden").order_by("-fecha")[:15], "tab": "inicio"})
 
 
 def _orden_del_tecnico(request, pk):

@@ -746,6 +746,8 @@ class Command(BaseCommand):
                                                estado="completada", es_retrabajo=True, orden_original=o,
                                                minutos_reales=r.randint(30, 70)))
         OrdenTrabajo.objects.bulk_create(retrabajos, batch_size=2000)
+        from operaciones.signals import completar_intentos_faltantes
+        completar_intentos_faltantes()  # bulk_create no dispara señales: historia de visitas
         self.stdout.write(f"  {len(retrabajos)} retrabajos")
         self.ordenes_meta = meta_ordenes
 

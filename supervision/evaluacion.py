@@ -74,10 +74,16 @@ def evaluar_supervisores(hasta: date | None = None, dias: int = 30):
               .values("supervisor_id").annotate(n=Count("id"))):
         evs[r["supervisor_id"]].tecnicos_a_cargo = r["n"]
 
-    # Días hábiles = días en que su equipo salió a la calle
-    for r in (Jornada.objects.filter(tecnico__supervisor_id__in=ids, fecha__range=(desde, hasta), en_calle=True)
-              .values("tecnico__supervisor_id").annotate(n=Count("fecha", distinct=True))):
-        evs[r["tecnico__supervisor_id"]].dias_habiles = r["n"]
+    # Días hábiles = días en que su equipo (el de ESE día, según el historial) salió a la calle
+    from core.historial import HistorialSupervisores
+    hist = HistorialSupervisores(desde, hasta)
+    dias_equipo = defaultdict(set)
+    for tid, f in Jornada.objects.filter(fecha__range=(desde, hasta), en_calle=True).values_list("tecnico_id", "fecha"):
+        sid = hist.supervisor(tid, f)
+        if sid in evs:
+            dias_equipo[sid].add(f)
+    for sid, fechas in dias_equipo.items():
+        evs[sid].dias_habiles = len(fechas)
 
     calidad = defaultdict(list)
     respuesta = defaultdict(list)
@@ -116,9 +122,11 @@ def evaluar_supervisores(hasta: date | None = None, dias: int = 30):
         if t.cumplimiento is not None:
             tareas[t.supervisor_id].append(t.cumplimiento)
 
-    for r in (Siniestro.objects.filter(fecha__range=(desde, hasta), tecnico__supervisor_id__in=ids)
-              .values("tecnico__supervisor_id").annotate(n=Count("id"))):
-        evs[r["tecnico__supervisor_id"]].siniestros_equipo = r["n"]
+    for tid, f in Siniestro.objects.filter(fecha__range=(desde, hasta), tecnico__isnull=False).values_list(
+            "tecnico_id", "fecha"):
+        sid = hist.supervisor(tid, f)
+        if sid in evs:
+            evs[sid].siniestros_equipo += 1
 
     for sid, e in evs.items():
         e.informes_por_dia = e.informes / e.dias_habiles if e.dias_habiles else 0.0

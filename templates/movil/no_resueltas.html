@@ -4,13 +4,13 @@
 <div class="card"><p class="muted" style="margin:0">Una orden no resuelta cuenta en la evaluación del técnico sólo si se confirma que fue por él. Falta de material, rechazo u "otro" pueden tener otras causas (un pedido no atendido, el cliente).</p></div>
 <div class="card"><h2>Para revisar ({{ pendientes|length }})</h2>
 {% for o in pendientes %}<div style="border-bottom:1px solid var(--grid);padding:.6rem 0">
-  <b>{{ o.numero }}</b> · {{ o.tecnico.nombre_completo }}<br>
-  <span class="muted" style="font-size:.85rem">{{ o.tipo }} · {{ o.fecha_ejecucion|date:"d/m" }} · {{ o.get_estado_display }}{% if o.motivo_no_resuelto %} · {{ o.get_motivo_no_resuelto_display }}{% else %} · sin motivo{% endif %}</span>
-  <form method="post" class="form-movil" style="margin-top:.4rem">{% csrf_token %}<input type="hidden" name="orden" value="{{ o.id }}">
+  <b>{{ o.orden.numero }}</b> · {{ o.tecnico.nombre_completo }}<br>
+  <span class="muted" style="font-size:.85rem">{{ o.orden.tipo }} · {{ o.fecha|date:"d/m" }} · {{ o.get_resultado_display }}{% if o.motivo_no_resuelto %} · {{ o.get_motivo_no_resuelto_display }}{% else %} · sin motivo{% endif %}</span>
+  <form method="post" class="form-movil" style="margin-top:.4rem">{% csrf_token %}<input type="hidden" name="intento" value="{{ o.id }}">
     <select name="atribucion" required><option value="">¿A quién se atribuye?</option>{% for v, n in opciones %}<option value="{{ v }}">{{ n }}</option>{% endfor %}</select>
     <input name="comentario" placeholder="Comentario (opcional)" maxlength="200">
     <button class="btn">Confirmar</button></form>
 </div>{% empty %}<p class="muted">No hay órdenes para revisar.</p>{% endfor %}</div>
-<div class="card"><h2>Confirmadas recientemente</h2><ul class="lista-ot">{% for o in recientes %}<li><div>{{ o.numero }} · {{ o.tecnico.nombre_completo }}<br><span class="muted" style="font-size:.85rem">{{ o.fecha_ejecucion|date:"d/m" }}{% if o.motivo_no_resuelto %} · {{ o.get_motivo_no_resuelto_display }}{% endif %}</span></div>
+<div class="card"><h2>Confirmadas recientemente</h2><ul class="lista-ot">{% for o in recientes %}<li><div>{{ o.orden.numero }} · {{ o.tecnico.nombre_completo }}<br><span class="muted" style="font-size:.85rem">{{ o.fecha|date:"d/m" }}{% if o.motivo_no_resuelto %} · {{ o.get_motivo_no_resuelto_display }}{% endif %}</span></div>
 <span class="estado {% if o.atribucion_confirmada == 'tecnico' %}critico{% else %}ok{% endif %}">{{ o.get_atribucion_confirmada_display }}</span></li>{% empty %}<li class="muted">—</li>{% endfor %}</ul></div>
 {% endblock %}

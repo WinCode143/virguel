@@ -13,7 +13,8 @@ def reabrir_orden(orden: OrdenTrabajo, motivo: str, autor=None, usuario=None) ->
     """Corrección administrativa explícita: devuelve una orden cerrada a la agenda.
 
     Deja una nota con quién, por qué y el cierre anterior, para que el cambio sea auditable.
-    Los materiales consumidos y los gastos del cierre anterior se conservan."""
+    La visita anterior queda en el historial (Intento) con su técnico y resultado; los materiales
+    consumidos y los gastos del cierre anterior se conservan."""
     motivo = (motivo or "").strip()
     if not motivo:
         raise NoSePuedeReabrir("Indicar el motivo de la reapertura.")

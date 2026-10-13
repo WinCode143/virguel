@@ -401,5 +401,6 @@ def reabrir(request, numero):
         else:
             messages.success(request, f"Orden {ot.numero} reabierta.")
             return redirect("tablero:importar")
-    return render(request, "tablero/reabrir_orden.html", {"ot": ot, "error": error,
-                                                          "notas": ot.notas.select_related("autor")[:10]})
+    return render(request, "tablero/reabrir_orden.html", {
+        "ot": ot, "error": error, "notas": ot.notas.select_related("autor")[:10],
+        "intentos": ot.intentos.select_related("tecnico", "supervisor")})

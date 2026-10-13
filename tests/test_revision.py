@@ -362,6 +362,8 @@ class CustodiaHerramientasTests(TestCase):
 class AtribucionNoResueltasTests(TestCase):
     """H03: una orden no resuelta por causa ajena (cliente ausente) no penaliza al técnico."""
 
+    MOTIVO = "cliente_ausente"
+
     def setUp(self):
         from operaciones.models import Jornada, OrdenTrabajo, TipoTarea
         self.tipo = TipoTarea.objects.create(codigo="I", nombre="Inst", minutos_estandar=60)
@@ -378,7 +380,7 @@ class AtribucionNoResueltasTests(TestCase):
                                             fecha_ejecucion=f, fecha_programada=f)
         for i in range(5):
             OrdenTrabajo.objects.create(numero=f"F{i}", tipo=self.tipo, tecnico=self.a, estado="fallida",
-                                        motivo_no_resuelto="cliente_ausente", fecha_ejecucion=HOY - timedelta(days=1))
+                                        motivo_no_resuelto=self.MOTIVO, fecha_ejecucion=HOY - timedelta(days=1))
 
     def ev(self, t):
         from capacitacion.evaluacion import evaluar_tecnicos
@@ -393,31 +395,32 @@ class AtribucionNoResueltasTests(TestCase):
         self.assertEqual(ea.diagnostico, eb.diagnostico)
 
     def test_falta_material_queda_a_investigar_hasta_confirmar(self):
-        from operaciones.models import OrdenTrabajo
-        OrdenTrabajo.objects.filter(numero__startswith="F").update(motivo_no_resuelto="falta_material")
+        from operaciones.models import Intento
+        Intento.objects.filter(orden__numero__startswith="F").update(motivo_no_resuelto="falta_material")
         ea = self.ev(self.a)
         self.assertEqual((ea.fallidas, ea.fallidas_a_investigar, ea.score_calidad), (0, 5, 100))
         # El supervisor confirma que dos fueron responsabilidad del técnico
         self.client.force_login(self.sup.usuario)
-        for ot in OrdenTrabajo.objects.filter(numero__in=["F0", "F1"]):
-            self.client.post("/app/no-resueltas/", {"orden": ot.id, "atribucion": "tecnico"})
+        self.assertContains(self.client.get("/app/no-resueltas/"), "F0")
+        for it in Intento.objects.filter(orden__numero__in=["F0", "F1"]):
+            self.client.post("/app/no-resueltas/", {"intento": it.id, "atribucion": "tecnico"})
         ea = self.ev(self.a)
         self.assertEqual((ea.fallidas, ea.fallidas_a_investigar), (2, 3))
         self.assertLess(ea.score_calidad, 100)
 
     def test_indicadores_usan_el_mismo_criterio(self):
         from operaciones.criterios import q_falla_tecnico
-        from operaciones.models import OrdenTrabajo
-        self.assertEqual(OrdenTrabajo.objects.filter(q_falla_tecnico()).count(), 0)
-        OrdenTrabajo.objects.filter(numero="F0").update(atribucion_confirmada="tecnico")
-        self.assertEqual(OrdenTrabajo.objects.filter(q_falla_tecnico()).count(), 1)
+        from operaciones.models import Intento
+        self.assertEqual(Intento.objects.filter(q_falla_tecnico()).count(), 0)
+        Intento.objects.filter(orden__numero="F0").update(atribucion_confirmada="tecnico")
+        self.assertEqual(Intento.objects.filter(q_falla_tecnico()).count(), 1)
 
     def test_supervisor_no_confirma_ordenes_de_otro_equipo(self):
-        from operaciones.models import OrdenTrabajo
+        from operaciones.models import Intento
         otro = persona("S2", rol="supervisor", usuario=User.objects.create_user("s2", password="x"))
         self.client.force_login(otro.usuario)
-        ot = OrdenTrabajo.objects.get(numero="F0")
-        r = self.client.post("/app/no-resueltas/", {"orden": ot.id, "atribucion": "tecnico"})
+        it = Intento.objects.get(orden__numero="F0")
+        r = self.client.post("/app/no-resueltas/", {"intento": it.id, "atribucion": "tecnico"})
         self.assertEqual(r.status_code, 404)
 
 
@@ -638,3 +641,75 @@ class PowerBICajaTests(TestCase):
         self.client.force_login(g)
         for ds in ("pagos", "cuotas", "ingresos", "cobros"):
             self.assertEqual(self.client.get(f"/api/powerbi/{ds}.csv").status_code, 200, ds)
+
+
+class HistoriaOperacionalTests(TestCase):
+    """H10: la historia de visitas y de equipos no depende del estado actual."""
+
+    def setUp(self):
+        from operaciones.models import OrdenTrabajo, TipoTarea
+        self.s1 = persona("S1", rol="supervisor")
+        self.s2 = persona("S2", rol="supervisor")
+        self.a = persona("TA", supervisor=self.s1)
+        self.b = persona("TB", supervisor=self.s1)
+        self.tipo = TipoTarea.objects.create(codigo="I", nombre="Inst")
+        self.ot = OrdenTrabajo.objects.create(numero="OT1", tipo=self.tipo, tecnico=self.a, estado="asignada")
+
+    def cerrar(self, estado, fecha, motivo=""):
+        self.ot.estado, self.ot.fecha_ejecucion, self.ot.motivo_no_resuelto = estado, fecha, motivo
+        self.ot.save()
+
+    def test_reasignar_una_fallida_conserva_la_visita_del_primero(self):
+        from operaciones.criterios import visitas
+        self.cerrar("fallida", HOY - timedelta(days=2), "otro")
+        self.ot.tecnico, self.ot.estado, self.ot.fecha_ejecucion = self.b, "asignada", None
+        self.ot.save()
+        self.cerrar("completada", HOY - timedelta(days=1))
+        v = {(x.tecnico_id, x.resultado) for x in visitas(HOY - timedelta(days=5), HOY, [self.a.id, self.b.id])}
+        self.assertEqual(v, {(self.a.id, "fallida"), (self.b.id, "completada")})
+        self.assertEqual([i.numero for i in self.ot.intentos.all()], [1, 2])
+
+    def test_reabrir_no_borra_la_historia(self):
+        from operaciones.services import reabrir_orden
+        self.cerrar("completada", HOY - timedelta(days=1))
+        reabrir_orden(self.ot, "Claro la rechazó")
+        self.ot.refresh_from_db()
+        self.assertEqual(self.ot.intentos.get().resultado, "completada")
+        self.cerrar("completada", HOY)
+        self.assertEqual(self.ot.intentos.count(), 2)
+
+    def test_corregir_el_mismo_cierre_no_duplica(self):
+        self.cerrar("fallida", HOY, "otro")
+        self.ot.motivo_no_resuelto = "cliente_ausente"
+        self.ot.save()
+        self.assertEqual(self.ot.intentos.get().motivo_no_resuelto, "cliente_ausente")
+
+    def test_el_supervisor_de_la_visita_es_el_de_ese_momento(self):
+        self.cerrar("fallida", HOY, "otro")
+        self.a.supervisor = self.s2
+        self.a.save()
+        self.assertEqual(self.ot.intentos.get().supervisor_id, self.s1.id)
+
+    def test_cambio_de_supervisor_queda_en_el_historial(self):
+        from core.historial import HistorialSupervisores
+        from core.models import AsignacionSupervisor
+        AsignacionSupervisor.objects.filter(tecnico=self.a).update(desde=HOY - timedelta(days=100))
+        self.a.supervisor = self.s2
+        self.a.save()
+        h = HistorialSupervisores(HOY - timedelta(days=60), HOY)
+        self.assertEqual(h.supervisor(self.a.id, HOY - timedelta(days=30)), self.s1.id)
+        self.assertEqual(h.supervisor(self.a.id, HOY), self.s2.id)
+        self.assertIn(self.a.id, h.equipo(self.s1.id))
+
+    def test_indicadores_del_supervisor_anterior_no_cambian(self):
+        from operaciones.models import Jornada
+        from supervision.evaluacion import evaluar_supervisores
+        from core.models import AsignacionSupervisor
+        AsignacionSupervisor.objects.update(desde=HOY - timedelta(days=100))
+        for d in range(10, 20):
+            Jornada.objects.create(tecnico=self.a, fecha=HOY - timedelta(days=d), en_calle=True)
+        antes = {e.supervisor.id: e.dias_habiles for e in evaluar_supervisores(HOY, 30)}
+        self.a.supervisor = self.s2
+        self.a.save()
+        despues = {e.supervisor.id: e.dias_habiles for e in evaluar_supervisores(HOY, 30)}
+        self.assertEqual((antes[self.s1.id], despues[self.s1.id], despues[self.s2.id]), (10, 10, 0))

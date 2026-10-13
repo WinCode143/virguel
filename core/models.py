@@ -505,3 +505,24 @@ class OperacionOffline(models.Model):
 
     def __str__(self):
         return f"{self.ruta} {self.recibida:%d/%m %H:%M}"
+
+
+class AsignacionSupervisor(models.Model):
+    """Historia de quién fue el supervisor de cada técnico y desde/hasta cuándo.
+
+    Persona.supervisor es la relación actual; esta tabla permite leer períodos pasados con la
+    composición de equipos de ese momento. Se mantiene sola al cambiar el supervisor (core/signals.py)."""
+
+    tecnico = models.ForeignKey(Persona, on_delete=models.CASCADE, related_name="historial_supervisores")
+    supervisor = models.ForeignKey(Persona, on_delete=models.CASCADE, related_name="historial_a_cargo")
+    desde = models.DateField()
+    hasta = models.DateField(null=True, blank=True, help_text="Vacío = vigente.")
+
+    class Meta:
+        ordering = ["tecnico", "desde"]
+        verbose_name = "Asignación a supervisor (historial)"
+        verbose_name_plural = "Asignaciones a supervisor (historial)"
+
+    def __str__(self):
+        hasta = f"{self.hasta:%d/%m/%Y}" if self.hasta else "hoy"
+        return f"{self.tecnico} → {self.supervisor} ({self.desde:%d/%m/%Y}–{hasta})"

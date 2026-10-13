@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Alerta, Cliente, Indicador, Notificacion, Parametros, Persona, Zona
+from .models import Alerta, AsignacionSupervisor, Cliente, Indicador, Notificacion, Parametros, Persona, Zona
 
 admin.site.site_header = "Virguel · Carga de datos"
 admin.site.site_title = "Virguel ERP"
@@ -44,8 +44,18 @@ class ZonaAdmin(admin.ModelAdmin):
     list_display = ["nombre", "densidad_clientes_ha", "activa"]
 
 
+class HistorialSupervisorInline(admin.TabularInline):
+    model = AsignacionSupervisor
+    fk_name = "tecnico"
+    extra = 0
+    fields = ["supervisor", "desde", "hasta"]
+    autocomplete_fields = ["supervisor"]
+    verbose_name_plural = "Historial de supervisores"
+
+
 @admin.register(Persona)
 class PersonaAdmin(admin.ModelAdmin):
+    inlines = [HistorialSupervisorInline]
     list_display = ["legajo", "apellido", "nombre", "rol", "supervisor", "zona", "hora_entrada", "fecha_ingreso", "activo"]
     list_filter = ["rol", "activo", "zona", "supervisor"]
     search_fields = ["legajo", "apellido", "nombre", "dni"]

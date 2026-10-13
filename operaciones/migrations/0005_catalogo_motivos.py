@@ -65,33 +65,5 @@ class Migration(migrations.Migration):
                 "ordering": ["nombre"],
             },
         ),
-        migrations.AddField(
-            model_name="ordentrabajo",
-            name="atribucion_confirmada",
-            field=models.CharField(
-                blank=True,
-                choices=[
-                    ("tecnico", "Técnico (desempeño)"),
-                    ("cliente", "Cliente / datos de la orden"),
-                    ("suministro", "Empresa / abastecimiento"),
-                    ("externo", "Externo (red, clima)"),
-                    ("a_investigar", "A investigar"),
-                ],
-                help_text="La confirma el supervisor; si está vacía vale la del catálogo de motivos.",
-                max_length=15,
-                verbose_name="Atribución confirmada",
-            ),
-        ),
-        migrations.AddField(
-            model_name="ordentrabajo",
-            name="atribucion_confirmada_por",
-            field=models.ForeignKey(
-                blank=True,
-                null=True,
-                on_delete=django.db.models.deletion.SET_NULL,
-                related_name="+",
-                to="core.persona",
-            ),
-        ),
-        migrations.RunPython(cargar_motivos, migrations.RunPython.noop),
+    migrations.RunPython(cargar_motivos, migrations.RunPython.noop),
     ]

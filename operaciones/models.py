@@ -107,11 +107,6 @@ class OrdenTrabajo(models.Model):
         ("cliente_ausente", "Cliente ausente"), ("falta_material", "Faltó material"),
         ("problema_red", "Problema de red / externo"), ("direccion", "Dirección errónea"),
         ("clima", "Clima"), ("rechazo", "Cliente rechazó el trabajo"), ("otro", "Otro")])
-    atribucion_confirmada = models.CharField(
-        "Atribución confirmada", max_length=15, choices=Atribucion.choices, blank=True,
-        help_text="La confirma el supervisor; si está vacía vale la del catálogo de motivos.")
-    atribucion_confirmada_por = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL,
-                                                  related_name="+")
     minutos_viaje = models.PositiveIntegerField("Tiempo de viaje (min)", null=True, blank=True)
     minutos_retorno = models.PositiveIntegerField("Tiempo de retorno (min)", null=True, blank=True)
     inicio_trabajo = models.DateTimeField(null=True, blank=True)
@@ -133,6 +128,49 @@ class OrdenTrabajo(models.Model):
 
     def __str__(self):
         return f"OT {self.numero} - {self.tipo}"
+
+
+MOTIVOS_NO_RESUELTO = OrdenTrabajo._meta.get_field("motivo_no_resuelto").choices
+
+
+class Intento(models.Model):
+    """Cada vez que se cierra una orden (completada, fallida o reprogramada) queda un intento con
+    quién la trabajó, bajo qué supervisor y con qué resultado. La orden guarda sólo el estado actual:
+    reasignarla o reabrirla no cambia la historia de quién hizo cada visita.
+
+    Se crea solo (operaciones/signals.py) cuando la orden pasa a un estado de resultado."""
+
+    class Resultado(models.TextChoices):
+        COMPLETADA = "completada", "Completada"
+        FALLIDA = "fallida", "Fallida / no resuelta"
+        REPROGRAMADA = "reprogramada", "Reprogramada"
+
+    orden = models.ForeignKey(OrdenTrabajo, on_delete=models.CASCADE, related_name="intentos")
+    numero = models.PositiveSmallIntegerField(default=1)
+    tecnico = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL, related_name="intentos")
+    supervisor = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+                                   help_text="Supervisor del técnico en ese momento.")
+    fecha = models.DateField(db_index=True)
+    resultado = models.CharField(max_length=15, choices=Resultado.choices)
+    motivo_no_resuelto = models.CharField(max_length=20, blank=True, choices=MOTIVOS_NO_RESUELTO)
+    minutos_reales = models.PositiveIntegerField(null=True, blank=True)
+    inicio_trabajo = models.DateTimeField(null=True, blank=True)
+    fin_trabajo = models.DateTimeField(null=True, blank=True)
+    atribucion_confirmada = models.CharField(
+        "Atribución confirmada", max_length=15, choices=Atribucion.choices, blank=True,
+        help_text="La confirma el supervisor; si está vacía vale la del catálogo de motivos.")
+    atribucion_confirmada_por = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL,
+                                                  related_name="+")
+    creado = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["orden", "numero"]
+        unique_together = [("orden", "numero")]
+        verbose_name = "Intento (visita) de una orden"
+        verbose_name_plural = "Intentos (visitas) de órdenes"
+
+    def __str__(self):
+        return f"{self.orden.numero} #{self.numero} {self.get_resultado_display()} ({self.fecha:%d/%m/%Y})"
 
 
 class NotaOrden(models.Model):

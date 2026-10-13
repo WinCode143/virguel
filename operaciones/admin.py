@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from inventario.models import Salida
 
-from .models import GastoOrden, Jornada, MotivoNoResolucion, NotaOrden, OrdenTrabajo, TipoTarea
+from .models import GastoOrden, Intento, Jornada, MotivoNoResolucion, NotaOrden, OrdenTrabajo, TipoTarea
 
 
 @admin.register(TipoTarea)
@@ -72,3 +72,13 @@ class GastoOrdenAdmin(admin.ModelAdmin):
 class MotivoNoResolucionAdmin(admin.ModelAdmin):
     list_display = ["codigo", "nombre", "atribucion"]
     list_editable = ["atribucion"]
+
+
+@admin.register(Intento)
+class IntentoAdmin(admin.ModelAdmin):
+    list_display = ["orden", "numero", "fecha", "tecnico", "supervisor", "resultado", "motivo_no_resuelto",
+                    "atribucion_confirmada"]
+    list_filter = ["resultado", "motivo_no_resuelto", "atribucion_confirmada"]
+    search_fields = ["orden__numero", "tecnico__apellido", "tecnico__legajo"]
+    date_hierarchy = "fecha"
+    autocomplete_fields = ["tecnico", "supervisor", "atribucion_confirmada_por"]

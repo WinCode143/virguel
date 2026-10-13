@@ -14,6 +14,8 @@
   {% else %}<p class="muted">La orden no está cerrada: no hace falta reabrirla.</p>{% endif %}
   <p><a href="{% url 'tablero:importar' %}">Volver</a></p>
 </form>
-<div class="card"><h2>Notas de la orden</h2><table><tbody>{% for n in notas %}<tr><td>{{ n.creada|date:"d/m/Y H:i" }}</td><td>{{ n.get_tipo_display }}</td><td>{{ n.texto }}</td></tr>{% empty %}<tr><td class="muted">Sin notas.</td></tr>{% endfor %}</tbody></table></div>
+<div><div class="card"><h2>Visitas (historial)</h2><table><tbody>{% for i in intentos %}<tr><td>#{{ i.numero }} {{ i.fecha|date:"d/m/Y" }}</td><td>{{ i.get_resultado_display }}{% if i.motivo_no_resuelto %} ({{ i.get_motivo_no_resuelto_display }}){% endif %}</td><td>{{ i.tecnico.nombre_completo|default:"—" }}{% if i.supervisor %}<br><small class="muted">sup. {{ i.supervisor.nombre_completo }}</small>{% endif %}</td></tr>{% empty %}<tr><td class="muted">Sin visitas registradas.</td></tr>{% endfor %}</tbody></table>
+<p class="muted" style="font-size:.82rem">Reabrir no borra estas visitas: quedan en la historia de quien las hizo.</p></div>
+<div class="card"><h2>Notas de la orden</h2><table><tbody>{% for n in notas %}<tr><td>{{ n.creada|date:"d/m/Y H:i" }}</td><td>{{ n.get_tipo_display }}</td><td>{{ n.texto }}</td></tr>{% empty %}<tr><td class="muted">Sin notas.</td></tr>{% endfor %}</tbody></table></div></div>
 </div>
 {% endblock %}

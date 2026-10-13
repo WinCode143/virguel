@@ -1,4 +1,6 @@
-"""Avisos automáticos al técnico cuando pasa algo que le concierne."""
+"""Avisos automáticos al técnico cuando pasa algo que le concierne, e historia de supervisores."""
+from datetime import timedelta
+
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django.utils import timezone
@@ -6,6 +8,7 @@ from django.utils import timezone
 from operaciones.models import OrdenTrabajo
 from supervision.models import AccionCorrectiva, InformeControl
 
+from .models import AsignacionSupervisor, Persona
 from .notificaciones import notificar
 
 
@@ -51,3 +54,27 @@ def _baja_de_acceso_al_egresar(sender, instance, raw=False, **kwargs):
         from .models import RegistroAcceso
         RegistroAcceso.objects.create(usuario=instance.usuario, usuario_ingresado=instance.usuario.username,
                                       evento=RegistroAcceso.Evento.ADMIN, detalle="Baja automática por egreso")
+
+
+# ---- Historia de supervisores: se registra cada cambio de Persona.supervisor
+@receiver(pre_save, sender=Persona)
+def _supervisor_anterior(sender, instance, raw=False, **kwargs):
+    instance._supervisor_anterior = (Persona.objects.filter(pk=instance.pk).values_list("supervisor_id", flat=True)
+                                     .first() if instance.pk and not raw else None)
+
+
+@receiver(post_save, sender=Persona)
+def _historial_supervisor(sender, instance, created, raw=False, **kwargs):
+    if raw:
+        return
+    anterior = getattr(instance, "_supervisor_anterior", None)
+    if not created and anterior == instance.supervisor_id:
+        return
+    hoy = timezone.localdate()
+    abiertas = AsignacionSupervisor.objects.filter(tecnico=instance, hasta__isnull=True)
+    # cerrar la vigente (si empezó hoy y se corrige el mismo día, se descarta)
+    abiertas.filter(desde__gte=hoy).delete()
+    abiertas.update(hasta=hoy - timedelta(days=1))
+    if instance.supervisor_id:
+        desde = min(instance.fecha_ingreso, hoy) if created else hoy
+        AsignacionSupervisor.objects.create(tecnico=instance, supervisor_id=instance.supervisor_id, desde=desde)

@@ -32,7 +32,7 @@ from django.utils import timezone
 from core.models import Parametros, Persona
 from herramientas.models import Asignacion, Elemento
 from incidentes.models import Siniestro
-from operaciones.criterios import NO_RESUELTAS, atribuciones_por_motivo
+from operaciones.criterios import NO_RESUELTAS, atribucion, atribuciones_por_motivo, visitas
 from operaciones.models import Atribucion, Jornada, OrdenTrabajo
 from supervision.models import AccionCorrectiva, InformeControl
 
@@ -154,26 +154,25 @@ def evaluar_tecnicos(hasta: date | None = None, dias: int | None = None, tecnico
         evs[r["tecnico_id"]].dias_calle = r["n"]
 
     # Órdenes: completadas, fallidas y serie diaria para la tendencia
-    ots = OrdenTrabajo.objects.filter(tecnico_id__in=ids, fecha_ejecucion__range=(desde, hasta))
+    # Visitas (historia de intentos): una fallida queda con quien la hizo aunque la orden se reasigne
     serie = defaultdict(lambda: defaultdict(int))
     tiempos = defaultdict(list)
     catalogo = atribuciones_por_motivo()
-    for tid, estado, fecha, mins, estandar, motivo, confirmada in ots.values_list(
-            "tecnico_id", "estado", "fecha_ejecucion", "minutos_reales", "tipo__minutos_estandar",
-            "motivo_no_resuelto", "atribucion_confirmada"):
-        if estado == OrdenTrabajo.Estado.COMPLETADA:
-            evs[tid].completadas += 1
-            serie[tid][fecha] += 1
-            if mins:
-                tiempos[tid].append(estandar / mins)
-        elif estado in NO_RESUELTAS:
-            a = confirmada or catalogo.get(motivo or "", Atribucion.A_INVESTIGAR)
+    for v in visitas(desde, hasta, ids):
+        e = evs[v.tecnico_id]
+        if v.resultado == OrdenTrabajo.Estado.COMPLETADA:
+            e.completadas += 1
+            serie[v.tecnico_id][v.fecha] += 1
+            if v.minutos and v.estandar:
+                tiempos[v.tecnico_id].append(v.estandar / v.minutos)
+        elif v.resultado in NO_RESUELTAS:
+            a = atribucion(v.resultado, v.motivo, v.confirmada, catalogo)
             if a == Atribucion.TECNICO:
-                evs[tid].fallidas += 1
+                e.fallidas += 1
             elif a == Atribucion.A_INVESTIGAR:
-                evs[tid].fallidas_a_investigar += 1
+                e.fallidas_a_investigar += 1
             else:
-                evs[tid].no_resueltas_ajenas += 1
+                e.no_resueltas_ajenas += 1
     for r in (OrdenTrabajo.objects.filter(es_retrabajo=True, orden_original__tecnico_id__in=ids,
                                           fecha_programada__range=(desde, hasta))
               .values("orden_original__tecnico_id").annotate(n=Count("id"))):
