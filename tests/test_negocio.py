@@ -870,12 +870,12 @@ class PartesAdeudadasTests(TestCase):
     def test_supervisor_ve_su_equipo_pero_no_regulariza(self):
         from inventario.models import EquipoRetirado
         ajeno = persona("T2")
-        EquipoRetirado.objects.create(tecnico=ajeno, numero_serie="Z9")
-        e = EquipoRetirado.objects.create(tecnico=self.t, numero_serie="Y1")
+        EquipoRetirado.objects.create(tecnico=ajeno, numero_serie="SERIE-AJENA-0001")
+        e = EquipoRetirado.objects.create(tecnico=self.t, numero_serie="SERIE-PROPIA-0001")
         self.client.force_login(self.sup.usuario)
         r = self.client.get("/tablero/partes-adeudadas/")
-        self.assertContains(r, "Y1")
-        self.assertNotContains(r, "Z9")
+        self.assertContains(r, "SERIE-PROPIA-0001")
+        self.assertNotContains(r, "SERIE-AJENA-0001")
         self.client.post("/tablero/partes-adeudadas/", {"accion": "recibir", "equipo": e.id})
         e.refresh_from_db()
         self.assertEqual(e.estado, "en_tecnico")
