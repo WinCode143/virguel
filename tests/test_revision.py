@@ -713,3 +713,70 @@ class HistoriaOperacionalTests(TestCase):
         self.a.save()
         despues = {e.supervisor.id: e.dias_habiles for e in evaluar_supervisores(HOY, 30)}
         self.assertEqual((antes[self.s1.id], despues[self.s1.id], despues[self.s2.id]), (10, 10, 0))
+
+
+class PrevisionComprasTests(TestCase):
+    """H08: la previsión usa un suministro reconciliado (depósito, técnicos, en camino) sin duplicar."""
+
+    def setUp(self):
+        from inventario.models import Material, RecetaMaterial
+        from operaciones.models import TipoTarea
+        self.m = Material.objects.create(codigo="R", nombre="Roseta", costo_unitario=Decimal("10"))
+        self.tipo = TipoTarea.objects.create(codigo="I", nombre="Inst")
+        RecetaMaterial.objects.create(tipo_tarea=self.tipo, material=self.m, cantidad=1)
+        self.t = persona("T1")
+
+    def dar_al_tecnico(self, q):
+        from inventario.models import LoteIngreso
+        from inventario.stock_tecnico import entregar
+        LoteIngreso.objects.create(material=self.m, cantidad=q)
+        entregar(self.t, self.m, q)
+
+    def demanda(self, clientes, dia=1):
+        from inventario.models import DemandaComercial
+        DemandaComercial.objects.create(fecha=HOY + timedelta(days=dia), tipo_tarea=self.tipo,
+                                        cantidad_clientes=clientes)
+
+    def ordenes(self, n, tecnico=None, dia=1):
+        from operaciones.models import OrdenTrabajo
+        for i in range(n):
+            OrdenTrabajo.objects.create(numero=f"O{dia}-{i}-{tecnico and tecnico.legajo}", tipo=self.tipo,
+                                        tecnico=tecnico, estado="asignada" if tecnico else "pendiente",
+                                        fecha_programada=HOY + timedelta(days=dia))
+
+    def fila(self):
+        from inventario.services import prevision_materiales
+        return prevision_materiales(HOY, HOY + timedelta(days=13))[0]
+
+    def test_escenario_de_la_revision_stock_libre_en_tecnico(self):
+        self.dar_al_tecnico(10)
+        self.demanda(10)
+        f = self.fila()
+        self.assertEqual((f["deposito"], f["libre_tecnicos"], f["faltante"]), (0, 10, 0))
+
+    def test_stock_del_tecnico_comprometido_en_sus_ordenes(self):
+        self.dar_al_tecnico(10)
+        self.ordenes(10, self.t)         # sus 10 unidades son para sus órdenes
+        self.demanda(20)                 # 10 de esas órdenes + 10 clientes más pronosticados
+        f = self.fila()
+        self.assertEqual((f["necesario"], f["propio_tecnicos"], f["libre_tecnicos"], f["faltante"]), (20, 10, 0, 10))
+
+    def test_ordenes_y_pronostico_no_se_suman_dos_veces(self):
+        self.ordenes(5)
+        self.demanda(5)
+        self.assertEqual(self.fila()["necesario"], 5)
+
+    def test_compras_en_camino_cuentan_si_llegan_a_tiempo(self):
+        from inventario.models import CompraEnCamino
+        self.demanda(10)
+        CompraEnCamino.objects.create(material=self.m, cantidad=6, fecha_esperada=HOY + timedelta(days=5))
+        CompraEnCamino.objects.create(material=self.m, cantidad=50, fecha_esperada=HOY + timedelta(days=40))
+        self.assertEqual(self.fila()["faltante"], 4)
+
+    def test_pantallas(self):
+        g = User.objects.create_user("ger", password="x")
+        g.groups.add(Group.objects.create(name="Gerencia"))
+        self.client.force_login(g)
+        self.demanda(3)
+        self.assertContains(self.client.get("/tablero/stock/"), "Libre en técnicos")
+        self.assertEqual(self.client.get("/tablero/planificacion/").status_code, 200)

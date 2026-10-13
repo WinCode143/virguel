@@ -4,7 +4,10 @@ Fuente: dos textos del cliente (uno por temas y uno por módulos del ERP), con
 varios puntos repetidos. Se unificaron en los 9 módulos de abajo.
 
 Restricciones del cliente:
-- **La empresa no vende**: finanzas maneja sólo egresos y proyección de gastos.
+- **La empresa no vende al público**, pero sí cobra por su trabajo (p. ej. la liquidación de Claro):
+  finanzas maneja egresos, **ingresos y cobros**, pagos parciales, cuotas, cuentas y **flujo de fondos**.
+  (Corrección de la revisión del 12/10/2026: la versión anterior había interpretado "no vende" como
+  "no tiene ingresos".)
 - **No se integra con Oracle**: todo dato sale del relevamiento interno (carga en el
   sistema, app móvil de técnicos y supervisores).
 - Se menciona **Power BI** como herramienta de análisis: el sistema calcula los
@@ -81,8 +84,9 @@ Sistema de indicadores IPT (técnicos) e IGS (supervisores) con metas configurab
 |---|---|
 | Power BI no debe medir sólo si es productivo hoy, sino su capacidad a largo plazo | Evaluación con ventana de 90 días (configurable) y **tendencia** (último tercio vs. primer tercio). Ficha del técnico con su curva semanal vs. el promedio del equipo. |
 | Detectar si rinde bajo por falta de capacitación en producción… | **Diagnóstico automático** (`capacitacion/evaluacion.py`): baja productividad con calidad, disciplina y seguridad en orden → "Necesita capacitación en producción". |
-| …o si es un desastre en todo lo demás y un riesgo (desvincular) | Falla en 2+ dimensiones, o ya fue capacitado en producción y no mejoró → "Riesgo alto – evaluar desvinculación". Otros estados: "En observación", "En curva de aprendizaje" (< 60 días), "En mejora tras capacitación". |
-| Nivel de riesgo operativo de cada persona | **Riesgo 0–100** = 100 − (20 % productividad + 30 % calidad + 25 % disciplina + 25 % seguridad). Alto ≥ 50. |
+| …o si es un desastre en todo lo demás y un riesgo (desvincular) | Falla en 2+ dimensiones, o ya fue capacitado en producción y no mejoró → "Requiere revisión del supervisor (riesgo alto)". Es una señal para revisar el caso, no una decisión laboral automática. Otros estados: "En observación", "En curva de aprendizaje" (< 60 días), "En mejora tras capacitación", "Sin evidencia suficiente" (pocas jornadas en la ventana). |
+| Nivel de riesgo operativo de cada persona | **Índice orientativo 0–100** = 100 − (20 % productividad + 30 % calidad + 25 % disciplina + 25 % seguridad), con pesos versionados (`CriterioEvaluacion`) y sólo sobre dimensiones con datos suficientes. Alto ≥ 50. No es una probabilidad validada. |
+| Calidad sin culpar por causas ajenas | Catálogo común de motivos de no resolución con atribución (técnico, cliente, abastecimiento, externo, a investigar). Cliente ausente, red o clima no restan; falta de material, rechazo u otro quedan "a investigar" hasta que el supervisor confirme. |
 | (agregado) ¿La capacitación sirve? | Tablero **5 · Capacitación**: productividad 30 días antes vs. 30 días después de cada capacitación. |
 
 ## 6. Flota / vehículos
@@ -93,7 +97,8 @@ Sistema de indicadores IPT (técnicos) e IGS (supervisores) con metas configurab
 ## 7. Finanzas y flujo de fondos
 | Pedido | Implementación |
 |---|---|
-| Proyección de egresos según movimiento de materiales y logística, sin ingresos | Egresos **automáticos** desde compras de stock, services, EPP y siniestros + costos fijos mensuales. Proyección a 3 meses: demanda comercial × materiales por tarea × costo, services que vencen, EPP que vence, siniestros abiertos, sueldos del último mes liquidado (`finanzas/proyeccion.py`). |
+| Proyección de egresos según movimiento de materiales y logística | Egresos **automáticos** desde compras de stock, services, compras de EPP y siniestros + costos fijos mensuales. Proyección a 3 meses: demanda comercial × materiales por tarea × costo, services que vencen, EPP que vence, siniestros abiertos, sueldos del último mes liquidado (`finanzas/proyeccion.py`). Las devoluciones de técnicos y las entregas del pañol no son compras. |
+| Gastos, ingresos, egresos, deudas, alternativas de pago y flujo de fondos | **Ingresos a cobrar** (p. ej. liquidación de Claro) con **cobros parciales**; **pagos parciales** de cada comprobante; **planes de cuotas**; **cuentas** (banco/efectivo) con saldo; **Caja y flujo de fondos**: saldo actual + cobros esperados − pagos comprometidos − gasto estimado, por semana (`finanzas/caja.py`). Separa presupuesto/estimado, obligación devengada y movimiento de dinero. |
 | Sueldo por empleado y horas extra | Pre-liquidación mensual (`finanzas/sueldos.py`): básico, HE 50/100 % desde fichadas, presentismo, faltas y suspensiones; multas informativas (art. 131 LCT). Excel de novedades para el estudio. |
 | Carga de facturas y recibos | Comprobantes con proveedor/CUIT, archivo, vencimiento y pago; recibos de sueldo firmados por liquidación. |
 
@@ -102,7 +107,7 @@ Sistema de indicadores IPT (técnicos) e IGS (supervisores) con metas configurab
 |---|---|
 | Antigüedad de stock: evitar materiales/equipos parados más de 60 días | Stock **por lote con fecha** y consumo **FIFO**. Semáforo: aviso a los 45 días, crítico a los 60 (configurables). Valor inmovilizado por tramo de antigüedad. |
 | Stock diario cruzado con el personal en calle | Para cada material: stock, stock por técnico, consumo por técnico/día (histórico), consumo diario esperado con los técnicos de hoy y **días de cobertura**. Alerta si alcanza para menos de 7 días. |
-| Previsión de materiales según demanda comercial | `DemandaComercial` (clientes previstos por día/tipo de tarea) × `RecetaMaterial` (materiales por tipo de tarea) → necesidad, faltante y costo de compra. |
+| Previsión de materiales según demanda comercial | Necesidad = órdenes abiertas + demanda comercial que excede a las órdenes ya creadas (sin duplicar) × `RecetaMaterial`. Suministro reconciliado: lo que cada técnico tiene cubre sus propias órdenes; el sobrante queda "libre en técnicos"; más depósito y **compras en camino**. Es una sugerencia que se revisa antes de comprar. |
 
 ## 9. Análisis transversal / pantalla gerencial
 | Pedido | Implementación |
@@ -113,6 +118,23 @@ Sistema de indicadores IPT (técnicos) e IGS (supervisores) con metas configurab
 | Pantalla gerencial que cruce todo | **Resumen** + **9 · Planificación** (simulador con todos los supuestos, demanda vs. capacidad por día, técnicos necesarios, materiales y decodificadores). |
 
 ---
+
+## Revisión funcional y técnica del 12/10/2026
+
+Se corrigieron los hallazgos H01–H10 (detalle y estado en `docs/PLAN_CORRECCIONES.md`). Quedan
+supuestos a validar con la empresa:
+
+- **Liquidación de Claro**: frecuencia, base (por orden, por puntos/baremo), retenciones, débitos por
+  calidad y plazo de cobro. Hoy el ingreso se carga a mano con su fecha esperada de cobro.
+- **Saldos iniciales** de cada cuenta (banco, efectivo) y si hay más de una moneda.
+- **Deudas** existentes (proveedores, fiscales, préstamos) y qué se entiende por "alternativas de pago".
+- **Atribución de motivos** de no resolución (valores iniciales en el admin: Motivos de no resolución).
+- **Pesos de la evaluación** y si la recapacitación debe restar (versión 2: no resta).
+- **Equipos (decodificadores)**: ¿son de Claro o de la empresa? ¿Se rinden a Claro?
+- **Cuadrillas**: ¿se trabaja solo o en cuadrilla? (hoy cada visita tiene un técnico).
+- **Stock inicial importado**: hoy cuenta como compra (genera egreso en su fecha de ingreso).
+- **60 días de stock en el técnico**: hoy se cuentan desde la entrega al técnico; en el depósito,
+  desde el ingreso original del lote (también para lo devuelto).
 
 ## Puntos ambiguos a confirmar con el cliente
 

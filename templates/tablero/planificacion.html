@@ -42,6 +42,6 @@
   <tbody>{% for f in deficit %}<tr><td>{{ f.fecha|date:"D d/m" }}</td><td class="num">{{ f.demanda }}</td><td class="num">{{ f.capacidad }}</td><td class="num"><span class="estado critico">{{ f.tecnicos_necesarios }}</span> <span class="muted">(hay {{ e.tecnicos }})</span></td></tr>
   {% empty %}<tr><td class="muted">La capacidad cubre toda la demanda cargada.</td></tr>{% endfor %}</tbody></table></div>
 </div>
-<div class="card"><h2>Materiales necesarios para el período</h2><div class="tabla-scroll"><table><thead><tr><th>Material</th><th class="num">Necesario</th><th class="num">Stock</th><th class="num">Faltante</th><th class="num">Costo</th></tr></thead>
+<div class="card"><h2>Materiales necesarios para el período</h2><div class="tabla-scroll"><table><thead><tr><th>Material</th><th class="num">Necesario</th><th class="num" title="En técnicos para sus órdenes + depósito + libre en técnicos + compras en camino">Suministro</th><th class="num">Faltante</th><th class="num">Costo</th></tr></thead>
 <tbody>{% for f in prev %}<tr><td>{{ f.material.nombre }}</td><td class="num">{{ f.necesario|num }}</td><td class="num">{{ f.stock|num }}</td><td class="num">{{ f.faltante|num }}</td><td class="num">{{ f.costo_compra|pesos }}</td></tr>{% empty %}<tr><td class="muted">Sin demanda cargada.</td></tr>{% endfor %}</tbody></table></div></div>
 {% endblock %}

@@ -125,19 +125,77 @@ def stock_diario(fecha: date | None = None):
     return {"fecha": fecha, "tecnicos_en_calle": en_calle, "filas": filas}
 
 
-def prevision_materiales(desde: date, hasta: date):
-    """Materiales necesarios para la demanda comercial del período, contra stock."""
-    necesidad = defaultdict(Decimal)
+def demanda_materiales(desde: date, hasta: date):
+    """Necesidad de materiales del período, sin contar dos veces:
+
+    * órdenes abiertas programadas hasta `hasta` (incluidas las atrasadas), por técnico asignado;
+    * demanda comercial pronosticada sólo por lo que excede a las órdenes ya creadas para ese día y tipo.
+
+    Devuelve ({(tecnico_id, material): cantidad}, {material: cantidad sin técnico})."""
+    from operaciones.models import OrdenTrabajo
     recetas = defaultdict(list)
     for r in RecetaMaterial.objects.select_related("material"):
         recetas[r.tipo_tarea_id].append(r)
+    por_tecnico, sin_tecnico = defaultdict(Decimal), defaultdict(Decimal)
+    ordenes_dia = defaultdict(int)
+    for tec, tipo, fecha in OrdenTrabajo.objects.filter(
+            estado__in=("pendiente", "asignada", "reprogramada"), fecha_programada__lte=hasta).values_list(
+            "tecnico_id", "tipo_id", "fecha_programada"):
+        if fecha >= desde:
+            ordenes_dia[(fecha, tipo)] += 1
+        for r in recetas[tipo]:
+            if tec:
+                por_tecnico[(tec, r.material)] += r.cantidad
+            else:
+                sin_tecnico[r.material] += r.cantidad
+    pronostico = defaultdict(int)
     for d in DemandaComercial.objects.filter(fecha__range=(desde, hasta)):
-        for r in recetas[d.tipo_tarea_id]:
-            necesidad[r.material] += r.cantidad * d.cantidad_clientes
+        pronostico[(d.fecha, d.tipo_tarea_id)] += d.cantidad_clientes
+    for (fecha, tipo), clientes in pronostico.items():
+        extra = max(0, clientes - ordenes_dia.get((fecha, tipo), 0))
+        for r in recetas[tipo]:
+            sin_tecnico[r.material] += r.cantidad * extra
+    return por_tecnico, sin_tecnico
+
+
+def prevision_materiales(desde: date, hasta: date):
+    """Materiales necesarios para el período contra un suministro reconciliado (sugerencia de compra).
+
+    Suministro, sin contar dos veces ni dar por libre lo que ya está comprometido:
+      * lo que cada técnico tiene a cargo cubre primero sus propias órdenes asignadas;
+      * lo que le sobra queda "libre en técnicos" (disponible devolviéndolo o transfiriéndolo);
+      * depósito + libre en técnicos + compras en camino que llegan antes de `hasta` cubren el resto.
+    Es una sugerencia: requiere revisión antes de emitir una orden de compra."""
+    from .models import CompraEnCamino, MovimientoStockTecnico
+    por_tecnico, sin_tecnico = demanda_materiales(desde, hasta)
+    tiene = defaultdict(Decimal)
+    for tec, mat_id, q in (MovimientoStockTecnico.objects.values_list("tecnico_id", "material_id")
+                           .annotate(t=Sum("cantidad")).values_list("tecnico_id", "material_id", "t")):
+        if q and q > 0:
+            tiene[(tec, mat_id)] = q
+    deposito = dict(LoteIngreso.objects.values_list("material").annotate(t=Sum("cantidad_disponible")))
+    en_camino = dict(CompraEnCamino.objects.filter(recibida=False, fecha_esperada__lte=hasta)
+                     .values_list("material").annotate(t=Sum("cantidad")))
+
+    materiales = {m for _, m in por_tecnico} | set(sin_tecnico)
     filas = []
-    for material, cant in sorted(necesidad.items(), key=lambda kv: kv[0].nombre):
-        stock = material.stock_actual
-        faltante = max(Decimal("0"), cant - stock)
-        filas.append({"material": material, "necesario": cant, "stock": stock,
+    for material in sorted(materiales, key=lambda m: m.nombre):
+        necesario = sin_tecnico.get(material, Decimal("0"))
+        propio = Decimal("0")
+        resto = sin_tecnico.get(material, Decimal("0"))
+        for (tec, m), q in por_tecnico.items():
+            if m != material:
+                continue
+            necesario += q
+            cubre = min(q, tiene.get((tec, m.id), Decimal("0")))
+            propio += cubre
+            resto += q - cubre
+        en_tecnicos = sum((q for (t, mid), q in tiene.items() if mid == material.id), Decimal("0"))
+        libre = en_tecnicos - propio
+        dep = deposito.get(material.id) or Decimal("0")
+        camino = en_camino.get(material.id) or Decimal("0")
+        faltante = max(Decimal("0"), resto - dep - libre - camino)
+        filas.append({"material": material, "necesario": necesario, "stock": propio + dep + libre + camino,
+                      "propio_tecnicos": propio, "deposito": dep, "libre_tecnicos": libre, "en_camino": camino,
                       "faltante": faltante, "costo_compra": faltante * material.costo_unitario})
     return filas

@@ -159,6 +159,26 @@ class DemandaComercial(models.Model):
         return f"{self.fecha} {self.tipo_tarea} x{self.cantidad_clientes}"
 
 
+class CompraEnCamino(models.Model):
+    """Compra confirmada a un proveedor que todavía no ingresó: suma al suministro de la previsión
+    hasta que se recibe (al recibirla se carga el lote de ingreso y se marca recibida)."""
+
+    material = models.ForeignKey(Material, on_delete=models.PROTECT, related_name="compras_en_camino")
+    cantidad = models.DecimalField(max_digits=12, decimal_places=2)
+    fecha_esperada = models.DateField()
+    proveedor = models.CharField(max_length=120, blank=True)
+    observaciones = models.CharField(max_length=200, blank=True)
+    recibida = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["fecha_esperada"]
+        verbose_name = "Compra en camino"
+        verbose_name_plural = "Compras en camino"
+
+    def __str__(self):
+        return f"{self.cantidad} {self.material.unidad} {self.material.nombre} ({self.fecha_esperada:%d/%m})"
+
+
 class MovimientoStockTecnico(models.Model):
     """Libro de las partes que tiene cada técnico a su cargo (en la camioneta).
 

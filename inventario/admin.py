@@ -1,7 +1,7 @@
 from django.contrib import admin, messages
 
-from .models import (DemandaComercial, EquipoRetirado, LoteIngreso, Material, MovimientoStockTecnico, PedidoItem, PedidoMaterial,
-                     RecetaMaterial, Salida)
+from .models import (CompraEnCamino, DemandaComercial, EquipoRetirado, LoteIngreso, Material, MovimientoStockTecnico,
+                     PedidoItem, PedidoMaterial, RecetaMaterial, Salida)
 from .services import StockInsuficiente, registrar_salida
 
 
@@ -19,8 +19,9 @@ class MaterialAdmin(admin.ModelAdmin):
 
 @admin.register(LoteIngreso)
 class LoteIngresoAdmin(admin.ModelAdmin):
-    list_display = ["material", "fecha", "cantidad", "cantidad_disponible", "dias", "costo_unitario", "proveedor"]
-    list_filter = ["material__categoria", "fecha"]
+    list_display = ["material", "fecha", "cantidad", "cantidad_disponible", "dias", "costo_unitario", "proveedor",
+                    "origen"]
+    list_filter = ["origen", "material__categoria", "fecha"]
     search_fields = ["material__nombre", "material__codigo", "remito", "proveedor"]
     date_hierarchy = "fecha"
     autocomplete_fields = ["material"]
@@ -94,3 +95,11 @@ class EquipoRetiradoAdmin(admin.ModelAdmin):
     list_filter = ["estado"]
     search_fields = ["numero_serie", "tecnico__apellido", "orden__numero"]
     date_hierarchy = "fecha_retiro"
+
+
+@admin.register(CompraEnCamino)
+class CompraEnCaminoAdmin(admin.ModelAdmin):
+    list_display = ["material", "cantidad", "fecha_esperada", "proveedor", "recibida"]
+    list_filter = ["recibida"]
+    list_editable = ["recibida"]
+    autocomplete_fields = ["material"]
