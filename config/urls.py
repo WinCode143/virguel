@@ -1,10 +1,8 @@
-from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import include, path
 
-from core import views_cuenta
+from core import archivos, views_cuenta
 from core.autenticacion import FormularioIngreso
 from movil.views import encuesta
 from tablero.exportar import exportar_csv
@@ -29,4 +27,6 @@ urlpatterns = [
     path("app/", include("movil.urls")),
     path("encuesta/<uuid:token>/", encuesta, name="encuesta"),
     path("api/powerbi/<slug:dataset>.csv", exportar_csv, name="exportar_csv"),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    # Archivos subidos: siempre pasan por la autorización de la aplicación (nunca se sirven directo)
+    path("media/<path:ruta>", archivos.servir, name="archivo"),
+]
