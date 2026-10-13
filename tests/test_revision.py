@@ -538,3 +538,103 @@ class RetrospectivaTests(TestCase):
         out = StringIO()
         call_command("evaluacion_retrospectiva", "--horizonte", "90", stdout=out)
         self.assertIn("100%", out.getvalue())
+
+
+class FinanzasCajaTests(TestCase):
+    """H07: ingresos y cobros, pagos parciales, cuotas y proyección de caja."""
+
+    def setUp(self):
+        from finanzas.models import CategoriaEgreso, Cuenta
+        self.cat = CategoriaEgreso.objects.create(codigo="otros", nombre="Otros")
+        self.banco = Cuenta.objects.create(nombre="Banco", saldo_inicial=Decimal("100000"),
+                                           fecha_saldo_inicial=HOY - timedelta(days=10))
+        self.cont = User.objects.create_user("cont", password="x")
+        self.cont.groups.add(Group.objects.create(name="Contabilidad"))
+        self.client.force_login(self.cont)
+
+    def egreso(self, monto, **kw):
+        from finanzas.models import Egreso
+        return Egreso.objects.create(fecha=HOY, categoria=self.cat, monto=Decimal(monto), descripcion="Factura",
+                                     **{"pagado": False, **kw})
+
+    def test_pagos_parciales(self):
+        from finanzas.models import Pago
+        e = self.egreso(1000)
+        Pago.objects.create(egreso=e, monto=Decimal("400"), cuenta=self.banco)
+        Pago.objects.create(egreso=e, monto=Decimal("400"), cuenta=self.banco)
+        e.refresh_from_db()
+        self.assertEqual((e.saldo, e.estado_pago, e.pagado), (Decimal("200"), "parcial", False))
+        Pago.objects.create(egreso=e, monto=Decimal("200"))
+        e.refresh_from_db()
+        self.assertEqual((e.estado_pago, e.pagado, e.fecha_pago), ("pagado", True, HOY))
+        self.assertEqual(self.banco.saldo(), Decimal("99200"))
+
+    def test_tilde_pagado_registra_el_pago_total_y_compatibilidad(self):
+        e = self.egreso(500, pagado=True, fecha_pago=HOY)
+        self.assertEqual((e.pagos.count(), e.saldo), (1, 0))
+        e.pagado = False
+        e.save()
+        self.assertEqual((e.pagos.count(), e.saldo), (0, Decimal("500")))
+
+    def test_marcar_pagado_con_parciales_paga_el_saldo(self):
+        from finanzas.models import Pago
+        e = self.egreso(1000)
+        Pago.objects.create(egreso=e, monto=Decimal("300"))
+        self.client.post("/finanzas/comprobantes/?ver=a_pagar", {"accion": "pagar", "egreso": e.id})
+        e.refresh_from_db()
+        self.assertEqual((e.saldo, e.pagado, e.pagos.count()), (0, True, 2))
+
+    def test_egresos_automaticos_existentes_siguen_pagados(self):
+        from finanzas.models import registrar_egreso_automatico
+        e = registrar_egreso_automatico("x:1", "otros", HOY, 250, "auto")
+        self.assertEqual(e.saldo, 0)
+        e = registrar_egreso_automatico("x:1", "otros", HOY, 300, "auto")  # cambia el monto en origen
+        self.assertEqual(e.saldo, 0)
+
+    def test_cuotas_y_proyeccion(self):
+        from finanzas.caja import generar_cuotas, proyeccion_caja, vencimientos
+        from finanzas.models import Cobro, Ingreso, Pago
+        e = self.egreso(3000)
+        generar_cuotas(e, 3, HOY + timedelta(days=7))
+        Pago.objects.create(egreso=e, monto=Decimal("1500"), cuenta=self.banco)
+        self.assertEqual([m for _, m in vencimientos(e)], [Decimal("500"), Decimal("1000")])
+        i = Ingreso.objects.create(concepto="Liquidación Claro", monto=Decimal("50000"),
+                                   fecha_esperada_cobro=HOY + timedelta(days=14))
+        Cobro.objects.create(ingreso=i, monto=Decimal("10000"), cuenta=self.banco)
+        self.assertEqual((i.saldo, i.estado), (Decimal("40000"), "parcial"))
+        p = proyeccion_caja(8, HOY, estimados=False)
+        self.assertEqual(p["saldo_inicial"], Decimal("100000") + 10000 - 1500)
+        self.assertEqual(sum(f["cobros"] for f in p["filas"]), Decimal("40000"))
+        # quedan 500 de la cuota 2 (dentro de las 8 semanas) y la cuota 3 (fuera del horizonte)
+        self.assertEqual(sum(f["pagos"] for f in p["filas"]), Decimal("500"))
+        self.assertEqual(p["filas"][-1]["saldo"], Decimal("108500") + 40000 - 500)
+
+    def test_pantallas(self):
+        from finanzas.models import Ingreso
+        e = self.egreso(1000)
+        self.assertEqual(self.client.get("/finanzas/caja/").status_code, 200)
+        self.assertEqual(self.client.get(f"/finanzas/comprobantes/{e.id}/").status_code, 200)
+        self.client.post(f"/finanzas/comprobantes/{e.id}/pagos/", {"accion": "pago", "monto": "250,50",
+                                                                   "cuenta": self.banco.id})
+        self.assertEqual(e.saldo, Decimal("749.50"))
+        self.client.post("/finanzas/ingresos/", {"fecha": HOY.isoformat(), "pagador": "Claro", "concepto": "Septiembre",
+                                                 "monto": "120.000"})
+        i = Ingreso.objects.get()
+        self.assertEqual(i.monto, Decimal("120000"))
+        self.client.post("/finanzas/ingresos/", {"accion": "cobro", "ingreso": i.id, "fecha": HOY.isoformat()})
+        self.assertEqual(i.estado, "cobrado")
+        self.assertContains(self.client.get("/finanzas/ingresos/"), "Septiembre")
+
+    def test_tecnico_no_entra_a_caja(self):
+        t = persona("T1", usuario=User.objects.create_user("t1", password="x"))
+        self.client.force_login(t.usuario)
+        self.assertEqual(self.client.get("/finanzas/caja/").status_code, 403)
+
+
+class PowerBICajaTests(TestCase):
+    def test_datasets_nuevos(self):
+        g = User.objects.create_user("ger", password="x")
+        g.groups.add(Group.objects.create(name="Gerencia"))
+        self.client.force_login(g)
+        for ds in ("pagos", "cuotas", "ingresos", "cobros"):
+            self.assertEqual(self.client.get(f"/api/powerbi/{ds}.csv").status_code, 200, ds)

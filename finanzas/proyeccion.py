@@ -1,4 +1,8 @@
-"""Proyección de egresos: no hay ventas, así que el flujo es sólo de salida.
+"""Proyección de egresos (estimación de gastos por mes).
+
+Es la capa "estimada" del flujo de fondos: los ingresos y cobros, lo comprometido (comprobantes,
+cuotas) y el saldo de las cuentas están en finanzas/caja.py, que usa esta proyección para el gasto
+todavía no registrado. (La empresa no vende al público, pero sí cobra por su trabajo: ver Ingreso.)
 
 Para cada mes futuro se suman:
   * Materiales: demanda comercial cargada x receta de materiales x costo.

@@ -1,4 +1,4 @@
-{% extends "escritorio.html" %}{% load ui %}
+{% extends "escritorio.html" %}{% load formato ui %}
 {% block titulo %}{% if e %}Editar comprobante{% else %}Cargar comprobante{% endif %} · Virguel{% endblock %}
 {% block encabezado %}<h1>{% if e %}Editar comprobante{% else %}Cargar comprobante{% endif %}</h1><p class="sub">Subí la foto o el PDF y completá lo que figura en el papel. Si el proveedor es nuevo se crea solo; la próxima vez se propone su categoría habitual.</p>{% endblock %}
 {% block contenido %}
@@ -37,4 +37,23 @@
     {% if e %}<button class="btn peligro" name="accion" value="eliminar" formnovalidate onclick="return confirm('¿Eliminar este comprobante?')" style="margin-left:auto">Eliminar</button>{% endif %}
   </div>
 </form>
+{% if e %}<div class="grid g2" style="max-width:760px;margin-top:1rem">
+<div class="card"><h2>Pagos ({% if e.estado_pago == "pagado" %}pagado{% elif e.estado_pago == "parcial" %}parcial · saldo {{ e.saldo|pesos }}{% else %}pendiente{% endif %})</h2>
+  <table><tbody>{% for p in pagos %}<tr><td>{{ p.fecha|date:"d/m/Y" }}{% if p.automatico %} <small class="muted">(pago total)</small>{% endif %}</td><td class="num">{{ p.monto|pesos }}</td><td>{{ p.cuenta|default:"" }} {{ p.get_medio_display }}</td>
+  <td><form method="post" action="{% url 'finanzas:pagos_egreso' e.id %}">{% csrf_token %}<input type="hidden" name="accion" value="borrar_pago"><input type="hidden" name="pago" value="{{ p.id }}"><button class="icono-btn" title="Eliminar pago" onclick="return confirm('¿Eliminar este pago?')">×</button></form></td></tr>{% empty %}<tr><td class="muted">Sin pagos registrados.</td></tr>{% endfor %}</tbody></table>
+  {% if e.saldo > 0 %}<form method="post" action="{% url 'finanzas:pagos_egreso' e.id %}" class="form-movil" style="margin-top:.6rem">{% csrf_token %}<input type="hidden" name="accion" value="pago">
+    <label>Monto pagado</label><input name="monto" placeholder="{{ e.saldo|pesos }}" inputmode="decimal" required>
+    <label>Fecha</label><input type="date" name="fecha" value="{{ hoy|date:'Y-m-d' }}">
+    <label>Cuenta</label><select name="cuenta"><option value="">—</option>{% for c in cuentas %}<option value="{{ c.id }}">{{ c.nombre }}</option>{% endfor %}</select>
+    <label>Medio</label><select name="medio"><option value="">—</option>{% for v, n in medios %}<option value="{{ v }}">{{ n }}</option>{% endfor %}</select>
+    <button class="btn sec">Registrar pago parcial</button></form>{% endif %}
+</div>
+<div class="card"><h2>Plan de cuotas</h2>
+  {% if cuotas %}<table><tbody>{% for f in cuotas %}<tr><td>Cuota {{ f.c.numero }}</td><td>{{ f.c.vencimiento|date:"d/m/Y" }}</td><td class="num">{{ f.c.monto|pesos }}</td><td>{% if f.saldo <= 0 %}<span class="estado ok">Pagada</span>{% elif f.pagado > 0 %}<span class="estado aviso">Parcial</span>{% elif f.c.vencimiento < hoy %}<span class="estado critico">Vencida</span>{% else %}<span class="estado info">Pendiente</span>{% endif %}</td></tr>{% endfor %}</tbody></table>{% else %}<p class="muted">Sin cuotas: se paga en un solo vencimiento.</p>{% endif %}
+  <form method="post" action="{% url 'finanzas:pagos_egreso' e.id %}" class="form-movil" style="margin-top:.6rem">{% csrf_token %}<input type="hidden" name="accion" value="cuotas">
+    <label>Cantidad de cuotas mensuales</label><input type="number" name="cantidad" min="1" max="120" required>
+    <label>Primer vencimiento</label><input type="date" name="primer_vencimiento" required>
+    <button class="btn sec">{% if cuotas %}Rehacer plan{% else %}Armar plan{% endif %}</button></form>
+  <p class="muted" style="font-size:.8rem">Los pagos se imputan a las cuotas en orden.</p>
+</div></div>{% endif %}
 {% endblock %}

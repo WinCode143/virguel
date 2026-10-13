@@ -1,0 +1,27 @@
+{% extends "escritorio.html" %}{% load formato ui %}
+{% block titulo %}Caja y flujo de fondos · Virguel{% endblock %}
+{% block encabezado %}<h1>Caja y flujo de fondos</h1><p class="sub">Saldo de las cuentas, lo que hay que cobrar y pagar, y cómo queda la caja semana a semana. Separa lo comprometido (comprobantes, cuotas y cobros cargados) de lo estimado (proyección de gastos todavía no registrados).</p>{% endblock %}
+{% block contenido %}
+{% if not proy.hay_cuentas %}<div class="card" style="border-color:var(--aviso)"><b>Falta cargar las cuentas</b> (banco, efectivo) con su saldo inicial para que la proyección parta del dinero real. Se cargan en <a href="{% url 'admin:finanzas_cuenta_add' %}">Cuentas</a>.</div>{% endif %}
+<div class="grid g4">
+  <div class="card kpi"><div class="etq">Saldo en cuentas hoy</div><div class="valor">{{ proy.saldo_inicial|pesos }}</div><div class="det">{% for c, s in cuentas %}{{ c.nombre }}: {{ s|pesos }}{% if not forloop.last %} · {% endif %}{% empty %}sin cuentas cargadas{% endfor %}</div></div>
+  <div class="card kpi"><div class="etq">A cobrar atrasado</div><div class="valor">{{ proy.atrasado_cobrar|pesos }}</div><div class="det"><a href="{% url 'finanzas:ingresos' %}">ver ingresos</a></div></div>
+  <div class="card kpi"><div class="etq">A pagar</div><div class="valor">{{ cap.total|pesos }}</div><div class="det">{{ cap.n }} comprobante{{ cap.n|pluralize }} · vencido {{ cap.monto_vencido|pesos }}</div></div>
+  <div class="card kpi"><div class="etq">Saldo al final ({{ semanas }} sem.)</div><div class="valor">{% with ult=proy.filas|last %}<span class="estado {% if ult.negativo %}critico{% else %}ok{% endif %}">{{ ult.saldo|pesos }}</span>{% endwith %}</div><div class="det">{% if estimados %}con gasto estimado{% else %}sólo lo comprometido{% endif %}</div></div>
+</div>
+<form class="filtros" method="get">
+  <label>Semanas<select name="semanas" onchange="this.form.submit()"><option value="8" {% if semanas == 8 %}selected{% endif %}>8</option><option value="12" {% if semanas == 12 %}selected{% endif %}>12</option><option value="26" {% if semanas == 26 %}selected{% endif %}>26</option></select></label>
+  <label>Incluir<select name="estimados" onchange="this.form.submit()"><option value="1" {% if estimados %}selected{% endif %}>Comprometido + estimado</option><option value="0" {% if not estimados %}selected{% endif %}>Sólo comprometido</option></select></label>
+</form>
+{% if g %}<div class="card">{% include "tablero/_grafico.html" with id="g-caja" datos=g titulo="Saldo proyectado por semana" %}</div>{% endif %}
+<div class="card"><h2>Proyección semanal</h2><div class="tabla-scroll"><table>
+<thead><tr><th>Semana</th><th class="num">Cobros esperados</th><th class="num">Pagos comprometidos</th><th class="num">Gasto estimado</th><th class="num">Neto</th><th class="num">Saldo</th></tr></thead>
+<tbody>{% for f in proy.filas %}<tr><td>{{ f.desde|date:"d/m" }} – {{ f.hasta|date:"d/m" }}{% if forloop.first %} <small class="muted">(incluye atrasados)</small>{% endif %}</td>
+<td class="num">{{ f.cobros|pesos }}</td><td class="num">{{ f.pagos|pesos }}</td><td class="num muted">{{ f.estimado|pesos }}</td><td class="num">{{ f.neto|pesos }}</td>
+<td class="num"><span class="estado {% if f.negativo %}critico{% else %}ok{% endif %}">{{ f.saldo|pesos }}</span></td></tr>{% endfor %}</tbody></table></div>
+<p class="muted" style="font-size:.82rem">Cobros: saldo de los ingresos por su fecha esperada. Pagos: saldo de cada comprobante por vencimiento (o por cuota). Estimado: proyección mensual de gastos (materiales, flota, EPP, siniestros, fijos y sueldos) menos lo ya registrado en el mes, repartido por día.</p></div>
+<div class="grid g2">
+<div class="card"><h2>A cobrar</h2><table><tbody>{% for i in a_cobrar %}<tr><td>{{ i.pagador }} · {{ i.concepto }}<br><small class="muted">{% if i.fecha_esperada_cobro %}se espera {{ i.fecha_esperada_cobro|date:"d/m/Y" }}{% else %}sin fecha esperada{% endif %}</small></td><td class="num">{{ i.saldo_pendiente|pesos }}</td></tr>{% empty %}<tr><td class="muted">Sin ingresos pendientes de cobro. <a href="{% url 'finanzas:ingresos' %}">Cargar ingresos</a></td></tr>{% endfor %}</tbody></table></div>
+<div class="card"><h2>Vencidos a pagar</h2><table><tbody>{% for e in cap.vencidas|slice:":20" %}<tr><td>{{ e.proveedor|default:e.descripcion }}<br><small class="muted">venció {{ e.vencimiento|date:"d/m/Y" }}</small></td><td class="num">{{ e.saldo_pendiente|pesos }}</td></tr>{% empty %}<tr><td class="muted">Nada vencido.</td></tr>{% endfor %}</tbody></table></div>
+</div>
+{% endblock %}
