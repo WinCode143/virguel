@@ -14,6 +14,30 @@ reales para decisiones. **P2** = limitación importante para consolidar el produ
 
 ---
 
+## Estado de ejecución (13/10/2026)
+
+Rama `claude/laughing-goldberg-he8mh1`. Suite: **148 tests en PostgreSQL**, todos pasan (89 originales +
+59 de regresión en `tests/test_revision.py`), también en CI (`.github/workflows/tests.yml`).
+
+| Ítem | Estado | Notas |
+|---|---|---|
+| 0.1 Test frágil | ✅ Hecho | Serie inequívoca en la prueba de visibilidad. |
+| 0.2 CI en PostgreSQL | ✅ Hecho | Corre la suite y verifica migraciones pendientes. |
+| 0.3 Preguntas a la empresa | ⏳ **Esperando respuestas** | Ver lista abajo y `REQUERIMIENTOS.md`. |
+| 1.1 H01 Archivos privados | ✅ Hecho | `core/archivos.py`; Caddy ya no expone `/media/` (verificado con Docker/Caddy). |
+| 1.2 H05 Importación | ✅ Hecho | Conflictos registrados, sin duplicar stock, "Reabrir orden" auditado. |
+| 1.3 H06 Sin señal | ✅ Hecho | Idempotencia + confirmación explícita; verificado en navegador. |
+| 2.1 H02 Devoluciones | ✅ Hecho | `ConsumoLote`, origen del lote, comando `recalcular_devoluciones`. Punto 5 (desde cuándo cuentan los 60 días en el técnico) espera decisión. |
+| 2.2 Custodia herramientas/EPP | ✅ Hecho | `CompraElemento`; "decodificadores de Claro" espera respuesta (pregunta 6). |
+| 3.1 Catálogo de causas | ✅ Hecho | Valores iniciales a validar (pregunta 4). |
+| 3.2 H03 | ✅ Hecho | |
+| 3.3 H04 | ✅ Hecho | Usa el `tipo` del informe como tipo de problema. |
+| 3.4 H09 | ✅ Hecho | Pesos versionados; v2 a validar (pregunta 4). |
+| 4 H07 Finanzas | ✅ Hecho (genérico) | Falta: liquidación esperada de Claro calculada desde las órdenes y comparador de "alternativas de pago" (preguntas 1 y 3). |
+| 5.1 H10 Historia | ✅ Hecho | `Intento` y `AsignacionSupervisor`. Cuadrillas: espera pregunta 7. Consumos ligados a orden/técnico/fecha (no a la visita). |
+| 5.2 H08 Previsión | ✅ Hecho | Con `CompraEnCamino`. |
+| 6 Validación | ✅ Hecho | PostgreSQL, despliegue Docker + Caddy, recorrido con Playwright (`scripts/recorrido_navegador.js`, 51/51), rendimiento < 2 s por pantalla con los datos de demo. |
+
 ## Resumen
 
 | Fase | Contenido | Hallazgos | Depende de | Esfuerzo estimado |
