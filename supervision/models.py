@@ -76,7 +76,9 @@ class AccionCorrectiva(models.Model):
                                 help_text="Sólo para multas. Ojo: no se descuentan del sueldo (art. 131 LCT).")
     dias_suspension = models.PositiveSmallIntegerField(default=0, help_text="Sólo para suspensiones: días sin goce.")
     descripcion = models.TextField(blank=True)
-    cumplida = models.BooleanField(default=False)
+    cumplida = models.BooleanField(default=False, help_text="La acción se ejecutó (no implica que haya funcionado).")
+    fecha_cumplida = models.DateField(null=True, blank=True,
+                                      help_text="Desde acá se cuenta el seguimiento para verificar si fue efectiva.")
 
     class Meta:
         ordering = ["-fecha"]
@@ -85,6 +87,13 @@ class AccionCorrectiva(models.Model):
 
     def __str__(self):
         return f"{self.get_tipo_display()} - {self.tecnico} ({self.fecha})"
+
+    def save(self, *args, **kwargs):
+        if self.cumplida and not self.fecha_cumplida:
+            self.fecha_cumplida = max(self.fecha, timezone.localdate()) if self.pk else self.fecha
+        elif not self.cumplida:
+            self.fecha_cumplida = None
+        super().save(*args, **kwargs)
 
     @property
     def dias_respuesta(self):

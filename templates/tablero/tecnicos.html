@@ -25,10 +25,12 @@
 <div class="card"><h2>Cómo se interpreta</h2>
 <ul style="margin:0;padding-left:1.1rem;color:var(--ink-2);font-size:.9rem">
   <li><b>Necesita capacitación en producción:</b> rinde por debajo del 79% de la mediana del equipo, pero su calidad, disciplina y seguridad están bien. El problema es de oficio, no de actitud.</li>
-  <li><b>Riesgo alto – evaluar desvinculación:</b> falla en dos o más dimensiones además de la productividad (calidad, disciplina, seguridad), o ya fue capacitado en producción y no mejoró.</li>
+  <li><b>Requiere revisión del supervisor (riesgo alto):</b> falla en dos o más dimensiones además de la productividad (calidad, disciplina, seguridad), o ya fue capacitado en producción y no mejoró. Es una señal para revisar el caso con los datos de origen, no una decisión laboral.</li>
+  <li><b>Sin evidencia suficiente:</b> pocas jornadas en calle en la ventana (mínimo configurable en Parámetros); no se calculan puntajes.</li>
   <li><b>En observación:</b> falla en una dimensión; conviene seguimiento del supervisor.</li>
   <li><b>En curva de aprendizaje:</b> ingresó hace menos de 60 días; la baja productividad es esperable.</li>
   <li><b>Δ 4 sem.:</b> cuánto cambió el riesgo en el último mes (suba ≥ 5 en rojo, baja ≥ 5 en verde). Sale del historial semanal que guarda la tarea diaria.</li>
-  <li><b>Riesgo (0–100):</b> 100 − (20% productividad + 30% calidad + 25% disciplina + 25% seguridad). Alto ≥ 50, medio ≥ 30.</li>
+  <li><b>Riesgo (0–100):</b> índice orientativo, no una probabilidad validada: 100 − (20% productividad + 30% calidad + 25% disciplina + 25% seguridad) con los pesos de la versión vigente del criterio. Una dimensión sin datos suficientes no entra y su peso se reparte. Alto ≥ 50, medio ≥ 30.</li>
+  <li><b>Calidad:</b> sólo cuentan las no resueltas atribuidas al técnico; cliente ausente, red o clima no restan, y lo dudoso (falta de material, rechazo, otro) queda "a investigar" hasta que el supervisor lo confirme.</li>
 </ul></div>
 {% endblock %}

@@ -370,7 +370,7 @@ class AtribucionNoResueltasTests(TestCase):
         self.b = persona("TB", supervisor=self.sup)
         n = 0
         for t in (self.a, self.b):
-            for d in range(5):
+            for d in range(12):
                 f = HOY - timedelta(days=d + 1)
                 Jornada.objects.create(tecnico=t, fecha=f, en_calle=True)
                 n += 1
@@ -385,6 +385,7 @@ class AtribucionNoResueltasTests(TestCase):
         return {e.tecnico.legajo: e for e in evaluar_tecnicos(HOY, tecnicos=[self.a, self.b])}[t.legajo]
 
     def test_escenario_de_la_revision(self):
+        # (la revisión usó 5 trabajos; acá 12 jornadas para superar el mínimo de evidencia)
         ea, eb = self.ev(self.a), self.ev(self.b)
         self.assertEqual(ea.score_calidad, eb.score_calidad)
         self.assertEqual(ea.score_calidad, 100)
@@ -418,3 +419,122 @@ class AtribucionNoResueltasTests(TestCase):
         ot = OrdenTrabajo.objects.get(numero="F0")
         r = self.client.post("/app/no-resueltas/", {"orden": ot.id, "atribucion": "tecnico"})
         self.assertEqual(r.status_code, 404)
+
+
+class EfectividadAccionesTests(TestCase):
+    """H04: una acción sólo es efectiva si se cumplió y los controles posteriores lo verifican."""
+
+    def setUp(self):
+        self.sup = persona("S1", rol="supervisor", usuario=User.objects.create_user("sup", password="x"))
+        self.tecs = [persona(f"T{i}", supervisor=self.sup) for i in range(3)]
+
+    def accion(self, t, dias, **kw):
+        from supervision.models import AccionCorrectiva
+        return AccionCorrectiva.objects.create(tecnico=t, tipo="apercibimiento", fecha=HOY - timedelta(days=dias),
+                                               aplicada_por=self.sup, **kw)
+
+    def control(self, t, dias, desvio=False, tipo="calidad"):
+        from supervision.models import InformeControl
+        return InformeControl.objects.create(supervisor=self.sup, tecnico=t, fecha=HOY - timedelta(days=dias),
+                                             puntaje=2 if desvio else 5, desvio_detectado=desvio, tipo=tipo)
+
+    def efectividad(self):
+        from tablero.metricas import tableros_supervisores
+        return tableros_supervisores(hasta=HOY, supervisores=[self.sup])[0].get("efectividad_correccion").valor
+
+    def test_escenario_de_la_revision_sin_cumplir_ni_controlar_no_es_100(self):
+        for t in self.tecs:
+            self.accion(t, 40)
+        self.assertIsNone(self.efectividad())
+
+    def test_cumplidas_sin_controles_quedan_no_verificadas(self):
+        from supervision.efectividad import NO_VERIFICADA, clasificar
+        a = [self.accion(t, 40, cumplida=True) for t in self.tecs]
+        self.assertEqual({clasificar(x, HOY) for x in a}, {NO_VERIFICADA})
+        self.assertIsNone(self.efectividad())
+
+    def test_cumplidas_y_verificadas(self):
+        from supervision.efectividad import EFECTIVA, NO_EFECTIVA, clasificar
+        acciones = []
+        for i, t in enumerate(self.tecs):
+            acciones.append(self.accion(t, 45, cumplida=True))
+            self.control(t, 40)
+            self.control(t, 35, desvio=(i == 0))  # el primero repite el desvío
+        self.assertEqual([clasificar(a, HOY) for a in acciones], [NO_EFECTIVA, EFECTIVA, EFECTIVA])
+        self.assertAlmostEqual(self.efectividad(), 200 / 3)
+
+    def test_recurrencia_se_mide_sobre_el_mismo_problema(self):
+        from supervision.efectividad import EFECTIVA, clasificar
+        t = self.tecs[0]
+        origen = self.control(t, 50, desvio=True, tipo="seguridad")
+        a = self.accion(t, 45, cumplida=True, informe=origen)
+        self.control(t, 40, tipo="seguridad")
+        self.control(t, 38, tipo="seguridad")
+        self.control(t, 36, desvio=True, tipo="vehiculo")  # otro problema
+        self.assertEqual(clasificar(a, HOY), EFECTIVA)
+
+    def test_supervisor_marca_cumplida_desde_la_app(self):
+        a = self.accion(self.tecs[0], 3)
+        self.client.force_login(self.sup.usuario)
+        self.client.post(f"/app/accion/{a.id}/cumplida/")
+        a.refresh_from_db()
+        self.assertTrue(a.cumplida)
+        self.assertEqual(a.fecha_cumplida, HOY)
+
+
+class EvidenciaSuficienteTests(TestCase):
+    """H09: sin datos suficientes no hay diagnóstico ni puntajes inventados."""
+
+    def test_sin_jornadas_ni_ordenes_es_sin_evidencia(self):
+        from capacitacion.evaluacion import Diagnostico, evaluar_tecnicos
+        e = evaluar_tecnicos(HOY, tecnicos=[persona("T1")])[0]
+        self.assertEqual(e.diagnostico, Diagnostico.SIN_EVIDENCIA)
+        self.assertIsNone(e.riesgo)
+        self.assertIsNone(e.score_productividad)
+
+    def test_pantallas_y_exportacion_toleran_sin_evidencia(self):
+        g = User.objects.create_user("ger", password="x")
+        g.groups.add(Group.objects.create(name="Gerencia"))
+        t = persona("T1")
+        self.client.force_login(g)
+        self.assertContains(self.client.get("/tablero/tecnicos/"), "Sin evidencia suficiente")
+        self.assertEqual(self.client.get(f"/tablero/tecnicos/{t.id}/").status_code, 200)
+        self.assertEqual(self.client.get("/api/powerbi/evaluacion_tecnicos.csv").status_code, 200)
+
+    def test_recapacitacion_no_resta_y_se_guarda_la_version(self):
+        from capacitacion.evaluacion import evaluar_tecnicos, guardar_historial
+        from capacitacion.models import EvaluacionHistorica
+        from operaciones.models import Jornada, OrdenTrabajo, TipoTarea
+        from supervision.models import AccionCorrectiva
+        tipo = TipoTarea.objects.create(codigo="I", nombre="I")
+        t = persona("T1")
+        for d in range(1, 21):
+            f = HOY - timedelta(days=d)
+            Jornada.objects.create(tecnico=t, fecha=f)
+            OrdenTrabajo.objects.create(numero=f"o{d}", tipo=tipo, tecnico=t, estado="completada",
+                                        fecha_ejecucion=f, fecha_programada=f)
+        antes = evaluar_tecnicos(HOY, tecnicos=[t])[0].score_disciplina
+        AccionCorrectiva.objects.create(tecnico=t, tipo="recapacitacion", fecha=HOY - timedelta(days=3))
+        self.assertEqual(evaluar_tecnicos(HOY, tecnicos=[t])[0].score_disciplina, antes)
+        guardar_historial(HOY)
+        self.assertEqual(EvaluacionHistorica.objects.get(persona=t).criterio_version, 2)
+
+
+class RetrospectivaTests(TestCase):
+    def test_informa_por_diagnostico(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from capacitacion.models import EvaluacionHistorica
+        t = persona("T1")
+        t.fecha_egreso = HOY - timedelta(days=20)
+        t.save()
+        EvaluacionHistorica.objects.create(fecha=HOY - timedelta(days=100), persona=t, productividad=1,
+                                           indice_productividad=1, score_productividad=50, score_calidad=50,
+                                           score_disciplina=50, score_seguridad=50, riesgo=60,
+                                           diagnostico="Requiere revisión del supervisor (riesgo alto)",
+                                           criterio_version=2)
+        out = StringIO()
+        call_command("evaluacion_retrospectiva", "--horizonte", "90", stdout=out)
+        self.assertIn("100%", out.getvalue())

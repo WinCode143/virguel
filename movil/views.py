@@ -20,7 +20,7 @@ from herramientas.models import Asignacion
 from incidentes.models import Siniestro
 from operaciones.models import Jornada, OrdenTrabajo
 from supervision.evaluacion import evaluar_supervisores
-from supervision.models import EncuestaSupervisor, InformeControl, TareaSupervisor
+from supervision.models import AccionCorrectiva, EncuestaSupervisor, InformeControl, TareaSupervisor
 
 from .forms import (AccionForm, CerrarOrdenForm, EncuestaForm, EncuestaSemanalForm, FinJornadaForm, InformeForm,
                     InicioJornadaForm, NotaForm, NovedadForm, PedidoForm, SiniestroMovilForm)
@@ -100,6 +100,9 @@ def _inicio_supervisor(request, p):
         "pedidos_pendientes": PedidoMaterial.objects.filter(tecnico__supervisor=p, estado="pendiente").count(),
         "deudas_equipo": deudas_equipo,
         "a_investigar": _no_resueltas_a_investigar(p).count(),
+        "acciones_sin_cumplir": AccionCorrectiva.objects.filter(
+            tecnico__supervisor=p, cumplida=False, fecha__gte=hoy - timedelta(days=60))
+        .exclude(tipo__in=("charla",)).select_related("tecnico")[:10],
         "inicio_form": InicioJornadaForm(), "fin_form": FinJornadaForm()})
 
 
@@ -231,6 +234,20 @@ def novedades_equipo(request):
         "pendientes": Novedad.objects.filter(persona__supervisor=p, estado="pendiente").select_related("persona"),
         "recientes": Novedad.objects.filter(persona__supervisor=p).exclude(estado="pendiente")
         .select_related("persona")[:15], "tab": "asistencia"})
+
+
+@requiere_rol(SUPERVISOR)
+def accion_cumplida(request, pk):
+    """El supervisor registra que la acción correctiva se ejecutó (desde ahí corre el seguimiento)."""
+    p = _persona(request)
+    a = get_object_or_404(AccionCorrectiva, pk=pk, tecnico__supervisor=p)
+    if request.method == "POST" and not a.cumplida:
+        a.cumplida = True
+        a.fecha_cumplida = fecha_operacion(request)
+        a.save(update_fields=["cumplida", "fecha_cumplida"])
+        messages.success(request, f"{a.get_tipo_display()} de {a.tecnico.nombre_completo}: cumplida. "
+                                  "Se verificará con los próximos controles.")
+    return redirect("movil:inicio")
 
 
 @requiere_rol(SUPERVISOR)

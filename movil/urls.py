@@ -30,6 +30,7 @@ urlpatterns = [
     path("incidente/", views.reportar_incidente, name="incidente"),
     path("informe/", views.nuevo_informe, name="informe"),
     path("accion/", views.nueva_accion, name="accion"),
+    path("accion/<int:pk>/cumplida/", views.accion_cumplida, name="accion_cumplida"),
     path("tarea/<int:pk>/", views.tarea, name="tarea"),
     path("indicadores/", views.mis_indicadores, name="indicadores"),
 ]

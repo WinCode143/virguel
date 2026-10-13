@@ -277,7 +277,7 @@ def tecnicos(request):
     antes = dict(EvaluacionHistorica.objects.filter(fecha=previa).values_list("persona_id", "riesgo")) if previa else {}
     for e in evs:
         r = antes.get(e.tecnico.id)
-        e.delta_riesgo = (e.riesgo - float(r)) if r is not None else None
+        e.delta_riesgo = (e.riesgo - float(r)) if r is not None and e.riesgo is not None else None
     return render(request, "tablero/tecnicos.html", {
         "evs": evs, "filtro": filtro, "diagnosticos": list(Diagnostico.COLOR), "previa": previa,
         "ventana": Parametros.actual().dias_ventana_evaluacion})

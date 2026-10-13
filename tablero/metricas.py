@@ -20,6 +20,7 @@ from operaciones.criterios import q_falla_tecnico
 from operaciones.models import Jornada, OrdenTrabajo
 from personal.indicadores import resumen as resumen_asistencia
 from personal.models import Asistencia, Novedad
+from supervision.efectividad import resumir
 from supervision.models import AccionCorrectiva, InformeControl
 
 
@@ -286,16 +287,12 @@ def tableros_supervisores(desde=None, hasta=None, dias=30, supervisores=None) ->
         rapidos = sum(1 for i in desvios if any((a.fecha - i.fecha).days <= 2 for a in i.acciones.all()))
         x["respuesta_desvios"] = _pct(rapidos, len(desvios)) if len(desvios) >= 3 else None
 
-        # Efectividad: acciones de hace 30-60 días; ¿el técnico volvió a tener un desvío en los 30 días siguientes?
+        # Efectividad: acciones de hace 30-60 días, CUMPLIDAS y VERIFICADAS con controles posteriores
+        # (supervision/efectividad.py). Sin seguimiento suficiente quedan "no verificadas" y no suman.
         acciones = AccionCorrectiva.objects.filter(tecnico_id__in=ids, fecha__range=(hasta - timedelta(days=60),
                                                                                     hasta - timedelta(days=30)))
-        total = sin_repetir = 0
-        for a in acciones:
-            total += 1
-            repite = InformeControl.objects.filter(tecnico_id=a.tecnico_id, desvio_detectado=True,
-                                                   fecha__gt=a.fecha, fecha__lte=a.fecha + timedelta(days=30)).exists()
-            sin_repetir += not repite
-        x["efectividad_correccion"] = _pct(sin_repetir, total) if total >= 3 else None
+        res_acciones = resumir(acciones.select_related("informe"), hasta)
+        x["efectividad_correccion"] = res_acciones.efectividad
 
         ev = evs.get(s.id)
         notas = [n for n in ((ev.nota_encuesta, ev.nota_semanal) if ev else ()) if n]

@@ -78,6 +78,20 @@ class Parametros(models.Model):
         default=Decimal("0.60"), validators=[MinValueValidator(0), MaxValueValidator(1)])
     dias_ventana_evaluacion = models.PositiveIntegerField(
         "Ventana de evaluación de técnicos (días)", default=90)
+    evidencia_min_jornadas = models.PositiveIntegerField(
+        "Evaluación: jornadas en calle mínimas", default=10,
+        help_text="Con menos jornadas en la ventana el técnico figura 'Sin evidencia suficiente' (sin puntajes).")
+    evidencia_min_ordenes = models.PositiveIntegerField(
+        "Evaluación: órdenes ejecutadas mínimas para medir calidad", default=10,
+        help_text="Con menos órdenes (y sin controles suficientes) la calidad queda sin dato.")
+    evidencia_min_controles = models.PositiveIntegerField(
+        "Evaluación: controles mínimos para medir calidad", default=2)
+    controles_verificacion_accion = models.PositiveIntegerField(
+        "Acciones correctivas: controles posteriores para verificarlas", default=2,
+        help_text="Una acción cumplida se considera efectiva sólo si después hubo al menos estos controles sin "
+                  "repetir el desvío; con menos queda 'no verificada'.")
+    dias_verificacion_accion = models.PositiveIntegerField(
+        "Acciones correctivas: días de seguimiento", default=30)
     dias_cobertura_stock_min = models.PositiveIntegerField(
         "Días mínimos de cobertura de stock", default=7,
         help_text="Si el stock alcanza para menos días que esto, se alerta faltante.")
