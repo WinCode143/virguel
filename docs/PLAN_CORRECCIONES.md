@@ -81,7 +81,7 @@ Archivos con `FileField` a proteger:
 | Modelo | Campo | Ruta |
 |---|---|---|
 | `personal.Novedad` | `certificado` | `certificados/` |
-| `personal` (documento de legajo) | `archivo` | `legajos/` |
+| `personal.DocumentoPersonal` | `archivo` | `legajos/` |
 | `finanzas.Liquidacion` | `recibo` | `recibos/` |
 | `finanzas.Egreso` | `comprobante` | `egresos/` |
 | `operaciones.OrdenTrabajo` | `foto_trabajo`, `firma` | `ordenes/`, `firmas/` |
