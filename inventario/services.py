@@ -10,7 +10,7 @@ from django.utils import timezone
 from core.models import Parametros
 from operaciones.models import Jornada
 
-from .models import DemandaComercial, LoteIngreso, Material, RecetaMaterial, Salida
+from .models import ConsumoLote, DemandaComercial, LoteIngreso, Material, RecetaMaterial, Salida
 
 
 class StockInsuficiente(Exception):
@@ -23,6 +23,7 @@ def registrar_salida(salida: Salida, permitir_negativo=False) -> Salida:
     calcula el costo real de la salida."""
     restante = Decimal(salida.cantidad)
     costo = Decimal("0")
+    tomados = []
     lotes = (LoteIngreso.objects.select_for_update()
              .filter(material=salida.material, cantidad_disponible__gt=0).order_by("fecha", "id"))
     for lote in lotes:
@@ -33,6 +34,7 @@ def registrar_salida(salida: Salida, permitir_negativo=False) -> Salida:
         lote.save(update_fields=["cantidad_disponible"])
         costo += tomado * lote.costo_unitario
         restante -= tomado
+        tomados.append((lote, tomado))
     if restante > 0:
         if not permitir_negativo:
             raise StockInsuficiente(
@@ -40,6 +42,8 @@ def registrar_salida(salida: Salida, permitir_negativo=False) -> Salida:
         costo += restante * salida.material.costo_unitario
     salida.costo_total = costo
     salida.save()
+    ConsumoLote.objects.bulk_create(ConsumoLote(salida=salida, lote=lote, cantidad=q, costo_unitario=lote.costo_unitario)
+                                    for lote, q in tomados)
     return salida
 
 

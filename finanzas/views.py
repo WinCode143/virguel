@@ -55,7 +55,7 @@ def consumos(desde, hasta):
 
 def compras(desde, hasta):
     from inventario.models import LoteIngreso
-    return (LoteIngreso.objects.filter(fecha__range=(desde, hasta)).exclude(proveedor__startswith="Devolución")
+    return (LoteIngreso.objects.filter(fecha__range=(desde, hasta), origen=LoteIngreso.Origen.COMPRA)
             .select_related("material"))
 
 

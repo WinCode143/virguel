@@ -2,6 +2,10 @@
 
 Flujo:  depósito --entrega--> técnico --consumo en orden--> cliente
                                     \\--devolución--> depósito
+
+Las entregas guardan de qué lotes salieron las unidades (ConsumoLote). Una devolución
+reingresa esas mismas unidades: con la fecha de ingreso y el costo de su lote de origen,
+y sin generar un gasto (no es una compra).
 """
 from collections import defaultdict, deque
 from datetime import date, timedelta
@@ -13,7 +17,7 @@ from django.utils import timezone
 
 from core.models import Parametros
 
-from .models import LoteIngreso, MovimientoStockTecnico, RecetaMaterial, Salida
+from .models import ConsumoLote, LoteIngreso, MovimientoStockTecnico, RecetaMaterial, Salida
 from .services import StockInsuficiente, registrar_salida
 
 T = MovimientoStockTecnico.Tipo
@@ -43,11 +47,11 @@ def total_en_tecnicos() -> dict:
 def entregar(tecnico, material, cantidad, fecha: date | None = None, pedido=None, permitir_negativo=False):
     """El depósito entrega partes al técnico: salen de los lotes (FIFO) y pasan a su stock."""
     fecha = fecha or timezone.localdate()
-    registrar_salida(Salida(material=material, cantidad=cantidad, fecha=fecha, tecnico=tecnico,
-                            motivo=Salida.Motivo.ENTREGA, observaciones=f"Pedido {pedido.id}" if pedido else ""),
-                     permitir_negativo=permitir_negativo)
+    salida = registrar_salida(Salida(material=material, cantidad=cantidad, fecha=fecha, tecnico=tecnico,
+                                     motivo=Salida.Motivo.ENTREGA, observaciones=f"Pedido {pedido.id}" if pedido else ""),
+                              permitir_negativo=permitir_negativo)
     return MovimientoStockTecnico.objects.create(tecnico=tecnico, material=material, fecha=fecha, tipo=T.ENTREGA,
-                                                 cantidad=Decimal(cantidad), pedido=pedido)
+                                                 cantidad=Decimal(cantidad), pedido=pedido, salida=salida)
 
 
 @transaction.atomic
@@ -68,17 +72,70 @@ def consumir(tecnico, orden, material, cantidad, fecha: date | None = None) -> b
     return alcanzaba
 
 
+def unidades_a_cargo(tecnico, material) -> list:
+    """Unidades que tiene el técnico, con su origen: [[lote | None, fecha_ingreso, costo_unitario, cantidad], ...].
+
+    Se reconstruye en orden FIFO: cada salida del técnico (consumo, devolución, ajuste negativo)
+    se descuenta de lo que recibió primero. `lote` es None cuando no se conoce (entregas
+    anteriores al registro por lote, ajustes positivos o partes entregadas sin stock en depósito):
+    en ese caso la fecha es la de la entrega."""
+    cola = deque()
+    movs = (MovimientoStockTecnico.objects.filter(tecnico=tecnico, material=material)
+            .select_related("salida").order_by("fecha", "id"))
+    for m in movs:
+        if m.cantidad > 0:
+            pendiente = m.cantidad
+            if m.tipo == T.ENTREGA and m.salida_id:
+                for c in ConsumoLote.objects.filter(salida_id=m.salida_id).select_related("lote"):
+                    tomado = min(c.cantidad, pendiente)
+                    if tomado > 0:
+                        cola.append([c.lote, c.lote.fecha, c.costo_unitario, tomado])
+                        pendiente -= tomado
+            if pendiente > 0:
+                costo = (m.salida.costo_total / m.salida.cantidad) if m.salida_id and m.salida.cantidad else \
+                    material.costo_unitario
+                cola.append([None, m.fecha, costo, pendiente])
+        else:
+            resto = -m.cantidad
+            while resto > 0 and cola:
+                tomado = min(cola[0][3], resto)
+                cola[0][3] -= tomado
+                resto -= tomado
+                if cola[0][3] <= 0:
+                    cola.popleft()
+    return list(cola)
+
+
 @transaction.atomic
 def devolver(tecnico, material, cantidad, fecha: date | None = None, observaciones=""):
-    """El técnico devuelve partes al depósito: vuelven como un lote nuevo."""
+    """El técnico devuelve partes al depósito.
+
+    Vuelven como lotes de origen "devolución" con la fecha de ingreso y el costo del lote del que
+    habían salido (no reinicia la antigüedad ni cuenta como compra)."""
     fecha = fecha or timezone.localdate()
     cantidad = Decimal(cantidad)
     if saldo(tecnico, material) < cantidad:
         raise StockInsuficiente(f"{tecnico} no tiene {cantidad} {material.unidad} de {material.nombre}")
+    a_devolver = cantidad
+    por_origen = {}  # (lote_id, fecha, costo) -> [lote, cantidad]
+    for lote, f_ingreso, costo, q in unidades_a_cargo(tecnico, material):
+        if a_devolver <= 0:
+            break
+        tomado = min(q, a_devolver)
+        clave = (lote.pk if lote else None, f_ingreso, costo)
+        por_origen.setdefault(clave, [lote, Decimal("0")])[1] += tomado
+        a_devolver -= tomado
+    if a_devolver > 0:  # sin origen conocido (no debería pasar si el saldo alcanza)
+        por_origen.setdefault((None, fecha, material.costo_unitario), [None, Decimal("0")])[1] += a_devolver
     MovimientoStockTecnico.objects.create(tecnico=tecnico, material=material, fecha=fecha, tipo=T.DEVOLUCION,
                                           cantidad=-cantidad, observaciones=observaciones)
-    LoteIngreso.objects.create(material=material, fecha=fecha, cantidad=cantidad,
-                               costo_unitario=material.costo_unitario, proveedor=f"Devolución {tecnico.legajo}")
+    lotes = []
+    for (_, f_ingreso, costo), (lote, q) in por_origen.items():
+        lotes.append(LoteIngreso.objects.create(
+            material=material, fecha=f_ingreso, cantidad=q, costo_unitario=costo,
+            origen=LoteIngreso.Origen.DEVOLUCION, lote_origen=lote,
+            proveedor=f"Devolución {tecnico.legajo}", remito=f"Dev. {fecha:%d/%m/%Y}"))
+    return lotes
 
 
 def partes_paradas(tecnicos=None, hoy: date | None = None, dias: int | None = None):

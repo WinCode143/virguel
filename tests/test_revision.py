@@ -249,3 +249,111 @@ class SincronizacionOfflineTests(TestCase):
         js = (Path(settings.BASE_DIR) / "static/js/offline.js").read_text()
         self.assertIn("j.ok === true", js)
         self.assertIn('"X-Virguel-Sync": "1"', js)
+
+
+class DevolucionesTests(TestCase):
+    """H02: una devolución conserva antigüedad y costo de origen y no es una compra."""
+
+    def setUp(self):
+        from inventario.models import LoteIngreso, Material
+        self.m = Material.objects.create(codigo="DECO", nombre="Deco", costo_unitario=Decimal("100"))
+        self.t = persona("T1")
+        self.hace90 = HOY - timedelta(days=90)
+        self.lote = LoteIngreso.objects.create(material=self.m, fecha=self.hace90, cantidad=10,
+                                               costo_unitario=Decimal("100"))
+
+    def total_egresos(self):
+        from django.db.models import Sum
+
+        from finanzas.models import Egreso
+        return Egreso.objects.aggregate(t=Sum("monto"))["t"]
+
+    def test_escenario_de_la_revision(self):
+        from inventario.models import LoteIngreso
+        from inventario.stock_tecnico import devolver, entregar, saldo
+        self.assertEqual(self.total_egresos(), Decimal("1000"))
+        entregar(self.t, self.m, 4)
+        self.m.costo_unitario = Decimal("130")  # el precio actual cambió: no debe usarse
+        self.m.save()
+        devolver(self.t, self.m, 2)
+        self.assertEqual(self.total_egresos(), Decimal("1000"))  # antes: 1.200
+        dev = LoteIngreso.objects.get(origen="devolucion")
+        self.assertEqual((dev.fecha, dev.costo_unitario, dev.cantidad, dev.lote_origen), (
+            self.hace90, Decimal("100"), Decimal("2"), self.lote))
+        self.assertEqual(saldo(self.t, self.m), 2)
+        self.assertEqual(self.m.stock_actual, 8)
+
+    def test_antiguedad_se_mantiene_en_el_control_de_lotes(self):
+        from inventario.services import lotes_envejecidos
+        from inventario.stock_tecnico import devolver, entregar
+        entregar(self.t, self.m, 10)
+        devolver(self.t, self.m, 3)
+        filas = lotes_envejecidos()
+        self.assertEqual([(f["dias"], f["lote"].cantidad_disponible) for f in filas], [(90, 3)])
+
+    def test_devuelve_lo_mas_viejo_y_respeta_lotes_mezclados(self):
+        from inventario.models import LoteIngreso
+        from inventario.stock_tecnico import consumir, devolver, entregar
+        LoteIngreso.objects.create(material=self.m, fecha=HOY - timedelta(days=5), cantidad=10,
+                                   costo_unitario=Decimal("120"))
+        entregar(self.t, self.m, 14)       # 10 del lote viejo + 4 del nuevo
+        consumir(self.t, None, self.m, 9)  # consume 9 del viejo (FIFO)
+        devolver(self.t, self.m, 3)        # 1 del viejo + 2 del nuevo
+        devs = list(LoteIngreso.objects.filter(origen="devolucion").order_by("fecha").values_list(
+            "fecha", "cantidad", "costo_unitario"))
+        self.assertEqual(devs, [(self.hace90, Decimal("1"), Decimal("100")),
+                                (HOY - timedelta(days=5), Decimal("2"), Decimal("120"))])
+
+    def test_comprar_si_genera_egreso_y_finanzas_no_cuenta_devoluciones(self):
+        from finanzas.views import compras
+        from inventario.stock_tecnico import devolver, entregar
+        entregar(self.t, self.m, 4)
+        devolver(self.t, self.m, 4)
+        self.assertEqual([lote.pk for lote in compras(self.hace90, HOY)], [self.lote.pk])
+
+    def test_comando_corrige_egresos_de_devoluciones_anteriores(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from finanzas.models import Egreso, registrar_egreso_automatico
+        from inventario.models import LoteIngreso
+        viejo = LoteIngreso.objects.create(material=self.m, cantidad=2, costo_unitario=Decimal("100"),
+                                           origen="devolucion", proveedor="Devolución T1")
+        registrar_egreso_automatico(f"lote:{viejo.pk}", "compras-stock", HOY, 200, "Compra 2 u Deco")  # como antes
+        out = StringIO()
+        call_command("recalcular_devoluciones", stdout=out)
+        self.assertTrue(Egreso.objects.filter(origen=f"lote:{viejo.pk}").exists())  # sin --aplicar no cambia
+        call_command("recalcular_devoluciones", "--aplicar", stdout=out)
+        self.assertFalse(Egreso.objects.filter(origen=f"lote:{viejo.pk}").exists())
+        self.assertEqual(self.total_egresos(), Decimal("1000"))
+
+
+class CustodiaHerramientasTests(TestCase):
+    """Reasignar una herramienta es custodia: el gasto es la compra, una sola vez."""
+
+    def test_reasignar_no_genera_gastos_repetidos(self):
+        from finanzas.models import Egreso
+        from herramientas.models import Asignacion, CompraElemento, Elemento
+        taladro = Elemento.objects.create(codigo="TAL", nombre="Taladro", tipo="herramienta", costo=Decimal("500"))
+        CompraElemento.objects.create(elemento=taladro, cantidad=1, costo_unitario=Decimal("500"))
+        taladro.refresh_from_db()
+        self.assertEqual(taladro.stock, 1)
+        a = Asignacion.objects.create(persona=persona("T1"), elemento=taladro)
+        taladro.refresh_from_db()
+        self.assertEqual(taladro.stock, 0)
+        a.estado = "devuelto"
+        a.save()
+        taladro.refresh_from_db()
+        self.assertEqual(taladro.stock, 1)
+        Asignacion.objects.create(persona=persona("T2"), elemento=taladro)
+        Asignacion.objects.create(persona=persona("T3"), elemento=taladro, origen="reasignacion")
+        self.assertEqual(Egreso.objects.count(), 1)
+        self.assertEqual(Egreso.objects.get().monto, Decimal("500"))
+
+    def test_compra_directa_para_una_persona_si_es_gasto(self):
+        from finanzas.models import Egreso
+        from herramientas.models import Asignacion, Elemento
+        casco = Elemento.objects.create(codigo="CAS", nombre="Casco", costo=Decimal("80"))
+        Asignacion.objects.create(persona=persona("T1"), elemento=casco, cantidad=2, origen="compra")
+        self.assertEqual(Egreso.objects.get().monto, Decimal("160"))
