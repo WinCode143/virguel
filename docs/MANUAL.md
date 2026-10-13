@@ -156,6 +156,12 @@ En la PC (`/tablero/`): los mismos tableros que gerencia pero **sólo con su equ
   efectivo) se cargan una vez con su saldo inicial en el admin (Finanzas → Cuentas).
 - **Ingresos y cobros**: cargar lo que se factura o liquida (p. ej. la liquidación de Claro del mes) con
   la fecha en que se espera cobrar, y registrar cada cobro (total o parcial) con la cuenta.
+- **Liquidación esperada de Claro** (en Ingresos y cobros): para un mes, cuenta las órdenes completadas
+  por tipo de tarea × el precio que paga Claro (admin → Tipos de tarea), descuenta el % de retenciones
+  y débitos y calcula la fecha de cobro (Parámetros). "Registrar como ingreso a cobrar" lo deja en la
+  caja; recalcular lo actualiza. También: `python manage.py liquidacion_claro --mes AAAA-MM`.
+- **Alternativas de pago**: comparar contado, cuotas o planes a valor presente con el costo del dinero
+  mensual (Parámetros); marca la más conveniente.
 - **Pagos parciales y cuotas**: en la ficha de un comprobante se registran pagos parciales (con cuenta y
   medio) y se arma un plan de cuotas mensuales; los pagos se imputan a las cuotas en orden. El tilde
   "Ya está pagado" sigue funcionando: registra el pago del saldo.

@@ -5,11 +5,12 @@
     <a class="marca" href="{% url 'tablero:inicio' %}"><img class="logo" src="{% static 'img/icono.svg' %}" alt=""><span><b>Virguel</b><small>Control de personal y operación</small></span></a>
     <nav class="nav">
       {% if es_contabilidad %}
-      <details open class="nav-grupo" {% grupo_abierto 'finanzas:panel' 'finanzas:caja' 'finanzas:ingresos' 'finanzas:comprobantes' 'finanzas:comprobante_nuevo' 'finanzas:comprobante' 'finanzas:sueldos' 'finanzas:materiales' 'finanzas:gastos_campo' 'finanzas:presupuestos' 'finanzas:configuracion' %}>
+      <details open class="nav-grupo" {% grupo_abierto 'finanzas:panel' 'finanzas:caja' 'finanzas:ingresos' 'finanzas:alternativas' 'finanzas:comprobantes' 'finanzas:comprobante_nuevo' 'finanzas:comprobante' 'finanzas:sueldos' 'finanzas:materiales' 'finanzas:gastos_campo' 'finanzas:presupuestos' 'finanzas:configuracion' %}>
         <summary>Finanzas {% icono 'abajo' %}</summary>
         {% nav 'finanzas:panel' 'Resumen' 'billetera' %}
         {% nav 'finanzas:caja' 'Caja y flujo de fondos' 'billetera' %}
         {% nav 'finanzas:ingresos' 'Ingresos y cobros' 'subir' %}
+        {% nav 'finanzas:alternativas' 'Alternativas de pago' 'calendario' %}
         {% nav 'finanzas:comprobantes' 'Comprobantes y pagos' 'documento' %}
         {% nav 'finanzas:sueldos' 'Sueldos y horas extra' 'personas' %}
         {% nav 'finanzas:materiales' 'Materiales' 'caja' %}
@@ -84,11 +85,12 @@
       </details>
 
       {% if es_gerencia %}
-      <details class="nav-grupo" {% grupo_abierto 'finanzas:panel' 'finanzas:caja' 'finanzas:ingresos' 'finanzas:comprobantes' 'finanzas:comprobante_nuevo' 'finanzas:comprobante' 'finanzas:sueldos' 'finanzas:materiales' 'finanzas:gastos_campo' 'finanzas:presupuestos' 'finanzas:configuracion' %}>
+      <details class="nav-grupo" {% grupo_abierto 'finanzas:panel' 'finanzas:caja' 'finanzas:ingresos' 'finanzas:alternativas' 'finanzas:comprobantes' 'finanzas:comprobante_nuevo' 'finanzas:comprobante' 'finanzas:sueldos' 'finanzas:materiales' 'finanzas:gastos_campo' 'finanzas:presupuestos' 'finanzas:configuracion' %}>
         <summary>Finanzas {% icono 'abajo' %}</summary>
         {% nav 'finanzas:panel' 'Resumen' 'billetera' %}
         {% nav 'finanzas:caja' 'Caja y flujo de fondos' 'billetera' %}
         {% nav 'finanzas:ingresos' 'Ingresos y cobros' 'subir' %}
+        {% nav 'finanzas:alternativas' 'Alternativas de pago' 'calendario' %}
         {% nav 'finanzas:comprobantes' 'Comprobantes y pagos' 'documento' %}
         {% nav 'finanzas:sueldos' 'Sueldos y horas extra' 'personas' %}
         {% nav 'finanzas:materiales' 'Materiales' 'caja' %}

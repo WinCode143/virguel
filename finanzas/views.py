@@ -355,9 +355,21 @@ def caja(request):
 
 @requiere_rol(*ROLES)
 def ingresos(request):
+    from . import liquidacion_claro
     form = IngresoForm(initial={"fecha": timezone.localdate()})
+    mes_claro = _fecha((request.GET.get("mes_claro") or request.POST.get("mes_claro") or "") + "-01",
+                       sumar_meses(timezone.localdate().replace(day=1), -1))
     if request.method == "POST":
         accion = request.POST.get("accion")
+        if accion == "liquidacion_claro":
+            i = liquidacion_claro.registrar(mes_claro)
+            if i:
+                messages.success(request, f"Liquidación esperada de Claro {mes_claro:%m/%Y}: {pesos(i.monto)} a cobrar "
+                                          f"el {i.fecha_esperada_cobro:%d/%m/%Y}.")
+            else:
+                messages.error(request, "No hay órdenes completadas con precio en ese mes (revisar el precio de Claro "
+                                        "de cada tipo de tarea).")
+            return redirect(f"{request.path}?mes_claro={mes_claro:%Y-%m}")
         if accion == "cobro":
             i = get_object_or_404(Ingreso, pk=request.POST.get("ingreso"))
             monto = _decimal(request.POST.get("monto")) or i.saldo
@@ -380,7 +392,30 @@ def ingresos(request):
             return redirect("finanzas:ingresos")
     qs = Ingreso.objects.prefetch_related("cobros__cuenta").order_by("-fecha")[:200]
     return render(request, "finanzas/ingresos.html", {
-        "form": form, "ingresos": qs, "cuentas": Cuenta.objects.filter(activa=True), "hoy": timezone.localdate()})
+        "form": form, "ingresos": qs, "cuentas": Cuenta.objects.filter(activa=True), "hoy": timezone.localdate(),
+        "claro": liquidacion_claro.calcular(mes_claro)})
+
+
+@requiere_rol(*ROLES)
+def alternativas(request):
+    """Comparar formas de pago (contado, cuotas, plan) a valor presente."""
+    from .alternativas import comparar
+    tasa = _decimal(request.GET.get("tasa")) if request.GET.get("tasa") else Parametros.actual().tasa_descuento_mensual
+    filas_in = []
+    for k in range(1, 5):
+        nombre = request.GET.get(f"nombre_{k}", "").strip()
+        cuota = _decimal(request.GET.get(f"monto_cuota_{k}")) if request.GET.get(f"monto_cuota_{k}") else None
+        anticipo = _decimal(request.GET.get(f"anticipo_{k}")) if request.GET.get(f"anticipo_{k}") else Decimal("0")
+        try:
+            cuotas = int(request.GET.get(f"cuotas_{k}") or 0)
+            primera = int(request.GET.get(f"primera_{k}") or 1)
+        except ValueError:
+            cuotas, primera = 0, 1
+        if nombre and (anticipo or (cuota and cuotas)):
+            filas_in.append({"nombre": nombre, "anticipo": anticipo or Decimal("0"), "cuotas": cuotas,
+                             "monto_cuota": cuota or Decimal("0"), "primera_en_meses": primera})
+    return render(request, "finanzas/alternativas.html", {
+        "tasa": tasa, "filas": comparar(filas_in, tasa) if filas_in else [], "f": request.GET, "rango": range(1, 5)})
 
 
 # ------------------------------------------------------------------ sueldos

@@ -107,10 +107,19 @@ class Command(BaseCommand):
             self.tiempos_respuesta()
             self.indicadores_manuales()
             self.historial()
+            self.valores_de_prueba()
         self.stdout.write(self.style.SUCCESS("Datos de demostración generados. Contraseña de todos: virguel2026"))
 
     # ------------------------------------------------------------------
     def borrar(self):
+        from finanzas.models import Cuenta, Ingreso
+        from herramientas.models import CompraElemento
+        from inventario.models import CompraEnCamino
+        Ingreso.objects.all().delete()
+        CompraEnCamino.objects.all().delete()
+        CompraElemento.objects.all().delete()
+        Egreso.objects.all().delete()
+        Cuenta.objects.all().delete()
         from capacitacion.models import EvaluacionHistorica
         from personal.models import Asistencia, DocumentoPersonal, Feriado, Novedad, TipoDocumento
         EvaluacionHistorica.objects.all().delete()
@@ -1151,3 +1160,114 @@ class Command(BaseCommand):
                     Presupuesto.objects.update_or_create(categoria=c, mes=mes_ref, defaults={
                         "monto": (prom * Decimal(str(self.r.uniform(.9, 1.15)))).quantize(Decimal("1000"))})
             mes = m
+
+    # ------------------------------------------------------------------
+    def valores_de_prueba(self):
+        """Valores INVENTADOS para lo que la empresa todavía no informó (a corregir con los reales):
+        precios de Claro, cuentas y saldos, cobros, deudas en cuotas, compras en camino, compras del
+        pañol y confirmaciones de supervisores. Los importes se escalan al gasto de la demo para que
+        el flujo de caja sea coherente."""
+        from django.db.models import Count, Sum
+
+        from finanzas.caja import generar_cuotas
+        from finanzas.liquidacion_claro import registrar
+        from finanzas.models import Cobro, Cuenta, Ingreso, Pago
+        from finanzas.proyeccion import sumar_meses
+        from herramientas.models import CompraElemento
+        from inventario.models import CompraEnCamino
+        from operaciones.criterios import q_a_investigar
+        from operaciones.models import Intento
+        r = self.r
+        meses = max(1, (self.hoy - self.inicio).days / 30)
+        gasto_mes = (Egreso.objects.filter(fecha__gte=self.inicio).aggregate(t=Sum("monto"))["t"] or Decimal("0")) \
+            / Decimal(str(meses))
+
+        # 1. Precio por tipo de tarea (baremo de Claro): relativos, escalados para que el ingreso cubra el gasto + 15 %
+        relativo = {"INST-FO": 1.0, "INST-TV": .7, "REP": .45, "MUD": .9, "RET": .2, "REL": .15}
+        unidades = sum(relativo.get(t, .3) * n for t, n in OrdenTrabajo.objects.filter(
+            estado="completada", es_retrabajo=False, fecha_ejecucion__gte=self.inicio)
+            .values_list("tipo__codigo").annotate(n=Count("id"))) / meses
+        base = gasto_mes * Decimal("1.15") / Decimal("0.97") / Decimal(str(unidades or 1))
+        for codigo, tipo in self.tipos.items():
+            tipo.precio_claro = (base * Decimal(str(relativo.get(codigo, .3)))).quantize(Decimal("100"))
+            tipo.save(update_fields=["precio_claro"])
+
+        # 2. Cuentas con saldo inicial al comienzo de la demo
+        banco = Cuenta.objects.create(nombre="Banco (cuenta corriente)", tipo="banco",
+                                      saldo_inicial=(gasto_mes * 2).quantize(Decimal("1000")),
+                                      fecha_saldo_inicial=self.inicio - timedelta(days=1))
+        Cuenta.objects.create(nombre="Caja chica", tipo="efectivo", saldo_inicial=Decimal("300000"),
+                              fecha_saldo_inicial=self.inicio - timedelta(days=1))
+        Pago.objects.filter(fecha__gt=banco.fecha_saldo_inicial).update(cuenta=banco)
+
+        # 3. Liquidaciones esperadas de Claro (meses cerrados) y sus cobros
+        m = self.inicio.replace(day=1)
+        mes_actual = self.hoy.replace(day=1)
+        while m < mes_actual:
+            registrar(m)
+            m = sumar_meses(m, 1)
+        # liquidaciones de los dos meses anteriores a la demo (se cobran dentro del período)
+        completos = [i.monto for i in Ingreso.objects.filter(periodo__gt=self.inicio)]
+        promedio = sum(completos, Decimal("0")) / max(1, len(completos))
+        par = Parametros.actual()
+        for k in (2, 1):
+            pm = sumar_meses(self.inicio.replace(day=1), -k)
+            fin_pm = sumar_meses(pm, 1) - timedelta(days=1)
+            Ingreso.objects.create(pagador="Claro", periodo=pm, fecha=fin_pm, monto=promedio.quantize(Decimal("1000")),
+                                   concepto=f"Liquidación {pm:%m/%Y} (anterior al sistema, prueba)",
+                                   fecha_esperada_cobro=fin_pm + timedelta(days=par.claro_dias_cobro))
+        vencidos = list(Ingreso.objects.filter(fecha_esperada_cobro__lte=self.hoy).order_by("fecha_esperada_cobro"))
+        for k, i in enumerate(vencidos):
+            ultimo = k == len(vencidos) - 1
+            monto = (i.monto * Decimal("0.7")).quantize(Decimal("0.01")) if ultimo else i.monto
+            Cobro.objects.create(ingreso=i, cuenta=banco, monto=monto,
+                                 fecha=max(self.inicio, min(self.hoy, i.fecha_esperada_cobro + timedelta(days=r.randint(0, 4)))),
+                                 observaciones="Pago parcial: débito en discusión (prueba)" if ultimo else "")
+
+        # 4. Deudas en cuotas: plan fiscal y préstamo bancario
+        cat_fiscal = CategoriaEgreso.objects.get_or_create(codigo="deudas-fiscales",
+                                                          defaults={"nombre": "Planes de pago fiscales"})[0]
+        cat_fin = CategoriaEgreso.objects.get_or_create(codigo="deudas-financieras",
+                                                       defaults={"nombre": "Préstamos y financiación"})[0]
+        for desc, cat, monto, cuotas, desde_dias in [
+                ("Plan de pagos ARCA (cargas sociales)", cat_fiscal, gasto_mes * Decimal("0.25"), 6, 20),
+                ("Préstamo bancario (capital + interés)", cat_fin, gasto_mes * Decimal("0.6"), 12, 50)]:
+            e = Egreso.objects.create(fecha=self.inicio + timedelta(days=desde_dias - 15), categoria=cat,
+                                      monto=monto.quantize(Decimal("1000")), descripcion=desc, pagado=False,
+                                      tipo_comprobante="otro")
+            for c in generar_cuotas(e, cuotas, self.inicio + timedelta(days=desde_dias)):
+                if c.vencimiento <= self.hoy:
+                    Pago.objects.create(egreso=e, fecha=c.vencimiento, monto=c.monto, cuenta=banco,
+                                        medio="debito", observaciones=f"Cuota {c.numero}")
+
+        # 5. Compras confirmadas que todavía no llegaron
+        for codigo, cant, dias in [("ONT", 60, 5), ("DECO-HD", 40, 12), ("FO-DROP", 3000, 20)]:
+            if codigo in self.mat:
+                CompraEnCamino.objects.create(material=self.mat[codigo], cantidad=cant,
+                                              fecha_esperada=self.hoy + timedelta(days=dias),
+                                              proveedor="Proveedor mayorista (prueba)")
+
+        # 6. Compras del pañol (herramientas/EPP): el gasto es la compra, no cada entrega
+        for el in self.elementos:
+            CompraElemento.objects.create(elemento=el, fecha=self.inicio + timedelta(days=r.randint(0, 20)),
+                                          cantidad=r.randint(5, 15), costo_unitario=el.costo,
+                                          proveedor="Proveedor de EPP (prueba)")
+
+        # 7. Supervisores que confirmaron la atribución de visitas dudosas (dejan algunas pendientes)
+        opciones = {"falta_material": [("suministro", .6), ("tecnico", .4)],
+                    "rechazo": [("cliente", .7), ("tecnico", .3)],
+                    "otro": [("tecnico", .5), ("externo", .5)]}
+        for it in Intento.objects.filter(q_a_investigar(), fecha__lt=self.hoy - timedelta(days=3),
+                                         supervisor__isnull=False):
+            if r.random() < .75:
+                valores, pesos = zip(*opciones.get(it.motivo_no_resuelto, [("tecnico", .5), ("externo", .5)]))
+                it.atribucion_confirmada = r.choices(valores, pesos)[0]
+                it.atribucion_confirmada_por_id = it.supervisor_id
+                it.save(update_fields=["atribucion_confirmada", "atribucion_confirmada_por"])
+
+        # 8. Acciones correctivas cumplidas: con su fecha de cumplimiento
+        for a in AccionCorrectiva.objects.filter(cumplida=True, fecha_cumplida__isnull=True):
+            a.fecha_cumplida = min(self.hoy, a.fecha + timedelta(days=r.randint(0, 3)))
+            a.save(update_fields=["fecha_cumplida"])
+        self.stdout.write(f"  valores de prueba: {Ingreso.objects.count()} liquidaciones de Claro, "
+                          f"{Cobro.objects.count()} cobros, 2 deudas en cuotas, 3 compras en camino")

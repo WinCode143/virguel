@@ -23,7 +23,7 @@ Rama `claude/laughing-goldberg-he8mh1`. Suite: **148 tests en PostgreSQL**, todo
 |---|---|---|
 | 0.1 Test frágil | ✅ Hecho | Serie inequívoca en la prueba de visibilidad. |
 | 0.2 CI en PostgreSQL | ✅ Hecho | Corre la suite y verifica migraciones pendientes. |
-| 0.3 Preguntas a la empresa | ⏳ **Esperando respuestas** | Ver lista abajo y `REQUERIMIENTOS.md`. |
+| 0.3 Preguntas a la empresa | ⏳ **Esperando respuestas** | Ver lista abajo y `REQUERIMIENTOS.md`. Mientras tanto la demo usa valores de prueba inventados. |
 | 1.1 H01 Archivos privados | ✅ Hecho | `core/archivos.py`; Caddy ya no expone `/media/` (verificado con Docker/Caddy). |
 | 1.2 H05 Importación | ✅ Hecho | Conflictos registrados, sin duplicar stock, "Reabrir orden" auditado. |
 | 1.3 H06 Sin señal | ✅ Hecho | Idempotencia + confirmación explícita; verificado en navegador. |
@@ -33,7 +33,7 @@ Rama `claude/laughing-goldberg-he8mh1`. Suite: **148 tests en PostgreSQL**, todo
 | 3.2 H03 | ✅ Hecho | |
 | 3.3 H04 | ✅ Hecho | Usa el `tipo` del informe como tipo de problema. |
 | 3.4 H09 | ✅ Hecho | Pesos versionados; v2 a validar (pregunta 4). |
-| 4 H07 Finanzas | ✅ Hecho (genérico) | Falta: liquidación esperada de Claro calculada desde las órdenes y comparador de "alternativas de pago" (preguntas 1 y 3). |
+| 4 H07 Finanzas | ✅ Hecho | Liquidación esperada de Claro (precio por tipo de tarea, retención, días de cobro) y comparador de alternativas de pago a valor presente, con **valores de prueba** hasta tener los reales (preguntas 1–3). |
 | 5.1 H10 Historia | ✅ Hecho | `Intento` y `AsignacionSupervisor`. Cuadrillas: espera pregunta 7. Consumos ligados a orden/técnico/fecha (no a la visita). |
 | 5.2 H08 Previsión | ✅ Hecho | Con `CompraEnCamino`. |
 | 6 Validación | ✅ Hecho | PostgreSQL, despliegue Docker + Caddy, recorrido con Playwright (`scripts/recorrido_navegador.js`, 51/51), rendimiento < 2 s por pantalla con los datos de demo. |
