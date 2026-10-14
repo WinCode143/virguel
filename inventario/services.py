@@ -129,36 +129,75 @@ def stock_diario(fecha: date | None = None):
     return {"fecha": fecha, "tecnicos_en_calle": en_calle, "filas": filas}
 
 
-def demanda_materiales(desde: date, hasta: date):
-    """Necesidad de materiales del período, sin contar dos veces:
+def _factor(receta, orden_equipos, orden_recambio, p) -> tuple[Decimal, bool]:
+    """(multiplicador, estimado?) de una receta para una orden. Usa lo conocido y estima lo desconocido."""
+    C = RecetaMaterial.Condicion
+    if receta.condicion == C.POR_EQUIPO:
+        if orden_equipos is not None:
+            return Decimal(orden_equipos), False
+        return (p.prob_decodificador_min + p.prob_decodificador_max) / 2, True
+    if receta.condicion == C.SI_RECAMBIO:
+        if orden_recambio is not None:
+            return Decimal(1 if orden_recambio else 0), False
+        return p.prob_recambio, True
+    return Decimal(1), False
 
-    * órdenes abiertas programadas hasta `hasta` (incluidas las atrasadas), por técnico asignado;
-    * demanda comercial pronosticada sólo por lo que excede a las órdenes ya creadas para ese día y tipo.
 
-    Devuelve ({(tecnico_id, material): cantidad}, {material: cantidad sin técnico})."""
+def necesidades(desde: date, hasta: date) -> list[dict]:
+    """Una fila por material y origen de la necesidad (sin contar dos veces):
+
+    * órdenes abiertas programadas hasta `hasta` (incluidas las atrasadas), descontando lo ya reservado;
+    * demanda comercial sólo por lo que excede a las órdenes ya creadas para ese día y tipo.
+    Cada fila dice si es inmediata (orden asignada dentro de los días de necesidad inmediata) o backlog,
+    y si la cantidad es estimada (condición desconocida)."""
     from operaciones.models import OrdenTrabajo
+
+    from .models import ReservaMaterial
+    p = Parametros.actual()
+    limite_inmediato = desde + timedelta(days=p.dias_necesidad_inmediata)
     recetas = defaultdict(list)
     for r in RecetaMaterial.objects.select_related("material"):
         recetas[r.tipo_tarea_id].append(r)
-    por_tecnico, sin_tecnico = defaultdict(Decimal), defaultdict(Decimal)
+    reservado = defaultdict(Decimal)
+    for oid, mid, q in ReservaMaterial.objects.filter(estado="activa").values_list("orden_id", "material_id",
+                                                                                   "cantidad"):
+        reservado[(oid, mid)] += q
+    filas = []
     ordenes_dia = defaultdict(int)
-    for tec, tipo, fecha in OrdenTrabajo.objects.filter(
+    for oid, tec, tipo, fecha, equipos, recambio in OrdenTrabajo.objects.filter(
             estado__in=("pendiente", "asignada", "reprogramada"), fecha_programada__lte=hasta).values_list(
-            "tecnico_id", "tipo_id", "fecha_programada"):
+            "id", "tecnico_id", "tipo_id", "fecha_programada", "equipos_requeridos", "requiere_recambio"):
         if fecha >= desde:
             ordenes_dia[(fecha, tipo)] += 1
+        inmediata = bool(tec) and fecha <= limite_inmediato
         for r in recetas[tipo]:
-            if tec:
-                por_tecnico[(tec, r.material)] += r.cantidad
-            else:
-                sin_tecnico[r.material] += r.cantidad
+            f, est = _factor(r, equipos, recambio, p)
+            q = r.cantidad * f - reservado.get((oid, r.material_id), Decimal("0"))
+            if q > 0:
+                filas.append({"material": r.material, "cantidad": q, "tecnico_id": tec, "fecha": fecha,
+                              "inmediata": inmediata, "estimado": est, "fuente": "orden"})
     pronostico = defaultdict(int)
     for d in DemandaComercial.objects.filter(fecha__range=(desde, hasta)):
         pronostico[(d.fecha, d.tipo_tarea_id)] += d.cantidad_clientes
     for (fecha, tipo), clientes in pronostico.items():
         extra = max(0, clientes - ordenes_dia.get((fecha, tipo), 0))
         for r in recetas[tipo]:
-            sin_tecnico[r.material] += r.cantidad * extra
+            f, est = _factor(r, None, None, p)
+            if extra and f:
+                filas.append({"material": r.material, "cantidad": r.cantidad * f * extra, "tecnico_id": None,
+                              "fecha": fecha, "inmediata": False, "estimado": est or r.condicion != "siempre",
+                              "fuente": "pronóstico"})
+    return filas
+
+
+def demanda_materiales(desde: date, hasta: date):
+    """Compatibilidad: ({(tecnico_id, material): cantidad}, {material: cantidad sin técnico})."""
+    por_tecnico, sin_tecnico = defaultdict(Decimal), defaultdict(Decimal)
+    for n in necesidades(desde, hasta):
+        if n["tecnico_id"]:
+            por_tecnico[(n["tecnico_id"], n["material"])] += n["cantidad"]
+        else:
+            sin_tecnico[n["material"]] += n["cantidad"]
     return por_tecnico, sin_tecnico
 
 
@@ -166,40 +205,89 @@ def prevision_materiales(desde: date, hasta: date):
     """Materiales necesarios para el período contra un suministro reconciliado (sugerencia de compra).
 
     Suministro, sin contar dos veces ni dar por libre lo que ya está comprometido:
+      * lo reservado para una orden ya está cubierto y no queda disponible para otra;
       * lo que cada técnico tiene a cargo cubre primero sus propias órdenes asignadas;
       * lo que le sobra queda "libre en técnicos" (disponible devolviéndolo o transfiriéndolo);
-      * depósito + libre en técnicos + compras en camino que llegan antes de `hasta` cubren el resto.
+      * depósito disponible + libre en técnicos + compras en camino cubren el resto; para la necesidad
+        inmediata sólo cuenta lo que llega a tiempo (una entrega posterior no la destraba).
+    Separa necesidad inmediata y backlog; con "abastecer backlog" apagado sólo sugiere lo inmediato.
     Es una sugerencia: requiere revisión antes de emitir una orden de compra."""
-    from .models import CompraEnCamino, MovimientoStockTecnico
-    por_tecnico, sin_tecnico = demanda_materiales(desde, hasta)
+    from .models import CompraEnCamino, MovimientoStockTecnico, ReservaMaterial
+    p = Parametros.actual()
+    limite_inmediato = desde + timedelta(days=p.dias_necesidad_inmediata)
+    filas_nec = necesidades(desde, hasta)
     tiene = defaultdict(Decimal)
     for tec, mat_id, q in (MovimientoStockTecnico.objects.values_list("tecnico_id", "material_id")
                            .annotate(t=Sum("cantidad")).values_list("tecnico_id", "material_id", "t")):
         if q and q > 0:
             tiene[(tec, mat_id)] = q
-    deposito = dict(LoteIngreso.objects.values_list("material").annotate(t=Sum("cantidad_disponible")))
-    en_camino = dict(CompraEnCamino.objects.filter(recibida=False, fecha_esperada__lte=hasta)
-                     .values_list("material").annotate(t=Sum("cantidad")))
+    deposito = dict(LoteIngreso.objects.exclude(origen=LoteIngreso.Origen.CUSTODIA).values_list("material")
+                    .annotate(t=Sum("cantidad_disponible")))
+    reservas = dict(ReservaMaterial.objects.filter(estado="activa").values_list("material")
+                    .annotate(t=Sum("cantidad")))
+    camino, camino_inm = defaultdict(Decimal), defaultdict(Decimal)
+    for mid, q, f in CompraEnCamino.objects.filter(recibida=False, fecha_esperada__lte=hasta).values_list(
+            "material_id", "cantidad", "fecha_esperada"):
+        camino[mid] += q
+        if f <= limite_inmediato:
+            camino_inm[mid] += q
 
-    materiales = {m for _, m in por_tecnico} | set(sin_tecnico)
+    por_material = defaultdict(list)
+    for n in filas_nec:
+        por_material[n["material"]].append(n)
     filas = []
-    for material in sorted(materiales, key=lambda m: m.nombre):
-        necesario = sin_tecnico.get(material, Decimal("0"))
+    for material in sorted(por_material, key=lambda m: m.nombre):
+        ns = por_material[material]
+        necesario = sum((n["cantidad"] for n in ns), Decimal("0"))
+        inmediato = sum((n["cantidad"] for n in ns if n["inmediata"]), Decimal("0"))
+        # stock propio de cada técnico cubre sus órdenes (primero las inmediatas)
+        disponible_tec = {k: v for k, v in tiene.items() if k[1] == material.id}
         propio = Decimal("0")
-        resto = sin_tecnico.get(material, Decimal("0"))
-        for (tec, m), q in por_tecnico.items():
-            if m != material:
-                continue
-            necesario += q
-            cubre = min(q, tiene.get((tec, m.id), Decimal("0")))
-            propio += cubre
-            resto += q - cubre
-        en_tecnicos = sum((q for (t, mid), q in tiene.items() if mid == material.id), Decimal("0"))
-        libre = en_tecnicos - propio
-        dep = deposito.get(material.id) or Decimal("0")
-        camino = en_camino.get(material.id) or Decimal("0")
-        faltante = max(Decimal("0"), resto - dep - libre - camino)
-        filas.append({"material": material, "necesario": necesario, "stock": propio + dep + libre + camino,
-                      "propio_tecnicos": propio, "deposito": dep, "libre_tecnicos": libre, "en_camino": camino,
+        resto_inm = resto_backlog = Decimal("0")
+        for n in sorted(ns, key=lambda n: (not n["inmediata"], n["fecha"])):
+            q = n["cantidad"]
+            if n["tecnico_id"]:
+                k = (n["tecnico_id"], material.id)
+                cubre = min(q, disponible_tec.get(k, Decimal("0")))
+                if cubre:
+                    disponible_tec[k] -= cubre
+                    propio += cubre
+                    q -= cubre
+            if n["inmediata"]:
+                resto_inm += q
+            else:
+                resto_backlog += q
+        libre = sum(disponible_tec.values(), Decimal("0"))
+        dep = max(Decimal("0"), (deposito.get(material.id) or Decimal("0")) - (reservas.get(material.id) or 0))
+        # necesidad inmediata: sólo con lo que está o llega a tiempo
+        suministro_inm = dep + libre + camino_inm.get(material.id, Decimal("0"))
+        faltante_inm = max(Decimal("0"), resto_inm - suministro_inm)
+        sobrante = max(Decimal("0"), suministro_inm - resto_inm) + (camino.get(material.id, Decimal("0"))
+                                                                   - camino_inm.get(material.id, Decimal("0")))
+        faltante_backlog = max(Decimal("0"), resto_backlog - sobrante)
+        faltante = faltante_inm + (faltante_backlog if p.abastecer_backlog else Decimal("0"))
+        filas.append({"material": material, "necesario": necesario, "inmediato": inmediato,
+                      "backlog": necesario - inmediato, "estimado": any(n["estimado"] for n in ns),
+                      "stock": propio + dep + libre + camino.get(material.id, Decimal("0")),
+                      "propio_tecnicos": propio, "deposito": dep, "reservado": reservas.get(material.id) or Decimal("0"),
+                      "libre_tecnicos": libre, "en_camino": camino.get(material.id, Decimal("0")),
+                      "faltante_inmediato": faltante_inm, "faltante_backlog": faltante_backlog,
                       "faltante": faltante, "costo_compra": faltante * material.costo_unitario})
     return filas
+
+
+def reservar(orden, material, cantidad, responsable="") -> "ReservaMaterial":
+    """Reserva material del depósito para una orden. No se puede comprometer lo que ya está reservado."""
+    from django.core.exceptions import ValidationError
+
+    from .models import ReservaMaterial
+    with transaction.atomic():
+        Material.objects.select_for_update().filter(pk=material.pk).first()
+        stock = (LoteIngreso.objects.filter(material=material).exclude(origen=LoteIngreso.Origen.CUSTODIA)
+                 .aggregate(t=Sum("cantidad_disponible"))["t"] or Decimal("0"))
+        ya = (ReservaMaterial.objects.filter(material=material, estado="activa").aggregate(t=Sum("cantidad"))["t"]
+              or Decimal("0"))
+        if stock - ya < Decimal(cantidad):
+            raise ValidationError(f"No alcanza: disponible sin reservar {stock - ya} {material.unidad}.")
+        return ReservaMaterial.objects.create(material=material, cantidad=cantidad, orden=orden,
+                                              necesaria_para=orden.fecha_programada, responsable=responsable)

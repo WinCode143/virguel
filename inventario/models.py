@@ -137,11 +137,18 @@ class ConsumoLote(models.Model):
 
 
 class RecetaMaterial(models.Model):
-    """Materiales que consume en promedio cada tipo de tarea (para prever compras)."""
+    """Materiales que consume cada tipo de tarea (para prever compras). La condición usa lo que se sabe
+    de la orden y sólo estima lo desconocido."""
+
+    class Condicion(models.TextChoices):
+        SIEMPRE = "siempre", "Siempre"
+        POR_EQUIPO = "por_equipo", "Por cada equipo de la orden (deco, módem...)"
+        SI_RECAMBIO = "si_recambio", "Sólo si la orden requiere recambio"
 
     tipo_tarea = models.ForeignKey(TipoTarea, on_delete=models.CASCADE, related_name="receta")
     material = models.ForeignKey(Material, on_delete=models.CASCADE, related_name="en_recetas")
     cantidad = models.DecimalField(max_digits=10, decimal_places=3)
+    condicion = models.CharField(max_length=12, choices=Condicion.choices, default=Condicion.SIEMPRE)
 
     class Meta:
         unique_together = [("tipo_tarea", "material")]
@@ -168,6 +175,95 @@ class DemandaComercial(models.Model):
 
     def __str__(self):
         return f"{self.fecha} {self.tipo_tarea} x{self.cantidad_clientes}"
+
+
+class ReservaMaterial(models.Model):
+    """Compromiso de material del depósito para una orden: identidad, plazo y liberación explícita.
+    Lo reservado no se cuenta como disponible para otra orden; cancelar la libera sin crear entradas."""
+
+    class Estado(models.TextChoices):
+        ACTIVA = "activa", "Activa"
+        CONSUMIDA = "consumida", "Consumida (entregada / usada)"
+        CANCELADA = "cancelada", "Cancelada"
+
+    material = models.ForeignKey(Material, on_delete=models.PROTECT, related_name="reservas")
+    cantidad = models.DecimalField(max_digits=12, decimal_places=2)
+    orden = models.ForeignKey(OrdenTrabajo, on_delete=models.CASCADE, related_name="reservas")
+    necesaria_para = models.DateField()
+    estado = models.CharField(max_length=10, choices=Estado.choices, default=Estado.ACTIVA, db_index=True)
+    creada = models.DateTimeField(default=timezone.now)
+    responsable = models.CharField(max_length=150, blank=True)
+
+    class Meta:
+        ordering = ["necesaria_para"]
+        verbose_name = "Reserva de material"
+        verbose_name_plural = "Reservas de material"
+
+    def __str__(self):
+        return f"{self.cantidad} {self.material.unidad} {self.material.nombre} → {self.orden.numero}"
+
+
+class UnidadEquipo(models.Model):
+    """Equipo identificable por número de serie: propietario, condición, ubicación y custodio.
+    Una serie está en un solo lugar; instalada o defectuosa no es stock utilizable."""
+
+    class Propietario(models.TextChoices):
+        SIN_CONFIRMAR = "sin_confirmar", "Sin confirmar"
+        EMPRESA = "empresa", "La empresa"
+        CLARO = "claro", "Claro (en custodia)"
+        OTRO = "otro", "Otro"
+
+    class Condicion(models.TextChoices):
+        NUEVO = "nuevo", "Nuevo"
+        USADO_OK = "usado_ok", "Usado en condiciones"
+        A_REVISAR = "a_revisar", "Retirado, a revisar"
+        DEFECTUOSO = "defectuoso", "Defectuoso"
+        BAJA = "baja", "Dado de baja"
+
+    class Ubicacion(models.TextChoices):
+        DEPOSITO = "deposito", "Depósito"
+        TECNICO = "tecnico", "En poder de un técnico"
+        CLIENTE = "cliente", "Instalado en cliente"
+        DEVUELTO = "devuelto", "Devuelto al propietario / proveedor"
+
+    material = models.ForeignKey(Material, on_delete=models.PROTECT, related_name="unidades")
+    numero_serie = models.CharField(max_length=60, unique=True)
+    propietario = models.CharField(max_length=14, choices=Propietario.choices, default=Propietario.SIN_CONFIRMAR)
+    condicion = models.CharField(max_length=12, choices=Condicion.choices, default=Condicion.NUEVO)
+    ubicacion = models.CharField(max_length=10, choices=Ubicacion.choices, default=Ubicacion.DEPOSITO)
+    custodio = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL, related_name="equipos")
+    cliente = models.ForeignKey("core.Cliente", null=True, blank=True, on_delete=models.SET_NULL, related_name="equipos")
+    actualizado = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["material", "numero_serie"]
+        verbose_name = "Equipo (unidad con serie)"
+        verbose_name_plural = "Equipos (unidades con serie)"
+
+    def __str__(self):
+        return f"{self.material.codigo} {self.numero_serie}"
+
+    @property
+    def utilizable(self) -> bool:
+        return self.ubicacion in (self.Ubicacion.DEPOSITO, self.Ubicacion.TECNICO) and self.condicion in (
+            self.Condicion.NUEVO, self.Condicion.USADO_OK)
+
+
+class MovimientoUnidad(models.Model):
+    unidad = models.ForeignKey(UnidadEquipo, on_delete=models.CASCADE, related_name="movimientos")
+    fecha = models.DateTimeField(default=timezone.now)
+    desde = models.CharField(max_length=10, blank=True)
+    hacia = models.CharField(max_length=10)
+    custodio = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    intento = models.ForeignKey("operaciones.Intento", null=True, blank=True, on_delete=models.SET_NULL,
+                                related_name="movimientos_equipo")
+    condicion = models.CharField(max_length=12, blank=True)
+    motivo = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ["-fecha"]
+        verbose_name = "Movimiento de equipo"
+        verbose_name_plural = "Movimientos de equipos"
 
 
 class CompraEnCamino(models.Model):

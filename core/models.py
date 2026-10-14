@@ -117,6 +117,15 @@ class Parametros(models.Model):
                   "repetir el desvío; con menos queda 'no verificada'.")
     dias_verificacion_accion = models.PositiveIntegerField(
         "Acciones correctivas: días de seguimiento", default=30)
+    prob_recambio = models.DecimalField(
+        "Prob. de recambio en reparaciones (si no se sabe)", max_digits=4, decimal_places=3, default=Decimal("0.30"),
+        validators=[MinValueValidator(0), MaxValueValidator(1)])
+    dias_necesidad_inmediata = models.PositiveIntegerField(
+        "Días que se consideran necesidad inmediata", default=3,
+        help_text="Órdenes asignadas en estos días; lo demás (sin técnico, más adelante o pronóstico) es backlog.")
+    abastecer_backlog = models.BooleanField(
+        "Abastecer también el backlog", default=True,
+        help_text="Si está apagado, la sugerencia de compra cubre sólo la necesidad inmediata y ejecutable.")
     dias_cobertura_stock_min = models.PositiveIntegerField(
         "Días mínimos de cobertura de stock", default=7,
         help_text="Si el stock alcanza para menos días que esto, se alerta faltante.")

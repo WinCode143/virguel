@@ -50,6 +50,11 @@ def entregar(tecnico, material, cantidad, fecha: date | None = None, pedido=None
     salida = registrar_salida(Salida(material=material, cantidad=cantidad, fecha=fecha, tecnico=tecnico,
                                      motivo=Salida.Motivo.ENTREGA, observaciones=f"Pedido {pedido.id}" if pedido else ""),
                               permitir_negativo=permitir_negativo)
+    if pedido is not None and pedido.orden_id:
+        # lo reservado para esa orden ya salió del depósito: la reserva queda consumida (no se descuenta dos veces)
+        from .models import ReservaMaterial
+        ReservaMaterial.objects.filter(orden_id=pedido.orden_id, material=material, estado="activa").update(
+            estado="consumida")
     return MovimientoStockTecnico.objects.create(tecnico=tecnico, material=material, fecha=fecha, tipo=T.ENTREGA,
                                                  cantidad=Decimal(cantidad), pedido=pedido, salida=salida)
 

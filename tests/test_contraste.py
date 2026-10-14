@@ -621,3 +621,73 @@ class RoturaYEppTests(TestCase):
         OrdenTrabajo.objects.create(numero="N1", tipo=tipo, zona=z, fecha_programada=HOY)
         p = proponer(HOY, Persona.objects.filter(rol="tecnico"))
         self.assertIn("suministro", p["sin_asignar"][0].causa)
+
+
+class AbastecimientoTests(TestCase):
+    """B08–B11: series con una sola ubicación, reservas sin doble compromiso, recetas condicionadas y
+    necesidad inmediata vs. backlog."""
+
+    def setUp(self):
+        from inventario.models import Material, RecetaMaterial
+        from operaciones.models import TipoTarea
+        self.modem = Material.objects.create(codigo="MOD", nombre="Módem", costo_unitario=Decimal("100"))
+        self.rep = TipoTarea.objects.create(codigo="REP", nombre="Reparación")
+        RecetaMaterial.objects.create(tipo_tarea=self.rep, material=self.modem, cantidad=1, condicion="si_recambio")
+        self.t = persona("T1")
+
+    def orden(self, n, **kw):
+        from operaciones.models import OrdenTrabajo
+        return OrdenTrabajo.objects.create(numero=n, tipo=self.rep, fecha_programada=HOY, **kw)
+
+    def fila(self):
+        from inventario.services import prevision_materiales
+        return prevision_materiales(HOY, HOY + timedelta(days=13))[0]
+
+    def test_receta_condicionada(self):
+        self.orden("1", requiere_recambio=False, tecnico=self.t, estado="asignada")
+        from inventario.services import prevision_materiales
+        self.assertEqual(prevision_materiales(HOY, HOY + timedelta(days=13)), [])  # sin recambio: cero módems
+        self.orden("2", requiere_recambio=True, tecnico=self.t, estado="asignada")
+        f = self.fila()
+        self.assertEqual((f["necesario"], f["estimado"]), (1, False))
+        self.orden("3")  # desconocido: se estima con la probabilidad de recambio
+        self.assertTrue(self.fila()["estimado"])
+
+    def test_reserva_no_cubre_dos_ordenes_y_se_libera(self):
+        from django.core.exceptions import ValidationError
+
+        from inventario.models import LoteIngreso
+        from inventario.services import reservar
+        LoteIngreso.objects.create(material=self.modem, cantidad=1, origen="apertura")
+        o1 = self.orden("1", requiere_recambio=True, tecnico=self.t, estado="asignada")
+        o2 = self.orden("2", requiere_recambio=True, tecnico=self.t, estado="asignada")
+        r = reservar(o1, self.modem, 1)
+        with self.assertRaises(ValidationError):
+            reservar(o2, self.modem, 1)
+        f = self.fila()
+        self.assertEqual((f["necesario"], f["deposito"], f["reservado"], f["faltante"]), (1, 0, 1, 1))  # o2 falta
+        r.estado = "cancelada"
+        r.save()
+        self.assertEqual(self.fila()["faltante"], 1)  # 2 necesarios, 1 en depósito
+        self.assertEqual(LoteIngreso.objects.count(), 1)  # cancelar no crea una entrada ficticia
+
+    def test_entrega_posterior_no_destraba_lo_inmediato(self):
+        from inventario.models import CompraEnCamino
+        self.orden("1", requiere_recambio=True, tecnico=self.t, estado="asignada")
+        CompraEnCamino.objects.create(material=self.modem, cantidad=5, fecha_esperada=HOY + timedelta(days=10))
+        f = self.fila()
+        self.assertEqual((f["inmediato"], f["faltante_inmediato"]), (1, 1))
+
+    def test_serie_un_solo_lugar_y_defectuoso_fuera_de_suministro(self):
+        from inventario.equipos import mover, recibir_en_deposito, revisar
+        from inventario.models import UnidadEquipo
+        u = UnidadEquipo.objects.create(material=self.modem, numero_serie="SN1")
+        mover(u, "tecnico", custodio=self.t)
+        mover(u, "cliente", motivo="Instalada")
+        u.refresh_from_db()
+        self.assertEqual((u.ubicacion, u.custodio, u.utilizable), ("cliente", None, False))
+        u = recibir_en_deposito("SN1")
+        self.assertEqual((u.ubicacion, u.condicion, u.utilizable), ("deposito", "a_revisar", False))
+        u = revisar(u, False)
+        self.assertFalse(u.utilizable)
+        self.assertEqual(u.movimientos.count(), 4)

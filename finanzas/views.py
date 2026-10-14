@@ -166,8 +166,12 @@ class ComprobanteForm(forms.ModelForm):
         self.fields["categoria"].empty_label = "— la habitual del proveedor —"
         self.fields["descripcion"].required = False
         self.fields["monto"] = CampoPesos(label="Total")
+        self.fields["prioridad"].required = False
         if self.instance.pk and self.instance.proveedor_ref:
             self.fields["proveedor_nombre"].initial = self.instance.proveedor_ref.nombre
+
+    def clean_prioridad(self):
+        return self.cleaned_data.get("prioridad") or "normal"
 
     def clean_monto(self):
         v = self.cleaned_data["monto"]

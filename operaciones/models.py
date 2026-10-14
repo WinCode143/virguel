@@ -117,6 +117,11 @@ class OrdenTrabajo(models.Model):
     estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.PENDIENTE, db_index=True)
     minutos_reales = models.PositiveIntegerField(null=True, blank=True)
     decodificador_solicitado = models.BooleanField(default=False)
+    equipos_requeridos = models.PositiveSmallIntegerField(
+        "Equipos que indica la orden", null=True, blank=True,
+        help_text="Cantidad conocida (p. ej. televisores/decos que pide Claro). Vacío = desconocido: se estima.")
+    requiere_recambio = models.BooleanField(null=True, blank=True,
+                                            help_text="Si la reparación necesita reemplazar el equipo (vacío = no se sabe).")
     decodificadores_instalados = models.PositiveSmallIntegerField(default=0)
     es_retrabajo = models.BooleanField(
         default=False, help_text="Visita para corregir un trabajo anterior mal hecho (indicador de calidad).")

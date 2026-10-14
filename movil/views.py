@@ -406,6 +406,11 @@ def orden_cierre(request, pk):
                                                   fecha_retiro=hoy)
                 if series:
                     avisos.append(f"Tenés {len(series)} equipo(s) retirado(s) para entregar en el depósito.")
+                from inventario.equipos import registrar_cierre
+                from inventario.models import ReservaMaterial
+                instaladas = [x.strip() for x in re.split(r"[,;\s]+", d["series_instaladas"] or "") if x.strip()]
+                avisos += registrar_cierre(visita, instaladas, series)
+                ReservaMaterial.objects.filter(orden=ot, estado="activa").update(estado="consumida")
                 for material, cantidad in f.materiales():
                     if not consumir(p, ot, material, cantidad, hoy, intento=visita):
                         avisos.append(f"{material.nombre}: usaste más de lo que figuraba a tu cargo. Avisale a tu supervisor.")
