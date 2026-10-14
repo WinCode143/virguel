@@ -370,6 +370,15 @@ def ingresos(request):
                 messages.error(request, "No hay órdenes completadas con precio en ese mes (revisar el precio de Claro "
                                         "de cada tipo de tarea).")
             return redirect(f"{request.path}?mes_claro={mes_claro:%Y-%m}")
+        if accion == "confirmar":
+            i = get_object_or_404(Ingreso, pk=request.POST.get("ingreso"))
+            monto = _decimal(request.POST.get("monto"))
+            if not monto or monto <= 0:
+                messages.error(request, "Indicá el monto que aceptó Claro.")
+            else:
+                liquidacion_claro.confirmar(i, monto, request.user, request.POST.get("nota", ""))
+                messages.success(request, f"Liquidación confirmada: {pesos(monto)} (estimado {pesos(i.monto_estimado)}).")
+            return redirect("finanzas:ingresos")
         if accion == "cobro":
             i = get_object_or_404(Ingreso, pk=request.POST.get("ingreso"))
             monto = _decimal(request.POST.get("monto")) or i.saldo
@@ -393,7 +402,7 @@ def ingresos(request):
     qs = Ingreso.objects.prefetch_related("cobros__cuenta").order_by("-fecha")[:200]
     return render(request, "finanzas/ingresos.html", {
         "form": form, "ingresos": qs, "cuentas": Cuenta.objects.filter(activa=True), "hoy": timezone.localdate(),
-        "claro": liquidacion_claro.calcular(mes_claro)})
+        "claro": liquidacion_claro.calcular(mes_claro), "ingreso_claro": liquidacion_claro.ingreso_del_mes(mes_claro)})
 
 
 @requiere_rol(*ROLES)

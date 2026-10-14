@@ -138,6 +138,35 @@ const PANTALLAS = {
     await ctx.close();
   }
 
+  // 4. Service worker activo y cambio de cuenta sin cerrar sesión: no quedan pantallas del anterior (V10)
+  {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    await login(page, 't001');
+    await page.goto(`${BASE}/app/`);
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.reload();             // ya controlada por el service worker: guarda /app/ de t001
+    await page.waitForTimeout(1500);
+    const nombre1 = (await page.textContent('.movil-header .titulo b')).trim();
+    await ctx.clearCookies();        // la sesión vence (sin pasar por "Salir")
+    await login(page, 't002');
+    await page.goto(`${BASE}/app/`);
+    await page.waitForTimeout(2000);
+    const guardadas = await page.evaluate(async () => {
+      const textos = [];
+      for (const k of await caches.keys()) {
+        if (!k.startsWith('virguel-paginas')) continue;
+        const c = await caches.open(k);
+        for (const req of await c.keys()) textos.push(await (await c.match(req)).text());
+      }
+      return textos;
+    });
+    const deT001 = guardadas.filter((t) => t.includes(nombre1)).length;
+    ok('cambio de cuenta: no quedan pantallas del usuario anterior', deT001 === 0,
+       `${guardadas.length} guardadas, ${deT001} de "${nombre1}"`);
+    await ctx.close();
+  }
+
   await browser.close();
 
   const fallas = resultados.filter((r) => r[0] === 'FAIL').length;

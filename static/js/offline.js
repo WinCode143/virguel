@@ -217,6 +217,27 @@
   }
 
   window.addEventListener("online", () => { espera = 15000; sincronizar(); });
+
+  // Avisar al service worker quién está usando la app (borra pantallas guardadas de otra cuenta)
+  function avisarIdentidad() {
+    if (!navigator.serviceWorker || !navigator.serviceWorker.controller) return;
+    navigator.serviceWorker.controller.postMessage({ tipo: "usuario", usuario: usuario() || "" });
+  }
+  document.addEventListener("DOMContentLoaded", avisarIdentidad);
+
+  // Pendientes de más de 7 días: el servidor ya no respeta su fecha; quedan para revisar o descartar
+  const VENCE_MS = 7 * 24 * 3600 * 1000;
+  async function vencer() {
+    try {
+      for (const i of await mios()) {
+        if (i.estado !== "error" && Date.now() - i.cuando > VENCE_MS) {
+          i.estado = "error";
+          i.mensaje = "Envío vencido (más de 7 días sin enviarse): revisalo antes de reintentar o descartalo.";
+          await actualizar(i);
+        }
+      }
+    } catch (e) { /* sin IndexedDB */ }
+  }
   document.addEventListener("DOMContentLoaded", ubicar);
-  document.addEventListener("DOMContentLoaded", () => { aviso(); sincronizar(); });
+  document.addEventListener("DOMContentLoaded", async () => { await vencer(); aviso(); sincronizar(); });
 })();

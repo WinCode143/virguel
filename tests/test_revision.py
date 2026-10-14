@@ -154,6 +154,11 @@ class ImportacionOrdenesTests(TestCase):
         self.subir("stock", archivo)
         self.subir("stock", archivo)
         self.assertEqual(LoteIngreso.objects.count(), 1)
+        self.assertEqual(Egreso.objects.count(), 0)  # sin columna origen es apertura: no es una compra (B13)
+        compra = archivo.replace("remito\n", "remito;origen\n").replace("R-1\n", "R-2;compra\n")
+        self.subir("stock", compra)
+        self.subir("stock", compra)
+        self.assertEqual(LoteIngreso.objects.count(), 2)
         self.assertEqual(Egreso.objects.count(), 1)
 
     def test_reabrir_es_explicito_y_queda_registrado(self):
@@ -592,12 +597,16 @@ class FinanzasCajaTests(TestCase):
         e.refresh_from_db()
         self.assertEqual((e.saldo, e.pagado, e.pagos.count()), (0, True, 2))
 
-    def test_egresos_automaticos_existentes_siguen_pagados(self):
-        from finanzas.models import registrar_egreso_automatico
-        e = registrar_egreso_automatico("x:1", "otros", HOY, 250, "auto")
-        self.assertEqual(e.saldo, 0)
-        e = registrar_egreso_automatico("x:1", "otros", HOY, 300, "auto")  # cambia el monto en origen
-        self.assertEqual(e.saldo, 0)
+    def test_registrar_un_gasto_no_lo_paga(self):
+        """B32/V07: un service (egreso automático) es una obligación pendiente; el pago es explícito."""
+        from finanzas.models import Pago, registrar_egreso_automatico
+        e = registrar_egreso_automatico("service:1", "flota", HOY, 100, "Service")
+        self.assertEqual((e.saldo, e.pagado, e.pagos.count()), (Decimal("100"), False, 0))
+        Pago.objects.create(egreso=e, monto=Decimal("30"), cuenta=self.banco, fecha=HOY)
+        e.refresh_from_db()
+        self.assertEqual((e.saldo, self.banco.saldo()), (Decimal("70"), Decimal("99970")))
+        e = registrar_egreso_automatico("service:1", "flota", HOY, 120, "Service")  # cambia el monto en origen
+        self.assertEqual(e.saldo, Decimal("90"))
 
     def test_cuotas_y_proyeccion(self):
         from finanzas.caja import generar_cuotas, proyeccion_caja, vencimientos
@@ -683,11 +692,21 @@ class HistoriaOperacionalTests(TestCase):
         self.cerrar("completada", HOY)
         self.assertEqual(self.ot.intentos.count(), 2)
 
-    def test_corregir_el_mismo_cierre_no_duplica(self):
-        self.cerrar("fallida", HOY, "otro")
-        self.ot.motivo_no_resuelto = "cliente_ausente"
+    def test_editar_la_orden_cerrada_no_reescribe_la_visita(self):
+        """B02/C03: cambiar la asignación de una orden cerrada no cambia quién hizo la visita."""
+        from operaciones.visitas import rectificar_visita
+        self.cerrar("completada", HOY)
+        self.ot.tecnico = self.b
         self.ot.save()
-        self.assertEqual(self.ot.intentos.get().motivo_no_resuelto, "cliente_ausente")
+        it = self.ot.intentos.get()
+        self.assertEqual(it.tecnico_id, self.a.id)
+        # corregirla es una rectificación explícita, con motivo y autor
+        with self.assertRaises(ValueError):
+            rectificar_visita(it, {"tecnico": self.b}, "")
+        rectificar_visita(it, {"tecnico": self.b}, "La hizo TB: error de carga")
+        it.refresh_from_db()
+        r = it.rectificaciones.get()
+        self.assertEqual((it.tecnico_id, r.antes, r.despues), (self.b.id, "TA", "TB"))
 
     def test_el_supervisor_de_la_visita_es_el_de_ese_momento(self):
         self.cerrar("fallida", HOY, "otro")
@@ -793,8 +812,11 @@ class LiquidacionClaroTests(TestCase):
     def setUp(self):
         from operaciones.models import OrdenTrabajo, TipoTarea
         self.mes = HOY.replace(day=1)
-        fo = TipoTarea.objects.create(codigo="FO", nombre="Fibra", precio_claro=Decimal("1000"))
-        rep = TipoTarea.objects.create(codigo="REP", nombre="Reparación", precio_claro=Decimal("400"))
+        from operaciones.models import TarifaClaro
+        fo = TipoTarea.objects.create(codigo="FO", nombre="Fibra")
+        rep = TipoTarea.objects.create(codigo="REP", nombre="Reparación")
+        TarifaClaro.objects.create(tipo_tarea=fo, precio=Decimal("1000"), vigente_desde=HOY - timedelta(days=400))
+        TarifaClaro.objects.create(tipo_tarea=rep, precio=Decimal("400"), vigente_desde=HOY - timedelta(days=400))
         t = persona("T1")
         for i in range(3):
             OrdenTrabajo.objects.create(numero=f"F{i}", tipo=fo, tecnico=t, estado="completada", fecha_ejecucion=self.mes)

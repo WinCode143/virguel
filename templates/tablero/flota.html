@@ -12,7 +12,9 @@
 <thead><tr><th>Vehículo</th><th>Estado</th><th class="num">Km</th><th>Asignado a</th><th>Próximo service</th><th>VTV</th><th>Seguro</th></tr></thead>
 <tbody>{% for f in filas %}<tr><td><a href="{% url 'admin:flota_vehiculo_change' f.v.id %}">{{ f.v.patente }}</a> <span class="muted">{{ f.v.marca }} {{ f.v.modelo }} {{ f.v.anio }}</span></td>
 <td>{{ f.v.get_estado_display }}</td><td class="num">{{ f.v.km_actual|num }}</td><td>{{ f.v.asignado_a.apellido|default:"—" }}</td>
-<td>{% if f.peor %}<span class="estado {{ f.peor.estado }}">{{ f.peor.tipo.nombre }}: {% if f.peor.dias <= 0 %}vencido{% else %}en {{ f.peor.dias }} días{% endif %}</span>{% if f.peor.km_restantes is not None %} <span class="muted">({{ f.peor.km_restantes|num }} km)</span>{% endif %}{% else %}—{% endif %}</td>
+<td>{% if f.peor %}<span class="estado {{ f.peor.estado }}">{{ f.peor.tipo.nombre }}: {% if f.peor.dias <= 0 %}vencido{% else %}en {{ f.peor.dias }} días{% endif %}</span>{% if f.peor.km_restantes is not None %} <span class="muted">({{ f.peor.km_restantes|num }} km)</span>{% endif %}{% elif not f.sin_base and not f.sin_planes %}—{% endif %}
+{% for p in f.sin_base %}<br><span class="estado aviso" title="Cargar el último service o la base del vehículo">{{ p.tipo.nombre }}: faltan antecedentes</span>{% endfor %}
+{% if f.sin_planes %}<span class="estado aviso">Sin planes de mantenimiento asignados</span>{% endif %}</td>
 <td>{{ f.v.vencimiento_vtv|date:"d/m/Y"|default:"—" }}</td><td>{{ f.v.vencimiento_seguro|date:"d/m/Y"|default:"—" }}</td></tr>{% endfor %}</tbody></table></div></div>
 {% include "tablero/_grafico.html" with id="g-flota" datos=g titulo="Costo de services por vehículo (12 meses)" %}
 <p><a class="btn sec" href="{% url 'admin:flota_servicerealizado_add' %}">Registrar service</a></p>

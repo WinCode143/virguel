@@ -67,7 +67,11 @@ def alertas_flota(hoy):
         url = reverse("tablero:flota")
         for v in Vehiculo.objects.exclude(estado=Vehiculo.Estado.FUERA):
             for p in proximos_services(v, hoy):
-                if p["estado"] != "ok":
+                if p["estado"] == "sin_base":
+                    s.alerta(f"service-{v.id}-{p['tipo'].id}",
+                             f"{v.patente}: {p['tipo'].nombre} sin antecedentes",
+                             "Cargar el último service o la fecha/km base del vehículo para poder controlarlo.", A, url)
+                elif p["estado"] != "ok":
                     s.alerta(f"service-{v.id}-{p['tipo'].id}",
                              f"{v.patente}: {p['tipo'].nombre} " + ("VENCIDO" if p["estado"] == "critico"
                                                                     else f"en {p['dias']} días"),
@@ -110,10 +114,10 @@ def alertas_personas(hoy):
                 s.alerta(f"trato-{e.supervisor.id}",
                          f"{e.supervisor.nombre_completo}: nota de trato {e.nota_encuesta:.1f}/5 en encuestas", "",
                          C if e.nota_encuesta < 2.5 else A, url)
-            if e.desvios and e.desvios_con_accion / e.desvios < 0.6:
+            if e.desvios and e.desvios_corregidos / e.desvios < 0.6:
                 s.alerta(f"desvios-{e.supervisor.id}",
-                         f"{e.supervisor.nombre_completo}: {e.desvios - e.desvios_con_accion} desvíos sin acción correctiva",
-                         "", A, url)
+                         f"{e.supervisor.nombre_completo}: {e.desvios - e.desvios_corregidos} desvíos sin corrección "
+                         f"ejecutada ({e.desvios_con_accion - e.desvios_corregidos} con acción pendiente)", "", A, url)
             if e.dias_habiles and e.informes_por_dia < 1:
                 s.alerta(f"informes-{e.supervisor.id}",
                          f"{e.supervisor.nombre_completo}: sólo {e.informes_por_dia:.1f} informes de control por día", "",

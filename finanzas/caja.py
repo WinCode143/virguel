@@ -7,6 +7,9 @@ Tres capas que no se mezclan:
 
 Saldo proyectado = saldo actual de las cuentas + cobros esperados − pagos comprometidos
                    − gasto estimado todavía no registrado.
+
+El costo de consumir material ya comprado es análisis de costo (proyeccion.py), no caja: para la
+caja se usan las compras netas que faltan y las compras en camino.
 """
 from collections import defaultdict
 from datetime import date, timedelta
@@ -92,12 +95,21 @@ def proyeccion_caja(semanas: int = 12, hoy: date | None = None, estimados: bool 
 
     if estimados:
         # Gasto estimado del mes que todavía no está registrado como egreso, repartido por día.
+        # Materiales: NO el costo de consumir stock ya pagado, sino las compras netas que faltan
+        # (previsión de compras) y las compras en camino en su fecha de llegada.
+        from inventario.models import CompraEnCamino
+        from inventario.services import prevision_materiales
         meses = (fin_total.year - hoy.year) * 12 + fin_total.month - hoy.month + 1
+        compra_previa = CERO
         for m in proyectar(meses, hoy):
             ini_m, fin_m = m["mes"], sumar_meses(m["mes"], 1) - timedelta(days=1)
+            acumulada = sum((f["costo_compra"] for f in prevision_materiales(hoy, fin_m)), CERO)
+            compras_netas = max(CERO, acumulada - compra_previa)
+            compra_previa = max(compra_previa, acumulada)
+            sin_materiales = Decimal(m["total"]) - Decimal(m["materiales"])
             registrado = (Egreso.objects.filter(fecha__range=(ini_m, fin_m))
-                          .aggregate(t=Sum("monto"))["t"] or CERO)
-            falta = max(CERO, Decimal(m["total"]) - registrado)
+                          .exclude(categoria__codigo="compras-stock").aggregate(t=Sum("monto"))["t"] or CERO)
+            falta = max(CERO, sin_materiales - registrado) + compras_netas
             desde = max(ini_m, hoy)
             dias = (fin_m - desde).days + 1
             if falta <= 0 or dias <= 0:
@@ -109,6 +121,10 @@ def proyeccion_caja(semanas: int = 12, hoy: date | None = None, estimados: bool 
                 if k is not None:
                     estimado[k] += por_dia
                 d += timedelta(days=1)
+        for c in CompraEnCamino.objects.filter(recibida=False).select_related("material"):
+            k = periodo_de(max(c.fecha_esperada, hoy))
+            if k is not None:
+                estimado[k] += c.cantidad * c.material.costo_unitario
 
     saldo = saldo_cuentas(hoy)
     filas = []
@@ -118,7 +134,11 @@ def proyeccion_caja(semanas: int = 12, hoy: date | None = None, estimados: bool 
         filas.append({"desde": ini, "hasta": fin, "cobros": cobros[k], "pagos": pagos[k],
                       "estimado": estimado[k].quantize(Decimal("0.01")), "neto": neto.quantize(Decimal("0.01")),
                       "saldo": saldo.quantize(Decimal("0.01")), "negativo": saldo < 0})
-    return {"saldo_inicial": saldo_cuentas(hoy), "filas": filas, "atrasado_cobrar": atrasado_cobrar,
+    from .models import Cobro, Pago
+    sin_cuenta = {"pagos": Pago.objects.filter(cuenta__isnull=True, automatico=False).aggregate(t=Sum("monto"))["t"] or CERO,
+                  "n_pagos": Pago.objects.filter(cuenta__isnull=True, automatico=False).count(),
+                  "cobros": Cobro.objects.filter(cuenta__isnull=True).aggregate(t=Sum("monto"))["t"] or CERO}
+    return {"sin_cuenta": sin_cuenta, "saldo_inicial": saldo_cuentas(hoy), "filas": filas, "atrasado_cobrar": atrasado_cobrar,
             "atrasado_pagar": atrasado_pagar, "hay_cuentas": Cuenta.objects.filter(activa=True).exists()}
 
 

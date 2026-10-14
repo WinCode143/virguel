@@ -15,6 +15,10 @@ TECNICO, SUPERVISOR, GERENCIA, DEPOSITO, CONTABILIDAD = "tecnico", "supervisor",
 
 
 def rol_de(user) -> str | None:
+    """Rol empresarial EXPLÍCITO: grupo de negocio, rol de la ficha de la persona o superusuario.
+
+    Entrar al admin (is_staff) no concede autoridad: una cuenta staff sin grupo ni persona no tiene
+    rol. Una persona "administrativo" sin grupo tampoco: su alcance se define con un grupo."""
     if not user.is_authenticated:
         return None
     grupos = set(user.groups.values_list("name", flat=True))
@@ -26,10 +30,12 @@ def rol_de(user) -> str | None:
         return DEPOSITO
     persona = getattr(user, "persona", None)
     if persona is None:
-        return GERENCIA if user.is_staff else None
-    if persona.rol in ("gerencia", "administrativo"):
+        return None
+    if persona.rol == "gerencia":
         return GERENCIA
-    return persona.rol
+    if persona.rol in (TECNICO, SUPERVISOR):
+        return persona.rol
+    return None
 
 
 def persona_de(user):

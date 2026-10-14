@@ -49,14 +49,15 @@ def _tecnicos():
 
 def _supervisores():
     yield ["legajo", "supervisor", "tecnicos_a_cargo", "informes", "informes_por_dia", "calidad_documentacion",
-           "desvios", "desvios_con_accion", "dias_respuesta_prom", "encuestas_enviadas", "encuestas_respondidas",
+           "desvios", "desvios_con_accion", "desvios_corregidos", "dias_respuesta_prom", "encuestas_enviadas", "encuestas_respondidas",
            "nota_trato", "nota_claridad", "nota_apoyo", "nota_presencia", "cumplimiento_tareas", "score_imagen",
            "score_control", "score_desvios", "score_objetivos", "score_total"]
     r = lambda v, n=2: round(v, n) if v is not None else ""
     for e in evaluar_supervisores():
         s = e.supervisor
         yield [s.legajo, s.nombre_completo, e.tecnicos_a_cargo, e.informes, r(e.informes_por_dia),
-               r(e.calidad_documentacion, 1), e.desvios, e.desvios_con_accion, r(e.dias_respuesta_prom, 1),
+               r(e.calidad_documentacion, 1), e.desvios, e.desvios_con_accion, e.desvios_corregidos,
+               r(e.dias_respuesta_prom, 1),
                e.encuestas_enviadas, e.encuestas_respondidas, r(e.nota_trato), r(e.nota_claridad), r(e.nota_apoyo),
                r(e.nota_presencia), r(e.cumplimiento_tareas), r(e.score_imagen, 1), r(e.score_control, 1),
                r(e.score_desvios, 1), r(e.score_objetivos, 1), e.score_total]

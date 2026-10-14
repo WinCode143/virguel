@@ -1,8 +1,8 @@
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db import models
-from django.db.models.functions import Greatest
+from django.core.exceptions import ValidationError
+from django.db import models, transaction
 from django.utils import timezone
 
 from core.models import Persona
@@ -56,9 +56,65 @@ class CompraElemento(models.Model):
 
     def save(self, *args, **kwargs):
         nueva = self._state.adding
-        super().save(*args, **kwargs)
-        if nueva:
-            Elemento.objects.filter(pk=self.elemento_id).update(stock=models.F("stock") + self.cantidad)
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            if nueva:
+                mover(self.elemento_id, MovimientoPanol.Tipo.COMPRA, self.cantidad, compra=self,
+                      fecha=self.fecha, motivo=f"Compra {self.comprobante}".strip())
+
+
+class MovimientoPanol(models.Model):
+    """Libro del pañol: toda entrada y salida de herramientas/EPP. El stock es la suma de los movimientos;
+    una diferencia física se registra como AJUSTE con responsable y motivo (nunca se trunca en cero)."""
+
+    class Tipo(models.TextChoices):
+        APERTURA = "apertura", "Saldo inicial"
+        COMPRA = "compra", "Compra"
+        ENTREGA = "entrega", "Entrega a una persona"
+        DEVOLUCION = "devolucion", "Devolución al pañol"
+        BAJA = "baja", "Baja (rotura / pérdida)"
+        AJUSTE = "ajuste", "Ajuste por inventario físico"
+
+    elemento = models.ForeignKey(Elemento, on_delete=models.CASCADE, related_name="movimientos")
+    fecha = models.DateField(default=timezone.localdate)
+    tipo = models.CharField(max_length=12, choices=Tipo.choices)
+    cantidad = models.IntegerField(help_text="Positivo entra al pañol, negativo sale.")
+    asignacion = models.ForeignKey("Asignacion", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    compra = models.ForeignKey("CompraElemento", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    responsable = models.CharField(max_length=150, blank=True)
+    motivo = models.CharField(max_length=200, blank=True)
+    creado = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-fecha", "-id"]
+        verbose_name = "Movimiento del pañol"
+        verbose_name_plural = "Movimientos del pañol"
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} {self.cantidad:+d} {self.elemento}"
+
+    def clean(self):
+        if self.tipo == self.Tipo.AJUSTE and not (self.motivo or "").strip():
+            raise ValidationError({"motivo": "Un ajuste necesita motivo (p. ej. 'conteo físico 14/10')."})
+        if self.tipo in (self.Tipo.ENTREGA, self.Tipo.BAJA) and self.cantidad > 0:
+            self.cantidad = -self.cantidad
+
+    def save(self, *args, **kwargs):
+        nuevo = self._state.adding
+        with transaction.atomic():
+            if nuevo and self.cantidad < 0 and self.tipo != self.Tipo.AJUSTE:
+                el = Elemento.objects.select_for_update().get(pk=self.elemento_id)
+                if el.stock + self.cantidad < 0:
+                    raise ValidationError(f"Sin existencias de {el}: hay {el.stock} y se quieren sacar "
+                                          f"{-self.cantidad}. Registrar la compra o un ajuste autorizado.")
+            super().save(*args, **kwargs)
+            if nuevo:
+                Elemento.objects.filter(pk=self.elemento_id).update(stock=models.F("stock") + self.cantidad)
+
+
+def mover(elemento_id, tipo, cantidad, **kw) -> MovimientoPanol:
+    signo = -1 if tipo in (MovimientoPanol.Tipo.ENTREGA, MovimientoPanol.Tipo.BAJA) else 1
+    return MovimientoPanol.objects.create(elemento_id=elemento_id, tipo=tipo, cantidad=signo * abs(int(cantidad)), **kw)
 
 
 class Asignacion(models.Model):
@@ -102,13 +158,22 @@ class Asignacion(models.Model):
         nueva = self._state.adding
         estado_anterior = None if nueva else (
             Asignacion.objects.filter(pk=self.pk).values_list("estado", flat=True).first())
-        super().save(*args, **kwargs)
-        # Custodia del pañol: lo entregado sale del pañol; lo devuelto en uso vuelve.
-        if nueva and self.origen == self.Origen.PANOL:
-            Elemento.objects.filter(pk=self.elemento_id).update(
-                stock=Greatest(models.F("stock") - self.cantidad, 0))
-        elif (estado_anterior == self.Estado.EN_USO and self.estado == self.Estado.DEVUELTO):
-            Elemento.objects.filter(pk=self.elemento_id).update(stock=models.F("stock") + self.cantidad)
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            # Custodia del pañol (libro de movimientos): entregar requiere existencias; lo devuelto vuelve.
+            if nueva and self.origen == self.Origen.PANOL:
+                mover(self.elemento_id, MovimientoPanol.Tipo.ENTREGA, self.cantidad, asignacion=self,
+                      fecha=self.fecha_entrega, motivo=f"Entrega a {self.persona}")
+            elif estado_anterior == self.Estado.EN_USO and self.estado == self.Estado.DEVUELTO:
+                mover(self.elemento_id, MovimientoPanol.Tipo.DEVOLUCION, self.cantidad, asignacion=self,
+                      motivo=f"Devolución de {self.persona}")
+
+    def clean(self):
+        if self._state.adding and self.origen == self.Origen.PANOL and self.elemento_id:
+            stock = Elemento.objects.filter(pk=self.elemento_id).values_list("stock", flat=True).first() or 0
+            if stock < (self.cantidad or 0):
+                raise ValidationError(f"Sin existencias en el pañol (hay {stock}). Registrar la compra, elegir "
+                                      "'Comprado para esta entrega' o un ajuste autorizado.")
 
     @property
     def es_gasto(self) -> bool:

@@ -73,7 +73,8 @@ class Egreso(models.Model):
     generan automáticamente; el resto se carga a mano.
 
     El dinero que efectivamente sale está en `Pago` (uno o varios, parciales). `pagado` y `fecha_pago`
-    se mantienen a partir de los pagos; marcar "pagado" sin cargar pagos registra un pago por el saldo."""
+    se mantienen a partir de los pagos; marcar "pagado" sin cargar pagos registra un pago por el saldo.
+    Un egreso nace PENDIENTE (también los automáticos): la obligación no es el pago."""
 
     fecha = models.DateField(default=timezone.localdate, db_index=True)
     categoria = models.ForeignKey(CategoriaEgreso, on_delete=models.PROTECT, related_name="egresos")
@@ -100,7 +101,8 @@ class Egreso(models.Model):
     proveedor = models.CharField(max_length=120, blank=True)
     numero_comprobante = models.CharField("N° de factura / comprobante", max_length=40, blank=True)
     vencimiento = models.DateField("Vence el", null=True, blank=True)
-    pagado = models.BooleanField(default=True)
+    pagado = models.BooleanField(default=False, help_text="Se mantiene desde los pagos registrados: registrar "
+                                                          "un gasto no implica que se haya pagado.")
     fecha_pago = models.DateField(null=True, blank=True)
     medio_pago = models.CharField(max_length=15, choices=Medio.choices, blank=True)
     comprobante = models.FileField("Archivo del comprobante", upload_to="egresos/%Y/%m/", blank=True)
@@ -223,7 +225,14 @@ class Ingreso(models.Model):
     """Ingreso devengado de la empresa (p. ej. la liquidación de Claro por los trabajos realizados).
 
     La empresa no vende al público, pero cobra por su trabajo: esto es lo que se espera cobrar.
-    Lo que efectivamente entra está en `Cobro` (uno o varios, parciales)."""
+    Lo que efectivamente entra está en `Cobro` (uno o varios, parciales).
+
+    Un ingreso ESTIMADO (calculado por el sistema) puede recalcularse; uno CONFIRMADO (la liquidación
+    aceptada por Claro, con su ajuste) o con cobros ya no lo reescribe ninguna estimación."""
+
+    class Confirmacion(models.TextChoices):
+        ESTIMADO = "estimado", "Estimado"
+        CONFIRMADO = "confirmado", "Confirmado"
 
     fecha = models.DateField("Fecha (devengado)", default=timezone.localdate, db_index=True)
     periodo = models.DateField("Período liquidado", null=True, blank=True, help_text="Primer día del mes.")
@@ -234,6 +243,13 @@ class Ingreso(models.Model):
                                 help_text="Neto a cobrar (después de retenciones y débitos conocidos).")
     fecha_esperada_cobro = models.DateField("Se espera cobrar el", null=True, blank=True)
     observaciones = models.CharField(max_length=200, blank=True)
+    confirmacion = models.CharField(max_length=10, choices=Confirmacion.choices, default=Confirmacion.CONFIRMADO)
+    monto_estimado = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True,
+                                         help_text="Lo que había estimado el sistema antes de confirmar.")
+    confirmado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                       related_name="+")
+    fecha_confirmacion = models.DateTimeField(null=True, blank=True)
+    nota_confirmacion = models.CharField("Ajuste / observación de la confirmación", max_length=200, blank=True)
 
     class Meta:
         ordering = ["-fecha"]
@@ -255,6 +271,30 @@ class Ingreso(models.Model):
     def estado(self) -> str:
         c = self.cobrado
         return "cobrado" if c >= self.monto else "parcial" if c > 0 else "pendiente"
+
+
+class EstimacionLiquidacion(models.Model):
+    """Cada cálculo de la liquidación esperada queda como una versión (no se pisa la anterior)."""
+
+    periodo = models.DateField()
+    version = models.PositiveIntegerField()
+    creada = models.DateTimeField(default=timezone.now)
+    bruto = models.DecimalField(max_digits=14, decimal_places=2)
+    retencion = models.DecimalField(max_digits=14, decimal_places=2)
+    neto = models.DecimalField(max_digits=14, decimal_places=2)
+    detalle = models.JSONField(default=list)
+    supuestos = models.JSONField(default=dict)
+    ingreso = models.ForeignKey(Ingreso, null=True, blank=True, on_delete=models.SET_NULL, related_name="estimaciones")
+    aplicada = models.BooleanField(default=False, help_text="Si actualizó el ingreso (sólo mientras está estimado).")
+
+    class Meta:
+        ordering = ["-periodo", "-version"]
+        unique_together = [("periodo", "version")]
+        verbose_name = "Estimación de liquidación (versión)"
+        verbose_name_plural = "Estimaciones de liquidación (versiones)"
+
+    def __str__(self):
+        return f"{self.periodo:%m/%Y} v{self.version}: ${self.neto}"
 
 
 class Cobro(models.Model):

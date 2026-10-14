@@ -46,6 +46,8 @@ class LoteIngreso(models.Model):
 
     class Origen(models.TextChoices):
         COMPRA = "compra", "Compra / ingreso de proveedor"
+        APERTURA = "apertura", "Saldo inicial (apertura)"
+        CUSTODIA = "custodia", "Recibido en custodia (propiedad de terceros, p. ej. Claro)"
         DEVOLUCION = "devolucion", "Devolución de un técnico"
         AJUSTE = "ajuste", "Ajuste de inventario"
 
@@ -56,7 +58,8 @@ class LoteIngreso(models.Model):
     costo_unitario = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
     proveedor = models.CharField(max_length=120, blank=True)
     remito = models.CharField(max_length=50, blank=True)
-    origen = models.CharField(max_length=12, choices=Origen.choices, default=Origen.COMPRA)
+    origen = models.CharField(max_length=12, choices=Origen.choices, default=Origen.COMPRA,
+                              help_text="Sólo una compra es un gasto; apertura, custodia, devolución y ajuste no.")
     lote_origen = models.ForeignKey("self", null=True, blank=True, on_delete=models.PROTECT, related_name="reingresos",
                                     help_text="Para devoluciones: lote del que habían salido las unidades.")
 

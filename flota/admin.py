@@ -15,6 +15,7 @@ class VehiculoAdmin(admin.ModelAdmin):
     list_filter = ["estado", "marca"]
     search_fields = ["patente", "marca", "modelo"]
     autocomplete_fields = ["asignado_a"]
+    filter_horizontal = ["planes"]
     inlines = [ServiceInline]
 
 

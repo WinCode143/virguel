@@ -36,4 +36,5 @@ urlpatterns = [
     path("importar/", importar.vista, name="importar"),
     path("importar/plantilla/<slug:tipo>.csv", importar.plantilla, name="plantilla"),
     path("ordenes/<str:numero>/reabrir/", importar.reabrir, name="reabrir_orden"),
+    path("visitas/<int:pk>/rectificar/", importar.rectificar_visita, name="rectificar_visita"),
 ]

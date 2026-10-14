@@ -3,6 +3,7 @@
 {% block encabezado %}<h1>Caja y flujo de fondos</h1><p class="sub">Saldo de las cuentas, lo que hay que cobrar y pagar, y cómo queda la caja semana a semana. Separa lo comprometido (comprobantes, cuotas y cobros cargados) de lo estimado (proyección de gastos todavía no registrados).</p>{% endblock %}
 {% block contenido %}
 {% if not proy.hay_cuentas %}<div class="card" style="border-color:var(--aviso)"><b>Falta cargar las cuentas</b> (banco, efectivo) con su saldo inicial para que la proyección parta del dinero real. Se cargan en <a href="{% url 'admin:finanzas_cuenta_add' %}">Cuentas</a>.</div>{% endif %}
+{% if proy.sin_cuenta.pagos or proy.sin_cuenta.cobros %}<div class="card" style="border-color:var(--aviso)"><b>Movimientos sin cuenta (diferencia a imputar):</b> pagos {{ proy.sin_cuenta.pagos|pesos }} ({{ proy.sin_cuenta.n_pagos }}) · cobros {{ proy.sin_cuenta.cobros|pesos }}. No afectan el saldo de ninguna cuenta hasta indicar de dónde salió o entró el dinero.</div>{% endif %}
 <div class="grid g4">
   <div class="card kpi"><div class="etq">Saldo en cuentas hoy</div><div class="valor">{{ proy.saldo_inicial|pesos }}</div><div class="det">{% for c, s in cuentas %}{{ c.nombre }}: {{ s|pesos }}{% if not forloop.last %} · {% endif %}{% empty %}sin cuentas cargadas{% endfor %}</div></div>
   <div class="card kpi"><div class="etq">A cobrar atrasado</div><div class="valor">{{ proy.atrasado_cobrar|pesos }}</div><div class="det"><a href="{% url 'finanzas:ingresos' %}">ver ingresos</a></div></div>

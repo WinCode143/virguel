@@ -388,7 +388,10 @@ def orden_cierre(request, pk):
                     ot.fecha_programada = hoy + timedelta(days=1)
                     ot.inicio_trabajo = None
                 ot._sin_notificar = True
+                ot._visita_explicita = True
                 ot.save()
+                from operaciones.visitas import crear_visita
+                visita = crear_visita(ot)
                 if d.get("nota"):
                     NotaOrden.objects.create(orden=ot, autor=p, tipo=NotaOrden.Tipo.CIERRE, texto=d["nota"], creada=fin)
                 for desc, monto, comprobante in f.gastos():
@@ -699,16 +702,16 @@ def encuesta(request, token):
     """Accesible con el link (sin login) para poder enviarse por WhatsApp/SMS."""
     e = get_object_or_404(EncuestaSupervisor.objects.select_related("supervisor", "tecnico"), token=token)
     if e.respondida:
-        return render(request, "movil/mensaje.html", {"titulo": "¡Gracias!",
-                                                      "texto": "Esta encuesta ya fue respondida."})
+        return render(request, "movil/mensaje.html", {
+            "titulo": "¡Gracias!", "texto": "La encuesta quedó respondida. Tu respuesta es confidencial: tu supervisor "
+                                           "sólo ve promedios de grupo."})
     if request.method == "POST":
         f = EncuestaForm(request.POST, instance=e)
         if f.is_valid():
             e = f.save(commit=False)
             e.respondida = timezone.now()
             e.save()
-            return render(request, "movil/mensaje.html", {
-                "titulo": "¡Gracias!", "texto": "Tu respuesta es confidencial: tu supervisor sólo ve promedios."})
+            return redirect(request.path)  # aceptado: redirección (también confirma el envío sin señal)
     else:
         f = EncuestaForm(instance=e)
     return render(request, "movil/encuesta.html", {"e": e, "form": f})

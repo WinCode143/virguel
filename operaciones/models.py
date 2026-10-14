@@ -13,9 +13,6 @@ class TipoTarea(models.Model):
         default=60, help_text="Tiempo estándar esperado para completar la tarea.")
     puede_requerir_decodificador = models.BooleanField(
         default=False, help_text="Si en esta tarea el cliente puede pedir decodificador para TV.")
-    precio_claro = models.DecimalField(
-        "Precio que paga Claro", max_digits=12, decimal_places=2, default=Decimal("0"),
-        help_text="Por orden completada (baremo). Se usa para calcular la liquidación esperada de Claro.")
     activo = models.BooleanField(default=True)
 
     class Meta:
@@ -48,6 +45,28 @@ class Jornada(models.Model):
 
     def __str__(self):
         return f"{self.fecha} - {self.tecnico}"
+
+
+class TarifaClaro(models.Model):
+    """Precio que paga Claro por orden completada de un tipo de tarea, con vigencia.
+
+    Cambiar una tarifa crea una nueva vigencia: el trabajo ya hecho se valoriza con la tarifa vigente
+    a su fecha de ejecución (no se revaloriza en silencio)."""
+
+    tipo_tarea = models.ForeignKey(TipoTarea, on_delete=models.CASCADE, related_name="tarifas")
+    precio = models.DecimalField(max_digits=12, decimal_places=2)
+    vigente_desde = models.DateField()
+    provisoria = models.BooleanField(default=True, help_text="Valor provisorio / de prueba hasta confirmarlo con Claro.")
+    fuente = models.CharField(max_length=120, blank=True, help_text="De dónde sale el valor (contrato, acta, prueba).")
+
+    class Meta:
+        ordering = ["tipo_tarea", "-vigente_desde"]
+        unique_together = [("tipo_tarea", "vigente_desde")]
+        verbose_name = "Tarifa de Claro"
+        verbose_name_plural = "Tarifas de Claro"
+
+    def __str__(self):
+        return f"{self.tipo_tarea}: ${self.precio} desde {self.vigente_desde:%d/%m/%Y}"
 
 
 class Atribucion(models.TextChoices):
@@ -174,6 +193,27 @@ class Intento(models.Model):
 
     def __str__(self):
         return f"{self.orden.numero} #{self.numero} {self.get_resultado_display()} ({self.fecha:%d/%m/%Y})"
+
+
+class RectificacionVisita(models.Model):
+    """Corrección explícita de una visita ya registrada: conserva antes, después, motivo y autor."""
+
+    intento = models.ForeignKey("Intento", on_delete=models.CASCADE, related_name="rectificaciones")
+    campo = models.CharField(max_length=40)
+    antes = models.CharField(max_length=200, blank=True)
+    despues = models.CharField(max_length=200, blank=True)
+    motivo = models.CharField(max_length=200)
+    autor = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    usuario = models.CharField(max_length=150, blank=True)
+    fecha = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-fecha"]
+        verbose_name = "Rectificación de visita"
+        verbose_name_plural = "Rectificaciones de visitas"
+
+    def __str__(self):
+        return f"{self.intento}: {self.campo} {self.antes} → {self.despues}"
 
 
 class NotaOrden(models.Model):

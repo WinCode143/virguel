@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Asignacion, CompraElemento, Elemento
+from .models import Asignacion, CompraElemento, Elemento, MovimientoPanol
 
 
 @admin.register(Elemento)
@@ -25,3 +25,23 @@ class CompraElementoAdmin(admin.ModelAdmin):
     list_filter = ["elemento__tipo"]
     search_fields = ["elemento__nombre", "proveedor", "comprobante"]
     autocomplete_fields = ["elemento"]
+
+
+@admin.register(MovimientoPanol)
+class MovimientoPanolAdmin(admin.ModelAdmin):
+    """Para ajustes por inventario físico y bajas: el resto de los movimientos los genera el sistema."""
+    list_display = ["fecha", "elemento", "tipo", "cantidad", "responsable", "motivo"]
+    list_filter = ["tipo", "elemento"]
+    fields = ["elemento", "fecha", "tipo", "cantidad", "motivo"]
+    autocomplete_fields = ["elemento"]
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.responsable = request.user.get_username()
+        super().save_model(request, obj, form, change)
+
+    def has_change_permission(self, request, obj=None):
+        return False  # el libro no se edita: una corrección es otro movimiento
+
+    def has_delete_permission(self, request, obj=None):
+        return False

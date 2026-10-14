@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from inventario.models import Salida
 
-from .models import GastoOrden, Intento, Jornada, MotivoNoResolucion, NotaOrden, OrdenTrabajo, TipoTarea
+from .models import GastoOrden, Intento, Jornada, MotivoNoResolucion, NotaOrden, OrdenTrabajo, TarifaClaro, TipoTarea
 
 
 @admin.register(TipoTarea)
@@ -82,3 +82,9 @@ class IntentoAdmin(admin.ModelAdmin):
     search_fields = ["orden__numero", "tecnico__apellido", "tecnico__legajo"]
     date_hierarchy = "fecha"
     autocomplete_fields = ["tecnico", "supervisor", "atribucion_confirmada_por"]
+
+
+@admin.register(TarifaClaro)
+class TarifaClaroAdmin(admin.ModelAdmin):
+    list_display = ["tipo_tarea", "precio", "vigente_desde", "provisoria", "fuente"]
+    list_filter = ["tipo_tarea", "provisoria"]

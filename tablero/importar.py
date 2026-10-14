@@ -153,11 +153,21 @@ def imp_materiales(f, ctx=None):
     return creado
 
 
+ORIGENES_IMPORTABLES = {"apertura": "apertura", "saldo inicial": "apertura", "compra": "compra",
+                        "custodia": "custodia", "claro": "custodia"}
+
+
 def imp_stock(f, ctx=None):
+    """Stock existente: por defecto es APERTURA (saldo inicial, no genera compra ni deuda).
+    Con origen "compra" genera su egreso; con "custodia" son equipos de terceros (no de la empresa)."""
     try:
         m = Material.objects.get(codigo=texto(f["codigo_material"]))
     except Material.DoesNotExist:
         raise ErrorFila(f"no existe el material '{f['codigo_material']}' (importar materiales primero)")
+    origen_txt = texto(f.get("origen"), False).lower() or "apertura"
+    if origen_txt not in ORIGENES_IMPORTABLES:
+        raise ErrorFila(f"origen '{origen_txt}' inválido (apertura, compra o custodia)")
+    origen = ORIGENES_IMPORTABLES[origen_txt]
     datos = {"material": m, "fecha": fecha(f["fecha_ingreso"]), "cantidad": decimal_(f["cantidad"]),
              "remito": texto(f.get("remito"), False), "proveedor": texto(f.get("proveedor"), False)}
     if LoteIngreso.objects.filter(**datos).exists():
@@ -166,7 +176,7 @@ def imp_stock(f, ctx=None):
                           "ingreso ya importado (mismo material, fecha, cantidad, proveedor y remito): no se duplica")
         return None
     LoteIngreso.objects.create(costo_unitario=decimal_(f.get("costo_unitario"), False) or m.costo_unitario,
-                               **datos)
+                               origen=origen, **datos)
     return True
 
 
@@ -255,9 +265,12 @@ IMPORTADORES = {
                    ["DECO-HD", "Decodificador TV HD", "equipo", "u", "39000", "40", "si"],
                    "categoría: material, equipo o repuesto."),
     "stock": ("Stock actual (lotes con fecha de ingreso)", imp_stock,
-              ["codigo_material", "fecha_ingreso", "cantidad", "costo_unitario", "proveedor", "remito"],
-              ["DECO-HD", "10/08/2026", "120", "39000", "Proveedor SA", "R-0001"],
-              "Una fila por ingreso: la fecha real de ingreso es la que permite controlar los 60 días."),
+              ["codigo_material", "fecha_ingreso", "cantidad", "costo_unitario", "proveedor", "remito", "origen"],
+              ["DECO-HD", "10/08/2026", "120", "39000", "Proveedor SA", "R-0001", "apertura"],
+              "Una fila por ingreso: la fecha real de ingreso es la que permite controlar los 60 días. origen: "
+              "apertura (saldo inicial, por defecto: no genera compra ni deuda), compra (genera su gasto) o "
+              "custodia (equipos de Claro u otros terceros). En 'remito' conviene indicar el fundamento del "
+              "saldo inicial (p. ej. 'Inventario físico 30/09')."),
     "clientes": ("Clientes", imp_clientes,
                  ["numero", "nombre", "direccion", "zona", "tipo", "cantidad_televisores"],
                  ["C000123", "María Gómez", "Calle 12 N° 345", "Centro", "moderno", "2"],
@@ -403,4 +416,30 @@ def reabrir(request, numero):
             return redirect("tablero:importar")
     return render(request, "tablero/reabrir_orden.html", {
         "ot": ot, "error": error, "notas": ot.notas.select_related("autor")[:10],
-        "intentos": ot.intentos.select_related("tecnico", "supervisor")})
+        "intentos": ot.intentos.select_related("tecnico", "supervisor").prefetch_related("rectificaciones"),
+        "resultados": OrdenTrabajo.Estado.choices[2:], "motivos": OrdenTrabajo._meta.get_field("motivo_no_resuelto").choices,
+        "tecnicos": Persona.objects.filter(rol="tecnico").order_by("apellido")})
+
+
+@requiere_rol(GERENCIA)
+def rectificar_visita(request, pk):
+    """Rectificación auditada de una visita registrada (resultado, motivo o quién la hizo)."""
+    from operaciones.models import Intento
+    from operaciones.visitas import rectificar_visita as rectificar
+    it = get_object_or_404(Intento.objects.select_related("orden"), pk=pk)
+    if request.method == "POST":
+        cambios = {}
+        if request.POST.get("resultado") in dict(Intento.Resultado.choices):
+            cambios["resultado"] = request.POST["resultado"]
+        if "motivo_no_resuelto" in request.POST:
+            cambios["motivo_no_resuelto"] = request.POST["motivo_no_resuelto"]
+        if request.POST.get("tecnico"):
+            cambios["tecnico"] = get_object_or_404(Persona, pk=request.POST["tecnico"], rol="tecnico")
+        try:
+            n = len(rectificar(it, cambios, request.POST.get("motivo", ""), autor=persona_de(request.user),
+                               usuario=request.user))
+        except ValueError as e:
+            messages.error(request, str(e))
+        else:
+            messages.success(request, f"Visita #{it.numero}: {n} cambio(s) rectificado(s)." if n else "Sin cambios.")
+    return redirect("tablero:reabrir_orden", numero=it.orden.numero)

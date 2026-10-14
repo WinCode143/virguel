@@ -206,8 +206,12 @@ class SupervisoresTests(TestCase):
                                                   trato=nota, claridad=nota, apoyo=nota, presencia=nota)
             inf = InformeControl.objects.create(supervisor=bueno, tecnico=tb, fecha=f, puntaje=2,
                                                 desvio_detectado=True, descripcion="x" * 100)
-            AccionCorrectiva.objects.create(informe=inf, tecnico=tb, tipo="recapacitacion", fecha=f + timedelta(days=1))
+            AccionCorrectiva.objects.create(informe=inf, tecnico=tb, tipo="recapacitacion", fecha=f + timedelta(days=1),
+                                            cumplida=True)
             InformeControl.objects.create(supervisor=malo, tecnico=tm, fecha=f, puntaje=2, desvio_detectado=True)
+        p = Parametros.actual()
+        p.encuesta_min_respuestas, p.encuesta_min_personas = 5, 1  # un técnico por supervisor en este escenario
+        p.save()
         evs = {e.supervisor.legajo: e for e in evaluar_supervisores(HOY, 30)}
         self.assertEqual(evs["S1"].nota_encuesta, 5)
         self.assertEqual(evs["S1"].desvios_con_accion, 10)
@@ -238,6 +242,7 @@ class AutomatismosTests(TestCase):
     def test_service_vencido_por_km(self):
         v = Vehiculo.objects.create(patente="AA1", marca="X", modelo="Y", anio=2020, km_actual=21000)
         ts = TipoService.objects.create(nombre="Aceite", cada_km=10000, cada_dias=365)
+        v.planes.add(ts)
         ServiceRealizado.objects.create(vehiculo=v, tipo=ts, fecha=HOY - timedelta(days=30), km=10000)
         p = proximos_services(v, HOY)[0]
         self.assertEqual(p["estado"], "critico")
@@ -271,7 +276,8 @@ class AccesoTests(TestCase):
     def test_encuesta_por_link_sin_login(self):
         e = EncuestaSupervisor.objects.create(fecha=HOY, tecnico=self.tec_p, supervisor=self.sup_p)
         r = self.client.post(f"/encuesta/{e.token}/", {"trato": 4, "claridad": 5, "apoyo": 3, "presencia": 4})
-        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.status_code, 302)  # aceptado: redirige (confirma también el envío sin señal)
+        self.assertContains(self.client.get(f"/encuesta/{e.token}/"), "Gracias")
         e.refresh_from_db()
         self.assertIsNotNone(e.respondida)
         self.assertEqual(e.promedio, 4)
@@ -481,7 +487,9 @@ class ControlPersonalTests(TestCase):
     def test_fichar_desde_el_celular_con_hora_del_celular(self):
         from personal.models import Asistencia
         self.client.login(username="tec", password="x")
-        hace_un_rato = timezone.now() - timedelta(hours=2)
+        # hasta 2 horas antes, sin cruzar la medianoche (si no, la entrada sería del día anterior)
+        ahora = timezone.localtime()
+        hace_un_rato = max(ahora - timedelta(hours=2), ahora.replace(hour=0, minute=0, second=1, microsecond=0))
         self.client.post("/app/jornada/iniciar/", {"lat": "-34.6", "lng": "-58.4",
                                                    "_momento_cliente": hace_un_rato.isoformat()})
         a = Asistencia.objects.get(persona=self.t)
@@ -595,6 +603,12 @@ class EncuestaSemanalTests(TestCase):
         self.client.post("/app/mi-supervisor/", datos)
         self.client.post("/app/mi-supervisor/", {**datos, "general": 1})  # segunda vez la misma semana: se ignora
         self.assertEqual(EncuestaSemanal.objects.filter(tecnico=t).count(), 1)
+        # una sola respuesta no alcanza para consolidar una nota (B24): con el mínimo en 1 sí
+        ev = [e for e in evaluar_supervisores(HOY, 30) if e.supervisor == sup][0]
+        self.assertIsNone(ev.nota_semanal)
+        p = Parametros.actual()
+        p.encuesta_min_respuestas = p.encuesta_min_personas = 1
+        p.save()
         ev = [e for e in evaluar_supervisores(HOY, 30) if e.supervisor == sup][0]
         self.assertEqual(ev.nota_semanal, 4)
         self.assertEqual(ev.score_imagen, 75)

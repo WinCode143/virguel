@@ -23,6 +23,12 @@ class Vehiculo(models.Model):
                                    related_name="vehiculos")
     vencimiento_vtv = models.DateField("Vencimiento VTV", null=True, blank=True)
     vencimiento_seguro = models.DateField(null=True, blank=True)
+    planes = models.ManyToManyField("TipoService", blank=True, related_name="vehiculos",
+                                    verbose_name="Planes de mantenimiento aplicables")
+    fecha_base_mantenimiento = models.DateField(
+        "Fecha base del mantenimiento", null=True, blank=True,
+        help_text="Incorporación o último service conocido antes del sistema. Sin base no se puede saber si está al día.")
+    km_base_mantenimiento = models.PositiveIntegerField("Km base del mantenimiento", null=True, blank=True)
 
     class Meta:
         ordering = ["patente"]
@@ -66,7 +72,10 @@ class ServiceRealizado(models.Model):
 
 
 def proximos_services(vehiculo: Vehiculo, hoy=None):
-    """Para cada tipo de service, cuándo toca el próximo (por km y/o fecha)."""
+    """Para cada plan de mantenimiento APLICABLE al vehículo, cuándo toca el próximo (por km y/o fecha).
+
+    La base es el último service de ese tipo o, si no hay, la fecha/km base del vehículo. Sin base el
+    estado es "sin_base" (faltan antecedentes), nunca "ok"."""
     hoy = hoy or timezone.localdate()
     # km promedio por día de los últimos 60 días (para estimar fecha por km)
     jornadas = vehiculo.jornada_set.filter(
@@ -76,11 +85,15 @@ def proximos_services(vehiculo: Vehiculo, hoy=None):
         total = sum(j.km_fin - j.km_inicio for j in jornadas)
         km_dia = total / 60
     res = []
-    for tipo in TipoService.objects.all():
+    for tipo in vehiculo.planes.all():
         ultimo = vehiculo.services.filter(tipo=tipo).order_by("-fecha").first()
-        base_fecha = ultimo.fecha if ultimo else None
-        base_km = ultimo.km if ultimo else 0
-        prox_km = base_km + tipo.cada_km if tipo.cada_km else None
+        if ultimo:
+            base_fecha, base_km = ultimo.fecha, ultimo.km
+        else:
+            base_fecha, base_km = vehiculo.fecha_base_mantenimiento, vehiculo.km_base_mantenimiento
+        # Sin base (ni service previo ni datos de incorporación) no se informa "al día": faltan antecedentes
+        falta_base = (tipo.cada_dias and base_fecha is None) or (tipo.cada_km and base_km is None)
+        prox_km = base_km + tipo.cada_km if (tipo.cada_km and base_km is not None) else None
         prox_fecha = base_fecha + timedelta(days=tipo.cada_dias) if (tipo.cada_dias and base_fecha) else None
         km_restantes = prox_km - vehiculo.km_actual if prox_km is not None else None
         fecha_por_km = (hoy + timedelta(days=int(km_restantes / km_dia))
@@ -90,9 +103,12 @@ def proximos_services(vehiculo: Vehiculo, hoy=None):
             candidatas.append(hoy)
         fecha_estimada = min(candidatas) if candidatas else None
         dias = (fecha_estimada - hoy).days if fecha_estimada else None
-        estado = "ok"
-        if dias is not None:
+        if falta_base and fecha_estimada is None:
+            estado = "sin_base"
+        elif dias is None:
+            estado = "ok"
+        else:
             estado = "critico" if dias <= 0 else "aviso" if dias <= 15 else "ok"
         res.append({"tipo": tipo, "ultimo": ultimo, "prox_km": prox_km, "km_restantes": km_restantes,
-                    "fecha_estimada": fecha_estimada, "dias": dias, "estado": estado})
+                    "fecha_estimada": fecha_estimada, "dias": dias, "estado": estado, "falta_base": bool(falta_base)})
     return res

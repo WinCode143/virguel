@@ -10,7 +10,7 @@
 <td class="num muted">{% if not m.indicador.mayor_es_mejor %}≤{% endif %}{{ m.indicador.meta|num:1 }}</td></tr>{% endif %}{% endfor %}</tbody></table>
 {% if tb.debiles %}<p style="font-size:.85rem;margin:.6rem 0 0"><b>A mejorar:</b> {% for m in tb.debiles %}{{ m.indicador.nombre|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}.</p>{% endif %}</div>
 {% if ev %}
-<div class="card kpi"><div class="etq">Puntaje general</div><div class="valor"><span class="estado {{ ev.color }}">{{ ev.score_total|num }}/100</span></div></div>
+<div class="card kpi"><div class="etq">Puntaje general</div><div class="valor">{% if ev.score_total is None %}<span class="estado info">Sin evidencia suficiente</span>{% else %}<span class="estado {{ ev.color }}">{{ ev.score_total|num }}/100</span>{% endif %}</div>{% if ev.sin_datos %}<div class="det">Sin dato: {{ ev.sin_datos|join:", " }}</div>{% endif %}</div>
 <div class="card"><table><tbody>
 <tr><td>Nota de tu equipo (encuesta)</td><td class="num">{{ ev.nota_encuesta|num:1 }} / 5</td></tr>
 <tr><td>Informes de control por día</td><td class="num">{{ ev.informes_por_dia|num:1 }} <span class="muted">(obj. 4)</span></td></tr>

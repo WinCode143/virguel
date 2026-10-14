@@ -440,10 +440,11 @@ def herramientas(request):
 def flota(request):
     hoy = timezone.localdate()
     filas = []
-    for v in Vehiculo.objects.select_related("asignado_a"):
+    for v in Vehiculo.objects.select_related("asignado_a").prefetch_related("planes"):
         prox = proximos_services(v, hoy)
         peor = min((p for p in prox if p["dias"] is not None), key=lambda p: p["dias"], default=None)
-        filas.append({"v": v, "prox": prox, "peor": peor})
+        filas.append({"v": v, "prox": prox, "peor": peor, "sin_base": [p for p in prox if p["estado"] == "sin_base"],
+                      "sin_planes": not prox})
     filas.sort(key=lambda f: f["peor"]["dias"] if f["peor"] else 9999)
     costos = (ServiceRealizado.objects.filter(fecha__gte=hoy - timedelta(days=365))
               .values("vehiculo__patente").annotate(t=Sum("costo"), n=Count("id")).order_by("-t"))

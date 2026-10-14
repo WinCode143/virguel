@@ -564,6 +564,10 @@ class Command(BaseCommand):
                 vencimiento_vtv=self.hoy + timedelta(days=r.randint(-5, 330)),
                 vencimiento_seguro=self.hoy + timedelta(days=r.randint(5, 360)))
             v.km_dia = r.uniform(55, 95)
+            v.planes.set(self.tipos_service)
+            if i == 15:  # uno sin antecedentes cargados (muestra "faltan antecedentes")
+                self.vehiculos.append(v)
+                continue
             self.vehiculos.append(v)
             # historial de services
             for ts in self.tipos_service:
@@ -1020,7 +1024,7 @@ class Command(BaseCommand):
             dias = (self.hoy - fecha).days
             cerrado = dias > 25 and r.random() < .85
             resol = r.choice(["reparacion", "acuerdo", "seguro"]) if cerrado else "pendiente"
-            Siniestro.objects.create(
+            sin = Siniestro.objects.create(
                 numero=f"S-{fecha:%Y}-{n:05d}", fecha=fecha, tipo=tipo, gravedad=grav,
                 responsabilidad_civil=r.random() < .85, tecnico=t, supervisor=t.supervisor, zona=t.zona,
                 direccion=f"Calle {r.randint(1, 180)} N° {r.randint(100, 4999)}",
@@ -1182,15 +1186,33 @@ class Command(BaseCommand):
         gasto_mes = (Egreso.objects.filter(fecha__gte=self.inicio).aggregate(t=Sum("monto"))["t"] or Decimal("0")) \
             / Decimal(str(meses))
 
+        # 0. Incidentes: algunos investigados (atribución confirmada o descartada con fundamento), el resto pendiente
+        from incidentes.models import Siniestro
+        for k, sin in enumerate(Siniestro.objects.order_by("fecha")):
+            if k % 3 == 0:
+                sin.investigacion, sin.atribucion = "concluida", "confirmada"
+                sin.atribucion_fundamento = "Testigos y fotos: no se usó el detector de cañerías (prueba)."
+            elif k % 3 == 1:
+                sin.investigacion, sin.atribucion = "concluida", "descartada"
+                sin.atribucion_fundamento = "Instalación previa del cliente fuera de norma (prueba)."
+            else:
+                sin.investigacion = "en_curso"
+            sin.atribucion_por_id = sin.supervisor_id
+            sin.responsable_gestion_id = sin.supervisor_id
+            sin.save()
+
         # 1. Precio por tipo de tarea (baremo de Claro): relativos, escalados para que el ingreso cubra el gasto + 15 %
         relativo = {"INST-FO": 1.0, "INST-TV": .7, "REP": .45, "MUD": .9, "RET": .2, "REL": .15}
         unidades = sum(relativo.get(t, .3) * n for t, n in OrdenTrabajo.objects.filter(
             estado="completada", es_retrabajo=False, fecha_ejecucion__gte=self.inicio)
             .values_list("tipo__codigo").annotate(n=Count("id"))) / meses
         base = gasto_mes * Decimal("1.15") / Decimal("0.97") / Decimal(str(unidades or 1))
+        from operaciones.models import TarifaClaro
+        from datetime import date as _date
         for codigo, tipo in self.tipos.items():
-            tipo.precio_claro = (base * Decimal(str(relativo.get(codigo, .3)))).quantize(Decimal("100"))
-            tipo.save(update_fields=["precio_claro"])
+            TarifaClaro.objects.create(tipo_tarea=tipo, vigente_desde=_date(2000, 1, 1), provisoria=True,
+                                       fuente="Valor de prueba (a reemplazar por el baremo real)",
+                                       precio=(base * Decimal(str(relativo.get(codigo, .3)))).quantize(Decimal("100")))
 
         # 2. Cuentas con saldo inicial al comienzo de la demo
         banco = Cuenta.objects.create(nombre="Banco (cuenta corriente)", tipo="banco",
@@ -1199,6 +1221,11 @@ class Command(BaseCommand):
         Cuenta.objects.create(nombre="Caja chica", tipo="efectivo", saldo_inicial=Decimal("300000"),
                               fecha_saldo_inicial=self.inicio - timedelta(days=1))
         Pago.objects.filter(fecha__gt=banco.fecha_saldo_inicial).update(cuenta=banco)
+        # Los gastos registrados quedan pendientes hasta que se paga (obligación ≠ pago): en la demo se
+        # registran los pagos de lo que tiene más de 10 días; lo más reciente queda a pagar.
+        for e in Egreso.objects.filter(pagado=False, monto__gt=0, fecha__lt=self.hoy - timedelta(days=10)):
+            Pago.objects.create(egreso=e, monto=e.saldo, cuenta=banco, medio="transferencia",
+                                fecha=min(self.hoy, (e.vencimiento or e.fecha) + timedelta(days=r.randint(0, 5))))
 
         # 3. Liquidaciones esperadas de Claro (meses cerrados) y sus cobros
         m = self.inicio.replace(day=1)

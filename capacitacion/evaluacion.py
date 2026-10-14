@@ -198,8 +198,10 @@ def evaluar_tecnicos(hasta: date | None = None, dias: int | None = None, tecnico
         evs[tid].puntos_disciplina += peso_accion.get(tipo, 1)
 
     # Seguridad: siniestros + EPP obligatorio faltante o vencido
+    # Sólo siniestros con conducta del técnico CONFIRMADA (estar vinculado no acredita haberlo causado)
     for tid, grav in Siniestro.objects.filter(
-            tecnico_id__in=ids, fecha__range=(desde, hasta)).values_list("tecnico_id", "gravedad"):
+            tecnico_id__in=ids, fecha__range=(desde, hasta), atribucion=Siniestro.Atribucion.CONFIRMADA
+    ).values_list("tecnico_id", "gravedad"):
         evs[tid].puntos_siniestros += peso_siniestro.get(grav, 1)
     obligatorios = set(Elemento.objects.filter(obligatorio_tecnicos=True).values_list("id", flat=True))
     vigentes = defaultdict(set)

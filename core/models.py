@@ -97,6 +97,11 @@ class Parametros(models.Model):
     tasa_descuento_mensual = models.DecimalField(
         "Costo del dinero (% mensual)", max_digits=5, decimal_places=2, default=Decimal("3"),
         help_text="Para comparar alternativas de pago (contado vs. cuotas) a valor presente.")
+    encuesta_min_respuestas = models.PositiveIntegerField(
+        "Encuestas: respuestas mínimas para consolidar la nota de un supervisor", default=5)
+    encuesta_min_personas = models.PositiveIntegerField(
+        "Encuestas: técnicos distintos mínimos (confidencialidad)", default=3,
+        help_text="Con menos personas no se muestra ni se usa la nota: podría identificarse quién respondió.")
     controles_verificacion_accion = models.PositiveIntegerField(
         "Acciones correctivas: controles posteriores para verificarlas", default=2,
         help_text="Una acción cumplida se considera efectiva sólo si después hubo al menos estos controles sin "
@@ -508,6 +513,7 @@ class OperacionOffline(models.Model):
     id_operacion = models.UUIDField(unique=True)
     usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
     ruta = models.CharField(max_length=200)
+    huella = models.CharField(max_length=64, blank=True, help_text="Huella del contenido enviado.")
     recibida = models.DateTimeField(default=timezone.now)
 
     class Meta:
