@@ -38,6 +38,62 @@ class Vehiculo(models.Model):
         return f"{self.patente} {self.marca} {self.modelo}"
 
 
+class LecturaOdometro(models.Model):
+    """Lectura del cuentakilómetros: el contador pertenece al vehículo, no a cada técnico. Dos personas
+    en el mismo recorrido producen una sola lectura; una lectura menor a la anterior es una anomalía."""
+
+    class Fuente(models.TextChoices):
+        JORNADA = "jornada", "Cierre de jornada"
+        SERVICE = "service", "Service"
+        MANUAL = "manual", "Carga manual"
+
+    vehiculo = models.ForeignKey(Vehiculo, on_delete=models.CASCADE, related_name="lecturas")
+    momento = models.DateTimeField(default=timezone.now)
+    km = models.PositiveIntegerField()
+    fuente = models.CharField(max_length=10, choices=Fuente.choices, default=Fuente.MANUAL)
+    registrada_por = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    anomalia = models.CharField(max_length=200, blank=True, help_text="Ej.: menor que la lectura anterior.")
+
+    class Meta:
+        ordering = ["-momento"]
+        verbose_name = "Lectura de odómetro"
+        verbose_name_plural = "Lecturas de odómetro"
+
+    def __str__(self):
+        return f"{self.vehiculo.patente} {self.km} km ({self.momento:%d/%m/%Y})"
+
+
+def registrar_lectura(vehiculo, km: int, fuente="manual", persona=None, momento=None) -> LecturaOdometro | None:
+    """Registra una lectura validando continuidad; si ya hay una igual ese día (otro integrante del mismo
+    recorrido) no la duplica. Actualiza km_actual sólo hacia adelante."""
+    momento = momento or timezone.now()
+    dia = timezone.localtime(momento).date()
+    if vehiculo.lecturas.filter(km=km, momento__date=dia).exists():
+        return None
+    anterior = vehiculo.lecturas.filter(momento__lte=momento).order_by("-momento").first()
+    anomalia = ""
+    if anterior and km < anterior.km:
+        anomalia = f"Menor que la lectura anterior ({anterior.km} km del {timezone.localtime(anterior.momento):%d/%m})"
+    lectura = LecturaOdometro.objects.create(vehiculo=vehiculo, km=km, fuente=fuente, registrada_por=persona,
+                                             momento=momento, anomalia=anomalia)
+    if not anomalia and km > vehiculo.km_actual:
+        Vehiculo.objects.filter(pk=vehiculo.pk).update(km_actual=km)
+        vehiculo.km_actual = km
+    return lectura
+
+
+def km_por_dia(vehiculo, hoy=None, dias=60) -> float:
+    """Km recorridos por día según las lecturas del vehículo (no la suma de jornadas por técnico)."""
+    hoy = hoy or timezone.localdate()
+    lect = list(vehiculo.lecturas.filter(momento__date__gte=hoy - timedelta(days=dias), anomalia="")
+                .order_by("momento").values_list("momento", "km"))
+    if len(lect) < 2:
+        return 0
+    (t0, k0), (t1, k1) = lect[0], lect[-1]
+    dias_reales = max(1, (t1 - t0).days)
+    return max(0, k1 - k0) / dias_reales
+
+
 class TipoService(models.Model):
     nombre = models.CharField(max_length=80, unique=True)
     cada_km = models.PositiveIntegerField(null=True, blank=True)
@@ -77,13 +133,16 @@ def proximos_services(vehiculo: Vehiculo, hoy=None):
     La base es el último service de ese tipo o, si no hay, la fecha/km base del vehículo. Sin base el
     estado es "sin_base" (faltan antecedentes), nunca "ok"."""
     hoy = hoy or timezone.localdate()
-    # km promedio por día de los últimos 60 días (para estimar fecha por km)
-    jornadas = vehiculo.jornada_set.filter(
-        fecha__gte=hoy - timedelta(days=60), km_fin__isnull=False, km_inicio__isnull=False)
-    km_dia = 0
-    if jornadas.exists():
-        total = sum(j.km_fin - j.km_inicio for j in jornadas)
-        km_dia = total / 60
+    # km promedio por día según el odómetro del vehículo (si no hay lecturas, por jornadas sin duplicar
+    # los recorridos compartidos: se toma el máximo km_fin y el mínimo km_inicio de cada día)
+    km_dia = km_por_dia(vehiculo, hoy)
+    if not km_dia:
+        from django.db.models import Max, Min
+        por_dia = (vehiculo.jornada_set.filter(fecha__gte=hoy - timedelta(days=60), km_fin__isnull=False,
+                                              km_inicio__isnull=False)
+                   .values("fecha").annotate(a=Min("km_inicio"), b=Max("km_fin")))
+        total = sum(max(0, d["b"] - d["a"]) for d in por_dia)
+        km_dia = total / 60 if total else 0
     res = []
     for tipo in vehiculo.planes.all():
         ultimo = vehiculo.services.filter(tipo=tipo).order_by("-fecha").first()

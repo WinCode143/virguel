@@ -188,11 +188,19 @@ def tipo_tarea(v):
 
 
 def imp_demanda(f, ctx=None):
-    DemandaComercial.objects.create(fecha=fecha(f["fecha"]), zona=zona(f.get("zona")),
-                                    tipo_tarea=tipo_tarea(f["codigo_tipo_tarea"]),
-                                    cantidad_clientes=entero(f["cantidad_clientes"]),
-                                    observaciones=texto(f.get("observaciones"), False))
-    return True
+    """La previsión es revisable: la misma fecha/tipo/zona se actualiza (con su valor anterior), no se duplica."""
+    clave = {"fecha": fecha(f["fecha"]), "zona": zona(f.get("zona")), "tipo_tarea": tipo_tarea(f["codigo_tipo_tarea"])}
+    cantidad, obs = entero(f["cantidad_clientes"]), texto(f.get("observaciones"), False)
+    d = DemandaComercial.objects.filter(**clave).first()
+    if d is None:
+        DemandaComercial.objects.create(cantidad_clientes=cantidad, observaciones=obs, **clave)
+        return True
+    if d.cantidad_clientes != cantidad and ctx:
+        ctx.cambio(f"{clave['fecha']:%d/%m/%Y} {clave['tipo_tarea'].codigo}", "cantidad_clientes", d.cantidad_clientes,
+                   cantidad)
+    d.cantidad_clientes, d.observaciones = cantidad, obs or d.observaciones
+    d.save()
+    return False
 
 
 def imp_clientes(f, ctx=None):
@@ -241,6 +249,8 @@ def imp_ordenes(f, ctx=None):
         return None
     # Orden abierta: se actualiza la planificación sin pisar el avance registrado en campo.
     for campo, valor in datos.items():
+        if ctx and getattr(ot, campo) != valor:
+            ctx.cambio(numero, campo, _mostrar(getattr(ot, campo)), _mostrar(valor))
         setattr(ot, campo, valor)
     if ot.estado != OrdenTrabajo.Estado.REPROGRAMADA:
         ot.estado = "asignada" if tec else "pendiente"
@@ -318,6 +328,12 @@ class Contexto:
     def __init__(self):
         self.fila = 0
         self.conflictos = []
+        self.cambios = []
+
+    def cambio(self, clave, campo, antes, despues):
+        """Valor anterior de un dato que la importación modificó (queda en el registro de la importación)."""
+        self.cambios.append({"fila": self.fila, "clave": str(clave)[:60], "campo": campo,
+                             "antes": str(antes)[:200], "despues": str(despues)[:200]})
 
     def conflicto(self, clave, campo, actual, importado, motivo):
         self.conflictos.append({"fila": self.fila, "clave": str(clave)[:60], "campo": campo,
@@ -325,12 +341,24 @@ class Contexto:
                                 "motivo": motivo[:200]})
 
 
+def huella_archivo(archivo) -> str:
+    import hashlib
+    h = hashlib.sha256()
+    for trozo in archivo.chunks():
+        h.update(trozo)
+    archivo.seek(0)
+    return h.hexdigest()
+
+
 def importar(tipo, archivo, usuario=None):
     from .models import ConflictoImportacion, Importacion
     _, funcion, columnas, _, _ = IMPORTADORES[tipo]
+    huella = huella_archivo(archivo)
+    previa = Importacion.objects.filter(tipo=tipo, huella=huella).first()
     filas = leer_filas(archivo)
     errores, creados, actualizados, omitidos = [], 0, 0, 0
     ctx = Contexto()
+    resultados = []
     if filas:
         faltan = [c for c in OBLIGATORIAS[tipo] if c not in filas[0]]
         if faltan:
@@ -349,6 +377,7 @@ def importar(tipo, archivo, usuario=None):
                     creados += 1
                 else:
                     actualizados += 1
+                resultados.append({"fila": i, "resultado": "omitida" if r is None else "creada" if r else "actualizada"})
             except ErrorFila as e:
                 errores.append((i, str(e)))
             except Exception as e:  # noqa: BLE001 — se informa cualquier problema de la fila
@@ -356,14 +385,21 @@ def importar(tipo, archivo, usuario=None):
         if errores:
             transaction.set_rollback(True)
         else:
+            cambios_por_fila = {}
+            for c in ctx.cambios:
+                cambios_por_fila.setdefault(c["fila"], []).append(c)
+            for r in resultados:
+                if r["fila"] in cambios_por_fila:
+                    r["cambios"] = cambios_por_fila[r["fila"]]
             imp = Importacion.objects.create(
                 tipo=tipo, archivo=getattr(archivo, "name", "")[:200], total=len(filas), creados=creados,
-                actualizados=actualizados, omitidos=omitidos,
+                actualizados=actualizados, omitidos=omitidos, huella=huella, resultado_filas=resultados,
                 usuario=usuario if getattr(usuario, "is_authenticated", False) else None)
             ConflictoImportacion.objects.bulk_create(ConflictoImportacion(importacion=imp, **c)
                                                      for c in ctx.conflictos)
     return {"errores": errores, "creados": creados, "actualizados": actualizados, "omitidos": omitidos,
-            "total": len(filas), "conflictos": ctx.conflictos if not errores else [], "importacion": imp}
+            "total": len(filas), "conflictos": ctx.conflictos if not errores else [], "importacion": imp,
+            "cambios": ctx.cambios if not errores else [], "repetido": previa}
 
 
 @requiere_rol(GERENCIA)
@@ -376,9 +412,12 @@ def vista(request):
             resultado["tipo"], resultado["tipo_clave"] = IMPORTADORES[tipo][0], tipo
             if not resultado["errores"]:
                 omitidos = f", {resultado['omitidos']} no aplicados (ver conflictos)" if resultado["omitidos"] else ""
+                if resultado["repetido"]:
+                    messages.info(request, f"Este mismo archivo ya se había importado el "
+                                           f"{resultado['repetido'].fecha:%d/%m/%Y %H:%M}: no se duplicó nada.")
                 messages.success(request, f"Importación correcta: {resultado['creados']} nuevos, "
                                           f"{resultado['actualizados']} actualizados{omitidos}.")
-                if not resultado["conflictos"]:
+                if not resultado["conflictos"] and not resultado["cambios"]:
                     return redirect("tablero:importar")
         else:
             messages.error(request, "Elegí el tipo de datos y un archivo.")

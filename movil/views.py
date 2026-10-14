@@ -173,9 +173,9 @@ def jornada(request, accion):
                     j.hectareas_cubiertas = f.cleaned_data["hectareas_cubiertas"]
                 j.horas_trabajadas = a.horas_trabajadas
                 j.save()
-                if j.vehiculo and j.km_fin and j.km_fin > j.vehiculo.km_actual:
-                    j.vehiculo.km_actual = j.km_fin
-                    j.vehiculo.save(update_fields=["km_actual"])
+                if j.vehiculo and j.km_fin:
+                    from flota.models import registrar_lectura
+                    registrar_lectura(j.vehiculo, j.km_fin, "jornada", persona=p, momento=momento)
             messages.success(request, f"Salida registrada a las {timezone.localtime(momento):%H:%M} "
                                       f"({a.horas_trabajadas:g} h)." + (" No olvides la encuesta del día." if es_tecnico else ""))
             # La encuesta se genera al cerrar la jornada (además del proceso nocturno)

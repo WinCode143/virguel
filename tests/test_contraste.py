@@ -524,3 +524,54 @@ class TransferenciasTests(TestCase):
         from finanzas.models import Pago
         comparar([{"nombre": "Cuotas", "cuotas": 6, "monto_cuota": Decimal("10")}], Decimal("3"))
         self.assertFalse(Pago.objects.exists())
+
+
+class ImportacionTrazableTests(TestCase):
+    """B01/B39/V11: reimportar la misma previsión no duplica; los cambios guardan su valor anterior."""
+
+    def setUp(self):
+        from operaciones.models import TipoTarea
+        g = User.objects.create_user("g", password="x")
+        g.groups.add(Group.objects.create(name="Gerencia"))
+        self.client.force_login(g)
+        TipoTarea.objects.create(codigo="I", nombre="I")
+
+    def subir(self, tipo, contenido):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        return self.client.post("/tablero/importar/", {"tipo": tipo, "archivo": SimpleUploadedFile(
+            "d.csv", contenido.encode(), content_type="text/csv")})
+
+    def test_demanda_revisable(self):
+        from inventario.models import DemandaComercial
+        from tablero.models import Importacion
+        f = (HOY + timedelta(days=3)).strftime("%d/%m/%Y")
+        archivo = f"fecha;codigo_tipo_tarea;cantidad_clientes\n{f};I;40\n"
+        self.subir("demanda", archivo)
+        r = self.subir("demanda", archivo)
+        self.assertEqual(DemandaComercial.objects.get().cantidad_clientes, 40)
+        self.assertContains(self.client.get("/tablero/importar/"), "")  # pantalla ok
+        self.assertEqual(Importacion.objects.filter(tipo="demanda").values("huella").distinct().count(), 1)
+        self.subir("demanda", archivo.replace(";40", ";55"))
+        self.assertEqual(DemandaComercial.objects.get().cantidad_clientes, 55)
+        cambio = Importacion.objects.order_by("-id").first().resultado_filas[0]["cambios"][0]
+        self.assertEqual((cambio["antes"], cambio["despues"]), ("40", "55"))
+        del r
+
+
+class OdometroTests(TestCase):
+    """B30/V09: dos integrantes del mismo recorrido no duplican km; una lectura menor es anomalía."""
+
+    def test_lecturas(self):
+        from flota.models import LecturaOdometro, Vehiculo, km_por_dia, registrar_lectura
+        v = Vehiculo.objects.create(patente="AA1", marca="X", modelo="Y", anio=2020, km_actual=1000)
+        from django.utils import timezone
+        ahora = timezone.now()
+        registrar_lectura(v, 1000, momento=ahora - timedelta(days=10))
+        registrar_lectura(v, 1500, "jornada", momento=ahora)
+        self.assertIsNone(registrar_lectura(v, 1500, "jornada", momento=ahora))  # el compañero, mismo recorrido
+        self.assertEqual(LecturaOdometro.objects.count(), 2)
+        self.assertEqual(km_por_dia(v, timezone.localdate()), 50)
+        mala = registrar_lectura(v, 900, momento=ahora + timedelta(hours=1))
+        v.refresh_from_db()
+        self.assertTrue(mala.anomalia)
+        self.assertEqual(v.km_actual, 1500)
