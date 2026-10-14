@@ -370,3 +370,9 @@ details.tabla-datos summary:hover { color: var(--ink-2); }
   color: var(--muted); pointer-events: none; font-variant-numeric: tabular-nums; }
 .campo-moneda > input { padding-left: 1.6rem !important; text-align: right; font-variant-numeric: tabular-nums; }
 .campo-moneda.lleno > input { width: 100%; }
+
+/* Aviso de datos de demostración (inventados) */
+.aviso-demo { margin: 0 0 .8rem; padding: .45rem .75rem; border-radius: 8px; font-size: .85rem;
+  color: var(--aviso-ink); background: var(--aviso-soft); border: 1px dashed var(--aviso); }
+.dato-inventado { font-size: .75rem; color: var(--aviso-ink); background: var(--aviso-soft); border-radius: 4px;
+  padding: 0 .3rem; white-space: nowrap; }

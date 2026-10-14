@@ -44,7 +44,7 @@
         {% if es_supervisor %}{% nav 'personal:usuarios' 'Accesos de mi equipo' 'llave' %}{% endif %}
       </details>
 
-      <details class="nav-grupo" {% grupo_abierto 'tablero:prod_general' 'tablero:prod_tecnicos' 'tablero:prod_supervisores' 'tablero:prod_ficha' 'tablero:metas' 'tablero:diccionario' %}>
+      <details class="nav-grupo" {% grupo_abierto 'tablero:prod_general' 'tablero:prod_tecnicos' 'tablero:prod_supervisores' 'tablero:prod_ficha' 'tablero:metas' 'tablero:diccionario' 'tablero:calibrar' %}>
         <summary>Productividad {% icono 'abajo' %}</summary>
         {% if es_gerencia %}{% nav 'tablero:prod_general' 'Panel general' 'grafico' %}{% endif %}
         {% nav 'tablero:prod_tecnicos' 'Técnicos (IPT)' 'trofeo' %}
@@ -52,13 +52,16 @@
         {% if es_supervisor %}{% nav 'tablero:prod_ficha' 'Mi índice (IGS)' 'estrella' 0 request.user.persona.id %}{% endif %}
         {% nav 'tablero:metas' 'Metas y semáforos' 'ajustes' %}
         {% nav 'tablero:diccionario' 'Diccionario de indicadores' 'lista' %}
+        {% if es_gerencia %}{% nav 'tablero:calibrar' 'Calibrar pesos' 'ajustes' %}{% endif %}
       </details>
 
-      <details class="nav-grupo" {% grupo_abierto 'tablero:tecnicos' 'tablero:capacitacion' 'tablero:supervisores' 'tablero:encuestas' 'tablero:incidentes' %}>
+      <details class="nav-grupo" {% grupo_abierto 'tablero:tecnicos' 'tablero:capacitacion' 'tablero:supervisores' 'tablero:encuestas' 'tablero:incidentes' 'tablero:incidente' 'tablero:objetivos' 'tablero:plantillas' 'tablero:plantilla' %}>
         <summary>Desempeño y calidad {% icono 'abajo' %}</summary>
         {% nav 'tablero:tecnicos' 'Técnicos y riesgo' 'escudo' %}
         {% nav 'tablero:capacitacion' 'Capacitación' 'birrete' %}
-        {% if es_gerencia %}{% nav 'tablero:supervisores' 'Evaluación de supervisores' 'encuesta' %}{% endif %}
+        {% if es_gerencia %}{% nav 'tablero:supervisores' 'Evaluación de supervisores' 'encuesta' %}
+        {% nav 'tablero:objetivos' 'Objetivos a verificar' 'check' %}{% endif %}
+        {% nav 'tablero:plantillas' 'Plantillas de control' 'lista' %}
         {% nav 'tablero:encuestas' 'Encuestas del día' 'correo' %}
         {% nav 'tablero:incidentes' 'Incidentes y daños' 'incidente' %}
       </details>
@@ -140,6 +143,7 @@
       </div>
     </header>
     <main class="contenido" id="contenido">
+      {% if datos_demo %}<p class="aviso-demo" role="note"><b>Datos de demostración.</b> Personas, órdenes, montos, tarifas, recetas, requisitos y plantillas son <b>inventados</b> para probar el sistema; la empresa debe reemplazarlos por los reales.</p>{% endif %}
       <div class="page-head">{% block encabezado %}{% endblock %}</div>
       {% block contenido %}{% endblock %}
     </main>

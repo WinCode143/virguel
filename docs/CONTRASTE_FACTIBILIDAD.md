@@ -54,21 +54,21 @@ que se indica · **Propuesta** = diseñado, no construido.
 | B11 Pedido neto y horizonte | Hecho con valores de prueba | Necesidad inmediata vs. backlog, stock + custodia + en camino − reservado; el horizonte «inmediato» (días) es un parámetro (`AbastecimientoTests`). |
 | B12 Antigüedad con relojes distintos | Hecho con valores de prueba | Antigüedad original y permanencia en la ubicación; qué reloj activa los 60 días es un parámetro a confirmar (`RelojesAntiguedadTests`). |
 | B15 Rotura temprana y recambio | Hecho | Reporte de condición desde la app, reposición por el libro del pañol (`RoturaYEppTests`). |
-| B16 EPP según tarea | Hecho (falta cargar datos) | Requisitos de EPP por tipo de tarea; la asignación de agenda avisa el EPP faltante. La demo no trae requisitos: mientras no se carguen, no se exige nada. |
+| B16 EPP según tarea | Hecho con valores de prueba | Requisitos de EPP por tipo de tarea; la agenda no asigna a quien le falta EPP vigente y dice por qué. La demo trae requisitos **inventados** (arnés y casco), visibles en *Capacitación → Requisitos* con cuántos del equipo cumplen. |
 
 ## M04 — Competencias, calidad y supervisión
 
 | Criterio | Estado | Qué se hizo / qué falta |
 |---|---|---|
-| B17 Competencias que afectan la asignación | Hecho (falta cargar datos) | Requisitos de competencia por tipo de tarea; la agenda no propone a quien no está habilitado (y dice por qué). Sin requisitos cargados no se restringe. |
+| B17 Competencias que afectan la asignación | Hecho con valores de prueba | Requisitos de competencia por tipo de tarea (nivel mínimo, admite tutela); la agenda no propone a quien no está habilitado y dice por qué. La demo trae requisitos **inventados**. |
 | B18 Formación y evaluación separadas | Hecho | Asistir no aprueba: la aprobación tiene evaluador, fecha y evidencia; las competencias vencen (`FormacionTests`). |
 | B19 Plan de mejora y período de prueba | Hecho | Plan individual con objetivos, apoyos, plazos y resultado. |
-| B20 Inspecciones y defectos observables | Hecho | **Nuevo:** plantillas de control versionadas (punto, criterio, defecto tipificado, crítico). Un punto crítico que no cumple es desvío. La «calidad del informe» se renombró a *completitud documental* (`PlantillaInspeccionTests`). Falta: la plantilla real de la empresa (hay una de prueba). |
+| B20 Inspecciones y defectos observables | Hecho | **Nuevo:** plantillas de control versionadas (punto, criterio, defecto tipificado, crítico). Un punto crítico que no cumple es desvío. La «calidad del informe» se renombró a *completitud documental* (`PlantillaInspeccionTests`). Pantalla propia *Plantillas de control* (puntos, versiones, defectos más encontrados). La demo trae una plantilla y resultados **inventados**. |
 | B21 Cobertura y selección | Hecho | **Nuevo:** motivo de cada control (programado / aleatorio / sospecha / reclamo); los de sospecha o reclamo no entran en la calidad general; el supervisor ve quién de su equipo trabajó y no tuvo control en la semana (`MotivoSeleccionTests`). |
-| B23 Objetivos del supervisor verificados | Hecho | **Nuevo:** criterio de aceptación, evidencia, estados sin reporte / reportado / verificado / rechazado; sólo lo verificado por un tercero cuenta; lo vencido sin reporte cuenta 0; la meta se versiona; nadie verifica lo propio (`ObjetivosVerificadosTests`). |
+| B23 Objetivos del supervisor verificados | Hecho | **Nuevo:** criterio de aceptación, evidencia, estados sin reporte / reportado / verificado / rechazado; sólo lo verificado por un tercero cuenta; lo vencido sin reporte cuenta 0; la meta se versiona; nadie verifica lo propio (`ObjetivosVerificadosTests`). Pantalla propia *Objetivos a verificar* para gerencia (verificar/rechazar con nota y asignar objetivos). |
 | B24 Encuesta, suficiencia y confidencialidad | Hecho con valores de prueba | Mínimos de respuestas y de personas para mostrar resultados (parámetros de prueba). |
-| B26 Resultados comparables | Parcial | Diccionario y fuente única (ver B35); el índice se presenta como resumen para ordenar la revisión, no como aptitud. Falta calibrar pesos con datos reales de la empresa. |
-| B28 Gestión de incidentes y costos | Hecho | **Nuevo:** cronología del expediente (denuncia, aseguradora, descargo, peritaje, pagos, recupero) con responsable y plazo; alerta cuando un plazo vence (`ActuacionesIncidenteTests`). |
+| B26 Resultados comparables | Hecho (calibración con datos reales pendiente) | Diccionario y fuente única (ver B35); el índice se presenta como resumen para ordenar la revisión, no como aptitud. **Nuevo:** *Calibrar pesos* simula otros pesos sin guardarlos, muestra cuánto cambia el orden (Spearman) y qué indicadores tienen pocos datos o no distinguen (`CalibracionPesosTests`). Acordar los pesos definitivos requiere meses de datos reales. |
+| B28 Gestión de incidentes y costos | Hecho | **Nuevo:** cronología del expediente (denuncia, aseguradora, descargo, peritaje, pagos, recupero) con responsable y plazo; alerta cuando un plazo vence (`ActuacionesIncidenteTests`). Ficha propia de cada incidente con su expediente, alta de actuaciones y «plazo cumplido»; el listado muestra el próximo plazo. La demo trae actuaciones **inventadas**. |
 
 ## M05 — Flota y agenda
 
@@ -130,9 +130,14 @@ conviene reemplazarlos (todos se cargan desde *Parámetros* o el administrador, 
 - **Finanzas:** tarifas de Claro por vigencia, % de retención y días de cobro; saldos de corte de
   las cuentas; criterios de urgencia para pagar; tasa de descuento para comparar alternativas.
 
+## Datos inventados en la demo
+
+La demo (`generar_demo`) enciende *Parámetros → Datos de demostración*: mientras esté encendido,
+**todas las pantallas** (escritorio y app) muestran un aviso de que los datos son inventados, y las
+pantallas de requisitos, plantillas, expedientes y calibración lo repiten donde corresponde. Al cargar
+los datos reales de la empresa, se apaga ese parámetro.
+
 ## Fuera de alcance de esta etapa
 
 - IA (dictado, consulta, agente de agenda): ver B40.
-- Calibrar los pesos de los índices con datos reales (requiere meses de operación en el sistema).
-- Pantallas propias para lo que hoy se gestiona desde el administrador (verificación de objetivos,
-  actuaciones de incidentes, plantillas): funcionan, pero una pantalla dedicada sería más cómoda.
+- Acordar los pesos definitivos de los índices: la herramienta existe, pero hacen falta meses de datos reales.

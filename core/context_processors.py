@@ -11,6 +11,14 @@ def alertas(request):
     }
 
 
+def demo(request):
+    """Aviso en todas las pantallas cuando la base tiene datos de demostración (inventados)."""
+    if not getattr(request, "user", None) or not request.user.is_authenticated:
+        return {}
+    from .models import Parametros
+    return {"datos_demo": Parametros.actual().datos_demo}
+
+
 def rol(request):
     from .roles import CONTABILIDAD, DEPOSITO, GERENCIA, SUPERVISOR, rol_de
     r = rol_de(request.user) if hasattr(request, "user") else None

@@ -108,6 +108,7 @@ class Command(BaseCommand):
             self.indicadores_manuales()
             self.historial()
             self.valores_de_prueba()
+            self.datos_inventados()
         self.stdout.write(self.style.SUCCESS("Datos de demostración generados. Contraseña de todos: virguel2026"))
 
     # ------------------------------------------------------------------
@@ -150,6 +151,7 @@ class Command(BaseCommand):
     def maestros(self):
         par = Parametros.actual()
         par.destinatarios_parte = "gerencia@virguel.demo"
+        par.datos_demo = True  # todas las pantallas avisan que los datos son inventados
         par.save()
         from personal.models import Feriado
         feriados = [("01-01", "Año Nuevo"), ("03-24", "Día de la Memoria"), ("04-02", "Malvinas"),
@@ -1318,3 +1320,68 @@ class Command(BaseCommand):
             a.save(update_fields=["fecha_cumplida"])
         self.stdout.write(f"  valores de prueba: {Ingreso.objects.count()} liquidaciones de Claro, "
                           f"{Cobro.objects.count()} cobros, 2 deudas en cuotas, 3 compras en camino")
+
+    def datos_inventados(self):
+        """Datos que sólo la empresa puede dar (sección 5.3 del contraste). Son INVENTADOS para que la demo
+        muestre cómo funciona cada regla; las pantallas lo avisan mientras Parámetros.datos_demo esté encendido."""
+        r = self.r
+        from capacitacion.models import RequisitoCompetencia
+        from herramientas.models import RequisitoEPP
+        from incidentes.models import ActuacionIncidente
+        from supervision.models import ItemPlantilla, PlantillaInspeccion, ResultadoItem
+
+        # 1. Competencias que exige cada tipo de trabajo (inventado)
+        comps = {c.nombre: c for c in Competencia.objects.all()}
+        for codigo, comp, nivel, tutelada in [
+                ("INST-FO", "Instalación FTTH", 3, True), ("INST-TV", "Instalación FTTH", 2, True),
+                ("MUD", "Instalación FTTH", 3, False), ("MUD", "Seguridad en altura", 2, False),
+                ("REP", "Diagnóstico de fallas", 2, True)]:
+            RequisitoCompetencia.objects.create(tipo_tarea=self.tipos[codigo], competencia=comps[comp],
+                                                nivel_minimo=nivel, permite_tutelada=tutelada)
+        # 2. EPP que exige cada tipo de trabajo (inventado)
+        els = {e.codigo: e for e in self.elementos}
+        for codigo, el in [("INST-FO", "ARNES"), ("MUD", "ARNES"), ("INST-FO", "CASCO"), ("INST-TV", "CASCO")]:
+            RequisitoEPP.objects.create(tipo_tarea=self.tipos[codigo], elemento=els[el])
+
+        # 3. Cronología de los expedientes de incidentes (inventada)
+        n_act = 0
+        for sin in Siniestro.objects.all():
+            pasos = [("denuncia", 0, 2, "Denuncia interna con fotos y relato del técnico")]
+            if sin.gravedad != "leve" or sin.responsabilidad_civil:
+                pasos += [("aseguradora", 1, 10, "Presentación a la aseguradora con presupuesto del daño"),
+                          ("descargo", 2, 7, "Descargo escrito del técnico involucrado")]
+            if sin.estado == Siniestro.Estado.CERRADO:
+                pasos.append(("pago" if sin.costo_real else "otro", 20, 0, "Cierre del expediente"))
+            for tipo, dia, plazo, texto in pasos:
+                fecha = sin.fecha + timedelta(days=dia)
+                if fecha > self.hoy:
+                    continue
+                vence = fecha + timedelta(days=plazo) if plazo else None
+                cumplida = sin.estado == Siniestro.Estado.CERRADO or (vence and vence < self.hoy - timedelta(days=3)
+                                                                       and r.random() < .85)
+                ActuacionIncidente.objects.create(siniestro=sin, fecha=fecha, tipo=tipo, descripcion=texto,
+                                                  responsable=sin.supervisor, vence=vence, cumplida=bool(cumplida),
+                                                  referencia=f"EXP-{sin.numero} (inventado)")
+                n_act += 1
+
+        # 4. Controles de calidad de los últimos 30 días hechos con la plantilla (resultados inventados)
+        pl = PlantillaInspeccion.objects.filter(vigente=True).first()
+        items = list(pl.items.all()) if pl else []
+        n_ctrl = 0
+        if items:
+            for inf in InformeControl.objects.filter(tipo="calidad", fecha__gte=self.hoy - timedelta(days=30)):
+                malos = set()
+                if inf.desvio_detectado:
+                    malos.add(r.choice(items).pk)
+                resultados = [ResultadoItem(informe=inf, item=i,
+                                            resultado="no_cumple" if i.pk in malos else
+                                            ("na" if r.random() < .05 else "cumple"),
+                                            medida=f"-{r.randint(26, 29)} dBm" if i.pk in malos and i.orden == 1 else
+                                            (f"-{r.randint(15, 23)} dBm" if i.orden == 1 else ""))
+                              for i in items if r.random() < .95]
+                ResultadoItem.objects.bulk_create(resultados)
+                inf.plantilla = pl
+                inf.save(update_fields=["plantilla"])
+                n_ctrl += 1
+        self.stdout.write(f"  datos inventados: requisitos por tarea, {n_act} actuaciones de incidentes, "
+                          f"{n_ctrl} controles con plantilla")

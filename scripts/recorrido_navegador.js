@@ -20,7 +20,8 @@ async function login(page, usuario) {
 const PANTALLAS = {
   gerencia: ['/tablero/', '/tablero/tecnicos/', '/tablero/supervisores/', '/tablero/productividad/',
     '/tablero/productividad/supervisores/', '/tablero/stock/', '/tablero/planificacion/', '/tablero/importar/',
-    '/tablero/operacion/', '/tablero/capacitacion/', '/tablero/indicadores/', '/finanzas/', '/finanzas/caja/', '/finanzas/ingresos/',
+    '/tablero/operacion/', '/tablero/capacitacion/', '/tablero/indicadores/', '/tablero/objetivos/', '/tablero/plantillas/', '/tablero/plantillas/1/',
+    '/tablero/productividad/calibrar/?peso_eficiencia_jornada=10', '/tablero/incidentes/1/', '/finanzas/', '/finanzas/caja/', '/finanzas/ingresos/',
     '/finanzas/comprobantes/', '/finanzas/comprobantes/?ver=a_pagar', '/personal/legajos/', '/personal/asistencia/'],
   contable: ['/finanzas/', '/finanzas/caja/', '/finanzas/ingresos/', '/finanzas/comprobantes/', '/finanzas/sueldos/',
     '/finanzas/alternativas-de-pago/?nombre_1=Contado&anticipo_1=1000000&nombre_2=Cuotas&cuotas_2=6&monto_cuota_2=180000'],
@@ -46,6 +47,7 @@ const PANTALLAS = {
       ok(`${usuario} ${u}`, r.status() === 200, `${r.status()} ${ms} ms`);
     }
     ok(`${usuario} sin errores JS`, errores.length === 0, errores.join(' | ').slice(0, 200));
+    ok(`${usuario} avisa que los datos son inventados`, (await page.locator('.aviso-demo').count()) > 0);
     await ctx.close();
   }
 

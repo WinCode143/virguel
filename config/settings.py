@@ -76,6 +76,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "core.context_processors.alertas",
                 "core.context_processors.rol",
+                "core.context_processors.demo",
                 "core.context_processors.movil",
             ],
         },

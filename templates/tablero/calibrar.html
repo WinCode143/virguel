@@ -1,0 +1,24 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Calibrar pesos · Virguel{% endblock %}
+{% block encabezado %}<h1>Calibrar los pesos del índice</h1><p class="sub">Probá otros pesos y mirá cómo cambia el orden de las personas. <b>No se guarda nada</b>: cuando la empresa acuerde los pesos, se cargan en <a href="{% url 'tablero:metas' %}">Metas y semáforos</a> (y el cambio queda versionado en el <a href="{% url 'tablero:diccionario' %}">diccionario</a>).</p>{% endblock %}
+{% block contenido %}
+{% if datos_demo %}<p class="aviso-demo">Con datos de demostración (inventados) la calibración sólo muestra cómo funciona la herramienta: los pesos se acuerdan con datos reales de varios meses.</p>{% endif %}
+<form method="get">
+<div class="filtros"><label>Índice<select name="rol" onchange="this.form.submit()"><option value="tecnico" {% if rol == 'tecnico' %}selected{% endif %}>Técnicos (IPT)</option><option value="supervisor" {% if rol == 'supervisor' %}selected{% endif %}>Supervisores (IGS)</option></select></label>
+<label>Período<select name="dias"><option value="30" {% if dias == 30 %}selected{% endif %}>30 días</option><option value="60" {% if dias == 60 %}selected{% endif %}>60 días</option><option value="90" {% if dias == 90 %}selected{% endif %}>90 días</option></select></label></div>
+<div class="card"><h2>Indicadores: ¿sirven para pesar?</h2><div class="tabla-scroll"><table>
+<thead><tr><th>Indicador</th><th class="num">Con dato</th><th class="num">Puntos promedio</th><th class="num">Dispersión</th><th>Observación</th><th class="num">Peso actual</th><th class="num">Peso a probar</th></tr></thead>
+<tbody>{% for c in cobertura %}<tr><td>{{ c.i.nombre }}</td><td class="num">{{ c.con_dato }}/{{ c.total }}</td><td class="num">{{ c.media|num }}</td><td class="num">{{ c.dispersion|num }}</td>
+<td style="font-size:.85rem">{% if c.aviso == 'pocos datos' %}<span class="estado aviso">pocos datos</span> pesa sobre pocas personas{% elif c.aviso == 'no distingue' %}<span class="estado info">no distingue</span> casi todos sacan lo mismo{% else %}—{% endif %}</td>
+<td class="num">{{ c.i.peso }}</td><td class="num"><input type="number" name="peso_{{ c.i.codigo }}" value="{{ c.propuesto }}" min="0" max="100" style="width:5rem"></td></tr>{% endfor %}</tbody></table></div>
+<button class="btn" style="margin-top:1rem">Simular</button> <a class="btn sec" href="?rol={{ rol }}">Volver a los actuales</a></div>
+</form>
+{% if cambio %}
+<div class="card"><h2>Resultado de la simulación</h2>
+<p>Parecido entre el orden actual y el propuesto (Spearman): <b>{{ spearman|num:2 }}</b> <span class="muted">(1 = mismo orden; cuanto más bajo, más cambia quién queda arriba y abajo).</span></p>
+<div class="tabla-scroll"><table><thead><tr><th>Persona</th><th class="num">Índice actual</th><th class="num">Índice propuesto</th><th class="num">Puesto actual</th><th class="num">Puesto propuesto</th><th class="num">Cambio</th></tr></thead>
+<tbody>{% for f in filas %}<tr><td>{{ f.persona.apellido }}, {{ f.persona.nombre }}</td><td class="num">{{ f.actual|num:1 }}</td><td class="num">{{ f.propuesto|num:1 }}</td><td class="num">{{ f.pos_actual }}</td><td class="num">{{ f.pos_propuesta }}</td>
+<td class="num">{% if f.salto > 0 %}<span class="estado ok">+{{ f.salto }}</span>{% elif f.salto < 0 %}<span class="estado aviso">{{ f.salto }}</span>{% else %}0{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+<p class="muted" style="font-size:.82rem">Se muestran las {{ filas|length }} personas cuyo puesto más cambia, de {{ n }} con índice. El índice ordena la revisión; no es una probabilidad de aptitud.</p></div>
+{% endif %}
+{% endblock %}

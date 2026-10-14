@@ -1,0 +1,31 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Siniestro {{ s.numero }} · Virguel{% endblock %}
+{% block encabezado %}<h1>Siniestro {{ s.numero }} <span class="estado {% if s.gravedad == 'critica' %}critico{% elif s.gravedad == 'grave' %}aviso{% else %}info{% endif %}">{{ s.get_gravedad_display }}</span></h1>
+<p class="sub"><a href="{% url 'tablero:incidentes' %}">Incidentes</a> · {{ s.fecha|date:"d/m/Y" }} · {{ s.get_tipo_display }} · {{ s.get_estado_display }}{% if es_gerencia %} · <a href="{% url 'admin:incidentes_siniestro_change' s.id %}">Editar datos y atribución</a>{% endif %}</p>{% endblock %}
+{% block contenido %}
+<div class="grid g2">
+<div class="card"><h2>Hechos</h2><dl class="datos">
+  <dt>Descripción</dt><dd>{{ s.descripcion }}</dd>
+  <dt>Hechos comprobados</dt><dd>{{ s.hechos|default:"— sin cargar —" }}</dd>
+  <dt>Técnico vinculado</dt><dd>{{ s.tecnico|default:"—" }}</dd>
+  <dt>Orden / cliente</dt><dd>{{ s.orden.numero|default:"—" }} · {{ s.cliente|default:"—" }}</dd>
+  <dt>Responsable de la gestión</dt><dd>{{ s.responsable_gestion|default:"sin asignar" }}</dd>
+</dl></div>
+<div class="card"><h2>Atribución y costos</h2><dl class="datos">
+  <dt>Atribución</dt><dd><span class="estado {% if s.atribucion == 'confirmada' %}critico{% elif s.atribucion == 'descartada' %}ok{% else %}info{% endif %}">{{ s.get_atribucion_display }}</span>{% if s.atribucion_fundamento %}<br><span style="font-size:.85rem">{{ s.atribucion_fundamento }}</span>{% endif %}</dd>
+  <dt>Costo estimado / real</dt><dd>{{ s.costo_estimado|pesos }} / {{ s.costo_real|pesos }}</dd>
+  <dt>Recuperado</dt><dd>{{ s.monto_recuperado|pesos }}</dd>
+  <dt>Próximo paso</dt><dd style="font-size:.9rem">{{ s.recomendacion_legal }}</dd>
+</dl><p class="muted" style="font-size:.82rem">Estar vinculado no acredita haberlo causado: sólo una atribución confirmada, con fundamento, afecta la evaluación del técnico.</p></div>
+</div>
+<div class="card"><h2>Expediente: actuaciones y plazos</h2>
+{% if datos_demo %}<p class="aviso-demo">Las actuaciones y referencias de esta demo son <b>inventadas</b>.</p>{% endif %}
+<div class="tabla-scroll"><table><thead><tr><th>Fecha</th><th>Actuación</th><th>Detalle</th><th>Responsable</th><th>Referencia</th><th>Plazo</th><th></th></tr></thead>
+<tbody>{% for a in actuaciones %}<tr><td>{{ a.fecha|date:"d/m/Y" }}</td><td>{{ a.get_tipo_display }}</td><td>{{ a.descripcion }}</td><td>{{ a.responsable.apellido|default:"—" }}</td><td style="font-size:.85rem">{{ a.referencia|default:"—" }}</td>
+<td>{% if a.vence %}{{ a.vence|date:"d/m/Y" }} {% if a.cumplida %}<span class="estado ok">cumplido</span>{% elif a.vencida %}<span class="estado critico">vencido</span>{% else %}<span class="estado aviso">pendiente</span>{% endif %}{% else %}—{% endif %}</td>
+<td>{% if a.vence and not a.cumplida %}<form method="post">{% csrf_token %}<input type="hidden" name="actuacion" value="{{ a.id }}"><button class="btn sec" name="accion" value="cumplida">Cumplido</button></form>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="7" class="muted">Sin actuaciones registradas.</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="card"><h2>Agregar actuación</h2><form method="post">{% csrf_token %}
+{% include "tablero/_form_campos.html" %}<button class="btn" style="margin-top:1rem">Agregar al expediente</button></form>
+<p class="muted" style="font-size:.82rem">Con un plazo cargado, el sistema avisa 3 días antes y cuando vence.</p></div>
+{% endblock %}
