@@ -2,7 +2,8 @@ from django.contrib import admin
 
 from inventario.models import Salida
 
-from .models import GastoOrden, Intento, Jornada, MotivoNoResolucion, NotaOrden, OrdenTrabajo, TarifaClaro, TipoTarea
+from .models import (Cuadrilla, GastoOrden, Intento, Jornada, MiembroCuadrilla, MotivoNoResolucion, NotaOrden,
+                     OrdenTrabajo, ParticipacionVisita, TarifaClaro, TipoTarea)
 
 
 @admin.register(TipoTarea)
@@ -74,8 +75,27 @@ class MotivoNoResolucionAdmin(admin.ModelAdmin):
     list_editable = ["atribucion"]
 
 
+class ParticipanteInline(admin.TabularInline):
+    model = ParticipacionVisita
+    extra = 0
+    autocomplete_fields = ["persona"]
+
+
+class MiembroInline(admin.TabularInline):
+    model = MiembroCuadrilla
+    extra = 1
+    autocomplete_fields = ["persona"]
+
+
+@admin.register(Cuadrilla)
+class CuadrillaAdmin(admin.ModelAdmin):
+    list_display = ["nombre", "activa"]
+    inlines = [MiembroInline]
+
+
 @admin.register(Intento)
 class IntentoAdmin(admin.ModelAdmin):
+    inlines = [ParticipanteInline]
     list_display = ["orden", "numero", "fecha", "tecnico", "supervisor", "resultado", "motivo_no_resuelto",
                     "atribucion_confirmada"]
     list_filter = ["resultado", "motivo_no_resuelto", "atribucion_confirmada"]

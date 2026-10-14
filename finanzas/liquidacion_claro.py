@@ -17,7 +17,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.utils import timezone
 
 from core.models import Parametros
@@ -56,6 +56,12 @@ def calcular(mes: date) -> dict:
     qs = OrdenTrabajo.objects.filter(estado="completada", fecha_ejecucion__range=(mes, fin))
     if not p.claro_paga_retrabajos:
         qs = qs.filter(es_retrabajo=False)
+    # Una visita completada con revisión técnica o aceptación de Claro rechazada no se estima como cobrable
+    from operaciones.models import Intento
+    rechazadas = Intento.objects.filter(resultado="completada", fecha__range=(mes, fin)).filter(
+        Q(revision_tecnica=Intento.Revision.RECHAZADA) | Q(aceptacion_claro=Intento.Aceptacion.RECHAZADA))
+    excluidas = qs.filter(intentos__in=rechazadas).count()
+    qs = qs.exclude(intentos__in=rechazadas)
     tarifario = Tarifario()
     grupos = defaultdict(lambda: {"ordenes": 0, "importe": Decimal("0")})
     for tipo_id, codigo, nombre, fecha in qs.values_list("tipo_id", "tipo__codigo", "tipo__nombre", "fecha_ejecucion"):
@@ -71,7 +77,7 @@ def calcular(mes: date) -> dict:
     return {"mes": mes, "filas": filas, "bruto": bruto, "retencion": retencion, "neto": bruto - retencion,
             "cobro": fin + timedelta(days=p.claro_dias_cobro),
             "sin_precio": {f["tipo"]: f["ordenes"] for f in filas if not f["precio"]},
-            "provisoria": any(f["provisoria"] for f in filas),
+            "provisoria": any(f["provisoria"] for f in filas), "excluidas": excluidas,
             "supuestos": {"retencion_pct": str(p.claro_retencion), "dias_cobro": p.claro_dias_cobro,
                           "paga_retrabajos": p.claro_paga_retrabajos}}
 

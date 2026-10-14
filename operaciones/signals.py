@@ -34,4 +34,8 @@ def completar_intentos_faltantes(ordenes=None) -> int:
         estado__in=RESULTADOS, fecha_ejecucion__isnull=False, intentos__isnull=True).select_related("tecnico")
     nuevos = [Intento(orden=o, numero=1, **datos_de_cierre(o)) for o in qs]
     Intento.objects.bulk_create(nuevos, batch_size=2000)
+    from .models import ParticipacionVisita
+    ParticipacionVisita.objects.bulk_create([ParticipacionVisita(intento=i, persona_id=i.tecnico_id, funcion="ejecutor",
+                                                                 minutos=i.minutos_reales)
+                                             for i in nuevos if i.tecnico_id], batch_size=5000)
     return len(nuevos)

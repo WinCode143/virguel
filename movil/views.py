@@ -395,18 +395,19 @@ def orden_cierre(request, pk):
                 if d.get("nota"):
                     NotaOrden.objects.create(orden=ot, autor=p, tipo=NotaOrden.Tipo.CIERRE, texto=d["nota"], creada=fin)
                 for desc, monto, comprobante in f.gastos():
-                    GastoOrden.objects.create(orden=ot, tecnico=p, fecha=hoy, descripcion=desc, monto=monto,
-                                              comprobante=comprobante or "")
+                    GastoOrden.objects.create(orden=ot, intento=visita, tecnico=p, fecha=hoy, descripcion=desc,
+                                              monto=monto, comprobante=comprobante or "")
                 from inventario.models import EquipoRetirado
                 series = [x.strip() for x in re.split(r"[,;\s]+", d["series_retiradas"] or "") if x.strip()]
                 if not series and ot.tipo.codigo == "RET":
                     series = ["(sin informar)"]
                 for serie in series:
-                    EquipoRetirado.objects.create(orden=ot, tecnico=p, numero_serie=serie[:60], fecha_retiro=hoy)
+                    EquipoRetirado.objects.create(orden=ot, intento=visita, tecnico=p, numero_serie=serie[:60],
+                                                  fecha_retiro=hoy)
                 if series:
                     avisos.append(f"Tenés {len(series)} equipo(s) retirado(s) para entregar en el depósito.")
                 for material, cantidad in f.materiales():
-                    if not consumir(p, ot, material, cantidad, hoy):
+                    if not consumir(p, ot, material, cantidad, hoy, intento=visita):
                         avisos.append(f"{material.nombre}: usaste más de lo que figuraba a tu cargo. Avisale a tu supervisor.")
             for a in avisos:
                 messages.warning(request, a)

@@ -55,7 +55,7 @@ def entregar(tecnico, material, cantidad, fecha: date | None = None, pedido=None
 
 
 @transaction.atomic
-def consumir(tecnico, orden, material, cantidad, fecha: date | None = None) -> bool:
+def consumir(tecnico, orden, material, cantidad, fecha: date | None = None, intento=None) -> bool:
     """Material usado en una orden: se descuenta del stock del técnico.
 
     Devuelve False si el técnico no tenía suficiente (queda saldo negativo y se avisa:
@@ -64,9 +64,9 @@ def consumir(tecnico, orden, material, cantidad, fecha: date | None = None) -> b
     cantidad = Decimal(cantidad)
     alcanzaba = saldo(tecnico, material) >= cantidad
     MovimientoStockTecnico.objects.create(tecnico=tecnico, material=material, fecha=fecha, tipo=T.CONSUMO,
-                                          cantidad=-cantidad, orden=orden)
+                                          cantidad=-cantidad, orden=orden, intento=intento)
     # Registro del consumo para los indicadores (no toca los lotes del depósito: ya salieron en la entrega)
-    Salida.objects.create(material=material, fecha=fecha, cantidad=cantidad, tecnico=tecnico, orden=orden,
+    Salida.objects.create(material=material, fecha=fecha, cantidad=cantidad, tecnico=tecnico, orden=orden, intento=intento,
                           motivo=Salida.Motivo.CONSUMO, costo_total=cantidad * material.costo_unitario,
                           observaciones="Del stock del técnico")
     return alcanzaba

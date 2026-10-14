@@ -33,6 +33,10 @@ class InformeControl(models.Model):
     desvio_detectado = models.BooleanField(default=False)
     descripcion = models.TextField(blank=True)
     foto = models.FileField(upload_to="informes/%Y/%m/", blank=True)
+    revision_visita = models.CharField(
+        "Resultado de la revisión de la visita", max_length=12, blank=True,
+        choices=[("aprobada", "Trabajo aprobado"), ("rechazada", "Trabajo rechazado")],
+        help_text="Si se controló una orden: queda como revisión técnica de esa visita (no depende del puntaje).")
     latitud = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitud = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
 
@@ -43,6 +47,16 @@ class InformeControl(models.Model):
 
     def __str__(self):
         return f"{self.fecha} {self.supervisor.apellido} → {self.tecnico.apellido}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.orden_id and self.revision_visita:
+            # Revisión técnica de la última visita de esa orden (estado propio, distinto del cierre)
+            from operaciones.models import Intento
+            it = Intento.objects.filter(orden_id=self.orden_id).order_by("-numero").first()
+            if it:
+                Intento.objects.filter(pk=it.pk).update(revision_tecnica=self.revision_visita,
+                                                        revisado_por_id=self.supervisor_id)
 
     @property
     def calidad_informe(self) -> int:

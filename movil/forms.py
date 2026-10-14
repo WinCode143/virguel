@@ -218,7 +218,7 @@ class EncuestaSemanalForm(forms.ModelForm):
 class InformeForm(forms.ModelForm):
     class Meta:
         model = InformeControl
-        fields = ["tecnico", "orden", "tipo", "puntaje", "desvio_detectado", "descripcion", "foto",
+        fields = ["tecnico", "orden", "revision_visita", "tipo", "puntaje", "desvio_detectado", "descripcion", "foto",
                   "latitud", "longitud"]
         labels = {"puntaje": "Puntaje del trabajo (1 = muy mal, 5 = excelente)",
                   "desvio_detectado": "Detecté un desvío / problema",

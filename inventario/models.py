@@ -98,6 +98,8 @@ class Salida(models.Model):
                                 related_name="salidas_material")
     orden = models.ForeignKey(OrdenTrabajo, null=True, blank=True, on_delete=models.SET_NULL,
                               related_name="consumos")
+    intento = models.ForeignKey("operaciones.Intento", null=True, blank=True, on_delete=models.SET_NULL,
+                                related_name="consumos", help_text="Visita en la que se usó.")
     costo_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal("0"), editable=False)
     observaciones = models.CharField(max_length=200, blank=True)
 
@@ -201,6 +203,8 @@ class MovimientoStockTecnico(models.Model):
     tipo = models.CharField(max_length=12, choices=Tipo.choices)
     cantidad = models.DecimalField(max_digits=12, decimal_places=2, help_text="Positivo entra, negativo sale.")
     orden = models.ForeignKey(OrdenTrabajo, null=True, blank=True, on_delete=models.SET_NULL)
+    intento = models.ForeignKey("operaciones.Intento", null=True, blank=True, on_delete=models.SET_NULL,
+                                related_name="+")
     pedido = models.ForeignKey("PedidoMaterial", null=True, blank=True, on_delete=models.SET_NULL)
     salida = models.ForeignKey(Salida, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
                                help_text="Entrega: salida del depósito (con los lotes de origen).")
@@ -265,6 +269,8 @@ class EquipoRetirado(models.Model):
         EXTRAVIADO = "extraviado", "Extraviado"
 
     orden = models.ForeignKey(OrdenTrabajo, null=True, blank=True, on_delete=models.SET_NULL, related_name="equipos_retirados")
+    intento = models.ForeignKey("operaciones.Intento", null=True, blank=True, on_delete=models.SET_NULL,
+                                related_name="equipos_retirados")
     tecnico = models.ForeignKey(Persona, on_delete=models.PROTECT, related_name="equipos_retirados")
     numero_serie = models.CharField(max_length=60)
     material = models.ForeignKey(Material, null=True, blank=True, on_delete=models.SET_NULL,

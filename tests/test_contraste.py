@@ -409,3 +409,67 @@ class FormacionTests(TestCase):
                         decision="no_cumplido")
         with self.assertRaises(ValidationError):
             pl.full_clean()
+
+
+class EvidenciaPorVisitaTests(TestCase):
+    """B06/B07: consumos y evidencias pertenecen a la visita; revisión y aceptación son estados propios."""
+
+    def setUp(self):
+        from inventario.models import LoteIngreso, Material
+        from inventario.stock_tecnico import entregar
+        from operaciones.models import OrdenTrabajo, TarifaClaro, TipoTarea
+        self.sup = persona("S1", rol="supervisor", usuario=User.objects.create_user("sup", password="x"))
+        self.t = persona("T1", supervisor=self.sup, usuario=User.objects.create_user("tec", password="x"))
+        self.tipo = TipoTarea.objects.create(codigo="I", nombre="Inst")
+        TarifaClaro.objects.create(tipo_tarea=self.tipo, precio=Decimal("100"), vigente_desde=HOY - timedelta(days=99))
+        self.m = Material.objects.create(codigo="C", nombre="Cable", costo_unitario=Decimal("2"))
+        LoteIngreso.objects.create(material=self.m, cantidad=100, origen="apertura")
+        entregar(self.t, self.m, 20)
+        self.ot = OrdenTrabajo.objects.create(numero="1", tipo=self.tipo, tecnico=self.t, estado="asignada")
+
+    def test_cierre_liga_consumo_y_evidencia_a_la_visita(self):
+        from inventario.models import Salida
+        self.client.force_login(self.t.usuario)
+        self.client.post(f"/app/orden/{self.ot.id}/cierre/", {
+            "resultado": "completada", "material_1": self.m.id, "cantidad_1": "3", "series_instaladas": "S123",
+            "conforme_nombre": "Ana", "gasto_desc_1": "Tarugos", "gasto_monto_1": "500"})
+        it = self.ot.intentos.get()
+        self.assertEqual((it.series_instaladas, it.conforme.startswith("Ana")), ("S123", True))
+        self.assertEqual(Salida.objects.get(motivo="consumo").intento_id, it.id)
+
+    def test_revision_rechazada_no_se_estima_como_cobrable(self):
+        from finanzas.liquidacion_claro import calcular
+        from supervision.models import InformeControl
+        self.ot.estado, self.ot.fecha_ejecucion = "completada", HOY
+        self.ot.save()
+        mes = HOY.replace(day=1)
+        self.assertEqual(calcular(mes)["bruto"], Decimal("100"))
+        InformeControl.objects.create(supervisor=self.sup, tecnico=self.t, orden=self.ot, puntaje=2,
+                                      desvio_detectado=True, revision_visita="rechazada")
+        it = self.ot.intentos.get()
+        self.assertEqual((it.resultado, it.revision_tecnica), ("completada", "rechazada"))  # conserva ambas
+        c = calcular(mes)
+        self.assertEqual((c["bruto"], c["excluidas"]), (Decimal("0"), 1))
+
+
+class CuadrillasTests(TestCase):
+    """B03: dos personas en una visita → una resolución, dos participaciones; cambiar el equipo no
+    reescribe la visita anterior."""
+
+    def test_participaciones(self):
+        from operaciones.models import Cuadrilla, MiembroCuadrilla, OrdenTrabajo, TipoTarea
+        a, b, c = persona("TA"), persona("TB"), persona("TC")
+        cu = Cuadrilla.objects.create(nombre="Norte 1")
+        MiembroCuadrilla.objects.create(cuadrilla=cu, persona=a, desde=HOY - timedelta(days=30))
+        mb = MiembroCuadrilla.objects.create(cuadrilla=cu, persona=b, funcion="ayudante", desde=HOY - timedelta(days=30))
+        ot = OrdenTrabajo.objects.create(numero="1", tipo=TipoTarea.objects.create(codigo="I", nombre="I"),
+                                         tecnico=a, estado="completada", fecha_ejecucion=HOY - timedelta(days=1))
+        it = ot.intentos.get()
+        self.assertEqual(OrdenTrabajo.objects.count(), 1)
+        self.assertEqual(sorted(it.participantes.values_list("persona__legajo", "funcion")),
+                         [("TA", "ejecutor"), ("TB", "ayudante")])
+        # cambia el equipo: TB sale, entra TC; la visita anterior no cambia
+        mb.hasta = HOY - timedelta(days=1)
+        mb.save()
+        MiembroCuadrilla.objects.create(cuadrilla=cu, persona=c, funcion="ayudante", desde=HOY)
+        self.assertEqual(sorted(it.participantes.values_list("persona__legajo", flat=True)), ["TA", "TB"])
