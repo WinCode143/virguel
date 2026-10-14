@@ -13,11 +13,13 @@
   {% include "tablero/_grafico.html" with id="g-costo" datos=g_costo titulo="Costo mensual de siniestros" %}
 </div>
 <div class="card"><h2>Siniestros abiertos y acción recomendada</h2><div class="tabla-scroll"><table>
-<thead><tr><th>N°</th><th>Fecha</th><th>Tipo</th><th>Gravedad</th><th>Técnico (vinculado)</th><th>Atribución</th><th>Estado</th><th class="num">Costo est.</th><th>Próximo paso</th></tr></thead>
-<tbody>{% for s in abiertos %}<tr><td><a href="{% url 'admin:incidentes_siniestro_change' s.id %}">{{ s.numero }}</a></td><td>{{ s.fecha|date:"d/m/Y" }}</td><td>{{ s.get_tipo_display }}</td>
+<thead><tr><th>N°</th><th>Fecha</th><th>Tipo</th><th>Gravedad</th><th>Técnico (vinculado)</th><th>Atribución</th><th>Estado</th><th class="num">Costo est.</th><th>Próximo plazo</th><th>Próximo paso</th></tr></thead>
+<tbody>{% for s in abiertos %}<tr><td><a href="{% url 'tablero:incidente' s.id %}">{{ s.numero }}</a></td><td>{{ s.fecha|date:"d/m/Y" }}</td><td>{{ s.get_tipo_display }}</td>
 <td><span class="estado {% if s.gravedad == 'critica' %}critico{% elif s.gravedad == 'grave' %}aviso{% else %}info{% endif %}">{{ s.get_gravedad_display }}</span></td>
-<td>{{ s.tecnico.apellido|default:"—" }}</td><td><span class="estado {% if s.atribucion == 'confirmada' %}critico{% elif s.atribucion == 'descartada' %}ok{% else %}info{% endif %}">{{ s.get_atribucion_display }}</span></td><td>{{ s.get_estado_display }}</td><td class="num">{{ s.costo_estimado|pesos }}</td><td style="font-size:.85rem">{{ s.recomendacion_legal }}</td></tr>
-{% empty %}<tr><td colspan="8" class="muted">No hay siniestros abiertos.</td></tr>{% endfor %}</tbody></table></div></div>
+<td>{{ s.tecnico.apellido|default:"—" }}</td><td><span class="estado {% if s.atribucion == 'confirmada' %}critico{% elif s.atribucion == 'descartada' %}ok{% else %}info{% endif %}">{{ s.get_atribucion_display }}</span></td><td>{{ s.get_estado_display }}</td><td class="num">{{ s.costo_estimado|pesos }}</td>
+<td style="font-size:.85rem">{% with a=s.plazo %}{% if a %}{{ a.vence|date:"d/m" }} {{ a.get_tipo_display|lower }}{% if a.vencida %} <span class="estado critico">vencido</span>{% endif %}{% else %}—{% endif %}{% endwith %}</td>
+<td style="font-size:.85rem">{{ s.recomendacion_legal }}</td></tr>
+{% empty %}<tr><td colspan="10" class="muted">No hay siniestros abiertos.</td></tr>{% endfor %}</tbody></table></div></div>
 <div class="grid g2">
   <div class="card"><h2>Por tipo (12 meses)</h2><table><thead><tr><th>Tipo</th><th class="num">Cantidad</th><th class="num">Costo real</th></tr></thead>
   <tbody>{% for t in tipos %}<tr><td>{{ t.nombre }}</td><td class="num">{{ t.n }}</td><td class="num">{{ t.c|pesos }}</td></tr>{% endfor %}</tbody></table></div>

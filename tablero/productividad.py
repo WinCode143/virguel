@@ -189,3 +189,65 @@ def general(request):
         "ind_tec": ind_tec, "ind_sup": ind_sup, "problemas": problemas, "equipos": equipos, "zonas": zonas,
         "mejores": con_ipt[:5], "peores": con_ipt[-5:][::-1], "g_evol": g_evol, "g_dist": g_dist, "g_eq": g_eq,
         "g_ind": g_ind})
+
+
+def _rangos(valores):
+    orden = sorted(range(len(valores)), key=lambda i: -valores[i])
+    r = [0] * len(valores)
+    for pos, i in enumerate(orden, 1):
+        r[i] = pos
+    return r
+
+
+def _spearman(a, b):
+    n = len(a)
+    if n < 3:
+        return None
+    ra, rb = _rangos(a), _rangos(b)
+    return 1 - 6 * sum((x - y) ** 2 for x, y in zip(ra, rb)) / (n * (n * n - 1))
+
+
+@requiere_rol(GERENCIA)
+def calibrar(request):
+    """Simulador de pesos (contraste B26): recalcula el índice con los pesos propuestos, SIN guardarlos, y
+    muestra cuánto cambia el orden de las personas y qué indicadores tienen datos suficientes para pesar.
+    Sirve para acordar los pesos con la empresa antes de cambiarlos en «Metas y semáforos»."""
+    rol = request.GET.get("rol", "tecnico") if request.GET.get("rol") in ("tecnico", "supervisor") else "tecnico"
+    dias = _dias(request)
+    tbs = tableros_tecnicos(dias=dias) if rol == "tecnico" else tableros_supervisores(dias=dias)
+    inds = list(Indicador.objects.filter(rol=rol, activo=True, tipo="calculado").order_by("orden"))
+    propuesto = {}
+    for i in inds:
+        try:
+            propuesto[i.codigo] = max(0, min(100, int(request.GET.get(f"peso_{i.codigo}", i.peso))))
+        except ValueError:
+            propuesto[i.codigo] = i.peso
+
+    def indice(tb, pesos):
+        con = [(m.puntos, pesos.get(m.indicador.codigo, 0)) for m in tb.mediciones if m.puntos is not None]
+        total = sum(p for _, p in con)
+        return sum(v * p for v, p in con) / total if total else None
+
+    actuales = {i.codigo: i.peso for i in inds}
+    filas = []
+    for tb in tbs:
+        a, b = indice(tb, actuales), indice(tb, propuesto)
+        if a is not None and b is not None:
+            filas.append({"persona": tb.persona, "actual": a, "propuesto": b})
+    for f, ra, rb in zip(filas, _rangos([f["actual"] for f in filas]), _rangos([f["propuesto"] for f in filas])):
+        f["pos_actual"], f["pos_propuesta"], f["salto"] = ra, rb, ra - rb
+    cobertura = []
+    for i in inds:
+        pts = [m.puntos for tb in tbs for m in tb.mediciones if m.indicador.codigo == i.codigo and m.puntos is not None]
+        media = sum(pts) / len(pts) if pts else None
+        disp = (sum((p - media) ** 2 for p in pts) / len(pts)) ** .5 if pts else None
+        cobertura.append({"i": i, "propuesto": propuesto[i.codigo], "con_dato": len(pts), "total": len(tbs),
+                          "media": media, "dispersion": disp,
+                          "aviso": "pocos datos" if len(pts) < max(3, len(tbs) // 2) else
+                          ("no distingue" if disp is not None and disp < 5 else "")})
+    cambio = request.GET and any(propuesto[k] != actuales[k] for k in actuales)
+    return render(request, "tablero/calibrar.html", {
+        "rol": rol, "dias": dias, "cobertura": cobertura, "cambio": cambio,
+        "filas": sorted(filas, key=lambda f: -abs(f["salto"]))[:20] if cambio else [],
+        "spearman": _spearman([f["actual"] for f in filas], [f["propuesto"] for f in filas]) if cambio else None,
+        "n": len(filas)})

@@ -129,6 +129,10 @@ class Parametros(models.Model):
     dias_cobertura_stock_min = models.PositiveIntegerField(
         "Días mínimos de cobertura de stock", default=7,
         help_text="Si el stock alcanza para menos días que esto, se alerta faltante.")
+    datos_demo = models.BooleanField(
+        "Datos de demostración", default=False,
+        help_text="Lo enciende el generador de demo: todas las pantallas avisan que los datos son inventados. "
+                  "Apagarlo al cargar los datos reales de la empresa.")
 
     class Meta:
         verbose_name = "Parámetros del sistema"

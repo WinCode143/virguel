@@ -21,6 +21,7 @@
     {% if vista == "movil:inicio" %}<form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="icono-btn" aria-label="Salir">{% icono 'salir' %}</button></form>{% endif %}
     {% endif %}
   </header>
+  {% if datos_demo %}<p class="aviso-demo" role="note"><b>Demo:</b> datos inventados para probar.</p>{% endif %}
   {% block contenido %}{% endblock %}
   {% if messages %}<ul class="mensajes" role="status">{% for m in messages %}<li class="{{ m.tags }}">{{ m }}</li>{% endfor %}</ul>{% endif %}
 </div>

@@ -1,0 +1,26 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Objetivos de supervisores · Virguel{% endblock %}
+{% block encabezado %}<h1>Objetivos de supervisores</h1><p class="sub">El supervisor reporta desde la app con su evidencia; acá gerencia lo verifica o lo rechaza. Sólo lo verificado cuenta para su puntaje, lo rechazado cuenta 0 y lo vencido sin reporte también cuenta 0.</p>{% endblock %}
+{% block contenido %}
+<div class="filtros">{% for k, nombre, n in estados %}<a class="btn {% if k != estado %}sec{% endif %}" href="?estado={{ k }}">{{ nombre }}{% if n is not None %} ({{ n }}){% endif %}</a>{% endfor %}</div>
+<p class="muted" style="font-size:.85rem">Los conteos son de los últimos 60 días.</p>
+<div class="card"><div class="tabla-scroll"><table>
+<thead><tr><th>Fecha</th><th>Supervisor</th><th>Objetivo</th><th>Se acepta si</th><th class="num">Meta / resultado</th><th>Evidencia reportada</th><th>Estado</th><th></th></tr></thead>
+<tbody>{% for t in tareas %}<tr>
+  <td>{{ t.fecha|date:"d/m/Y" }}</td><td>{{ t.supervisor.apellido }}, {{ t.supervisor.nombre }}</td>
+  <td>{{ t.descripcion }}{% if t.historial_meta %}<br><span class="muted" style="font-size:.8rem">meta cambiada {{ t.historial_meta|length }} vez/veces</span>{% endif %}</td>
+  <td style="font-size:.85rem">{{ t.criterio_aceptacion|default:"—" }}</td>
+  <td class="num">{% if t.meta %}{{ t.resultado|default:"—" }} / {{ t.meta }}{% else %}{{ t.get_estado_display }}{% endif %}</td>
+  <td style="font-size:.85rem">{{ t.evidencia|default:"—" }}</td>
+  <td><span class="estado {% if t.verificacion == 'verificado' %}ok{% elif t.verificacion == 'rechazado' %}critico{% elif t.verificacion == 'reportado' %}aviso{% else %}info{% endif %}">{{ t.get_verificacion_display }}</span>
+    {% if t.verificado_por %}<br><span class="muted" style="font-size:.78rem">{{ t.verificado_por.apellido }} · {{ t.fecha_verificacion|date:"d/m" }}</span>{% endif %}</td>
+  <td>{% if t.verificacion == 'reportado' %}<form method="post" style="display:flex;gap:.3rem;flex-wrap:wrap">{% csrf_token %}<input type="hidden" name="tarea" value="{{ t.id }}">
+    <input name="nota" placeholder="Nota (opcional)" style="max-width:9rem">
+    <button class="btn" name="accion" value="verificado">Verificar</button><button class="btn sec" name="accion" value="rechazado">Rechazar</button></form>{% endif %}</td>
+</tr>{% empty %}<tr><td colspan="8" class="muted">No hay objetivos en este estado.</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="card"><h2>Asignar un objetivo</h2>
+<form method="post">{% csrf_token %}<input type="hidden" name="accion" value="crear">
+{% include "tablero/_form_campos.html" %}
+<button class="btn" style="margin-top:1rem">Asignar</button></form>
+<p class="muted" style="font-size:.85rem">El criterio de aceptación es obligatorio: dice qué evidencia hace falta para darlo por cumplido.</p></div>
+{% endblock %}

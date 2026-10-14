@@ -20,4 +20,13 @@
 <td>{% if f.var is None %}<span class="estado info">Sin datos</span>{% elif f.var >= 10 %}<span class="estado ok">Mejoró</span>{% elif f.var > -5 %}<span class="estado aviso">Sin cambio</span>{% else %}<span class="estado critico">Empeoró</span>{% endif %}</td></tr>
 {% empty %}<tr><td colspan="7" class="muted">Sin capacitaciones registradas en los últimos 6 meses.</td></tr>{% endfor %}</tbody></table></div></div>
 <p><a class="btn sec" href="{% url 'admin:capacitacion_capacitacion_add' %}">Registrar capacitación</a></p>
+<div class="card"><h2>Requisitos para asignar cada tipo de trabajo</h2>
+{% if datos_demo %}<p class="aviso-demo">Estos requisitos son <b>inventados</b> para la demo: la empresa debe definir qué competencias (y con qué nivel) y qué EPP exige cada trabajo.</p>{% endif %}
+<div class="tabla-scroll"><table><thead><tr><th>Tipo de trabajo</th><th>Competencias (nivel mínimo)</th><th>EPP obligatorio</th><th class="num">Habilitados</th><th class="num">Con tutela</th><th class="num">No pueden</th></tr></thead>
+<tbody>{% for f in requisitos %}<tr><td>{{ f.tipo.nombre }}</td>
+<td>{% for r in f.comps %}{{ r.competencia }} ({{ r.nivel_minimo }}{% if r.permite_tutelada %}, admite tutela{% endif %}){% if not forloop.last %}<br>{% endif %}{% empty %}—{% endfor %}</td>
+<td>{% for e in f.epps %}{{ e.elemento.nombre }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</td>
+<td class="num">{{ f.habilitados }}</td><td class="num">{{ f.tutelados }}</td><td class="num">{% if f.bloqueados %}<span class="estado aviso">{{ f.bloqueados }}</span>{% else %}0{% endif %}</td></tr>
+{% empty %}<tr><td colspan="6" class="muted">No hay requisitos cargados: la agenda no restringe por competencias ni EPP.</td></tr>{% endfor %}</tbody></table></div>
+<p class="muted" style="font-size:.82rem">La agenda automática no asigna un trabajo a quien no está habilitado o le falta EPP vigente, y dice por qué.</p></div>
 {% endblock %}

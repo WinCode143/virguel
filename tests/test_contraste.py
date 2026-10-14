@@ -905,3 +905,91 @@ class PreparacionVisitaTests(TestCase):
         self.assertEqual(Intento.objects.count(), n_intentos)
         self.client.force_login(t.usuario)
         self.assertContains(self.client.get(f"/app/orden/{ot.pk}/"), "Preparar la visita")
+
+
+class PantallasCalidadTests(TestCase):
+    """Objetivos, plantillas e incidentes se gestionan desde pantallas propias, no sólo desde el administrador."""
+
+    def setUp(self):
+        self.g = User.objects.create_user("g", password="x")
+        self.g.groups.add(Group.objects.create(name="Gerencia"))
+        self.client.force_login(self.g)
+
+    def test_verificar_objetivo(self):
+        from supervision.models import TareaSupervisor
+        s = persona("S1", rol="supervisor")
+        t = TareaSupervisor.objects.create(supervisor=s, fecha=HOY, descripcion="Controlar 3", meta=3, resultado=3,
+                                           estado="cumplida", verificacion="reportado", evidencia="informes 1-3")
+        r = self.client.get("/tablero/objetivos/")
+        self.assertContains(r, "informes 1-3")
+        self.client.post("/tablero/objetivos/", {"tarea": t.pk, "accion": "verificado", "nota": "ok"})
+        t.refresh_from_db()
+        self.assertEqual(t.verificacion, "verificado")
+        self.client.post("/tablero/objetivos/", {"accion": "crear", "supervisor": s.pk, "fecha": HOY.isoformat(),
+                                                 "descripcion": "Revisar EPP", "criterio_aceptacion": "Planilla firmada"})
+        self.assertTrue(TareaSupervisor.objects.filter(descripcion="Revisar EPP").exists())
+
+    def test_plantilla_versionada(self):
+        from supervision.models import InformeControl, PlantillaInspeccion
+        self.client.post("/tablero/plantillas/", {"accion": "nueva", "nombre": "FTTH", "tipo": "calidad"})
+        pl = PlantillaInspeccion.objects.get(nombre="FTTH")
+        self.client.post(f"/tablero/plantillas/{pl.pk}/", {"accion": "agregar", "orden": 1, "punto": "Potencia",
+                                                          "criterio": "≥ -25 dBm", "defecto": "Potencia baja",
+                                                          "critico": "on"})
+        self.assertEqual(pl.items.count(), 1)
+        s, t = persona("S1", rol="supervisor"), persona("T1")
+        InformeControl.objects.create(supervisor=s, tecnico=t, fecha=HOY, puntaje=4, plantilla=pl)
+        # usada: no se edita, se versiona
+        self.client.post(f"/tablero/plantillas/{pl.pk}/", {"accion": "quitar", "item": pl.items.get().pk})
+        self.assertEqual(pl.items.count(), 1)
+        self.client.post(f"/tablero/plantillas/{pl.pk}/", {"accion": "version"})
+        nueva = PlantillaInspeccion.objects.get(nombre="FTTH", version=2)
+        self.assertTrue(nueva.vigente)
+        self.assertEqual(nueva.items.count(), 1)
+        pl.refresh_from_db()
+        self.assertFalse(pl.vigente)
+        self.assertContains(self.client.get("/tablero/plantillas/"), "FTTH")
+
+    def test_expediente_incidente(self):
+        from incidentes.models import Siniestro
+        sin = Siniestro.objects.create(numero="S-9", tipo="otro", descripcion="x")
+        self.client.post(f"/tablero/incidentes/{sin.pk}/", {
+            "fecha": HOY.isoformat(), "tipo": "aseguradora", "descripcion": "Presentar a la aseguradora",
+            "vence": (HOY - timedelta(days=1)).isoformat()})
+        a = sin.actuaciones.get()
+        r = self.client.get(f"/tablero/incidentes/{sin.pk}/")
+        self.assertContains(r, "vencido")
+        self.assertContains(self.client.get("/tablero/incidentes/"), "vencido")
+        self.client.post(f"/tablero/incidentes/{sin.pk}/", {"accion": "cumplida", "actuacion": a.pk})
+        a.refresh_from_db()
+        self.assertTrue(a.cumplida)
+
+    def test_aviso_demo(self):
+        from core.models import Parametros
+        self.assertNotContains(self.client.get("/tablero/plantillas/"), "Datos de demostración")
+        p = Parametros.actual()
+        p.datos_demo = True
+        p.save()
+        self.assertContains(self.client.get("/tablero/plantillas/"), "Datos de demostración")
+
+
+class CalibracionPesosTests(TestCase):
+    """B26: simular pesos no guarda nada y muestra cómo cambia el orden."""
+
+    def test_simular(self):
+        from core.models import Indicador
+        g = User.objects.create_user("g", password="x")
+        g.groups.add(Group.objects.create(name="Gerencia"))
+        self.client.force_login(g)
+        antes = dict(Indicador.objects.values_list("codigo", "peso"))
+        r = self.client.get("/tablero/productividad/calibrar/")
+        self.assertContains(r, "Eficiencia de la jornada")
+        r = self.client.get("/tablero/productividad/calibrar/?rol=tecnico&peso_eficiencia_jornada=0")
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.context["cambio"])
+        self.assertEqual(dict(Indicador.objects.values_list("codigo", "peso")), antes)
+
+    def test_spearman(self):
+        from tablero.productividad import _spearman
+        self.assertEqual(_spearman([3, 2, 1], [3, 2, 1]), 1)
+        self.assertEqual(_spearman([3, 2, 1], [1, 2, 3]), -1)

@@ -340,7 +340,43 @@ def capacitacion(request):
         filas.append({"p": p, "antes": antes, "despues": despues, "var": var})
     vars_ = [f["var"] for f in filas if f["var"] is not None]
     return render(request, "tablero/capacitacion.html", {
-        "pendientes": pendientes, "filas": filas[:60], "mejora_prom": sum(vars_) / len(vars_) if vars_ else None})
+        "pendientes": pendientes, "filas": filas[:60], "mejora_prom": sum(vars_) / len(vars_) if vars_ else None,
+        "requisitos": _requisitos_por_tarea(_equipo(request), hoy)})
+
+
+def _requisitos_por_tarea(equipo, hoy):
+    """Qué competencias y EPP exige cada tipo de trabajo y cuántos del equipo lo cumplen hoy (contraste B16/B17)."""
+    from capacitacion.models import EvaluacionCompetencia, RequisitoCompetencia
+    from herramientas.models import Asignacion, RequisitoEPP
+    from operaciones.models import TipoTarea
+    ids = [p.id for p in equipo]
+    nivel = {}
+    for pid, cid, n, vence in (EvaluacionCompetencia.objects.filter(persona_id__in=ids).order_by("fecha")
+                               .values_list("persona_id", "competencia_id", "nivel", "vence")):
+        if vence is None or vence >= hoy:
+            nivel[(pid, cid)] = n
+    epp = set(Asignacion.objects.filter(persona_id__in=ids, estado="en_uso", fecha_entrega__lte=hoy)
+              .filter(Q(fecha_vencimiento__isnull=True) | Q(fecha_vencimiento__gte=hoy))
+              .values_list("persona_id", "elemento_id"))
+    filas = []
+    for tipo in TipoTarea.objects.order_by("nombre"):
+        comps = list(RequisitoCompetencia.objects.filter(tipo_tarea=tipo).select_related("competencia"))
+        epps = list(RequisitoEPP.objects.filter(tipo_tarea=tipo).select_related("elemento"))
+        if not comps and not epps:
+            continue
+        habilitados = tutelados = 0
+        for pid in ids:
+            falta_epp = any((pid, e.elemento_id) not in epp for e in epps)
+            faltan = [r for r in comps if nivel.get((pid, r.competencia_id), 0) < r.nivel_minimo]
+            if falta_epp or any(not (r.permite_tutelada and nivel.get((pid, r.competencia_id), 0) >= 1) for r in faltan):
+                continue
+            if faltan:
+                tutelados += 1
+            else:
+                habilitados += 1
+        filas.append({"tipo": tipo, "comps": comps, "epps": epps, "habilitados": habilitados, "tutelados": tutelados,
+                      "bloqueados": len(ids) - habilitados - tutelados})
+    return filas
 
 
 # ---------------------------------------------------------------- 2. supervisores
@@ -395,7 +431,10 @@ def incidentes(request):
     tipos = qs.filter(fecha__gte=desde).values("tipo").annotate(n=Count("id"), c=Sum("costo_real")).order_by("-n")
     nombres_tipo = dict(Siniestro.Tipo.choices)
     tipos = [{**t, "nombre": nombres_tipo.get(t["tipo"], t["tipo"])} for t in tipos]
-    abiertos = qs.exclude(estado=Siniestro.Estado.CERRADO).select_related("tecnico").order_by("fecha")
+    from incidentes.models import proximo_plazo
+    abiertos = list(qs.exclude(estado=Siniestro.Estado.CERRADO).select_related("tecnico").order_by("fecha"))
+    for s in abiertos:
+        s.plazo = proximo_plazo(s)
     reincidentes = (qs.filter(fecha__gte=hoy - timedelta(days=180), tecnico__isnull=False)
                     .values("tecnico__id", "tecnico__apellido", "tecnico__nombre").annotate(n=Count("id"))
                     .filter(n__gte=2).order_by("-n"))
