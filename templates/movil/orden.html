@@ -22,6 +22,17 @@
 {% else %}<p class="muted">Sin cliente asociado.</p>{% endif %}
 </div>
 
+{% if prep %}<div class="card"><h2>Preparar la visita</h2>
+{% for nivel, texto, fuente in prep.avisos %}<p style="margin:.3rem 0;padding-left:.5rem;border-left:3px solid var(--{{ nivel }}, #8a8a8a)">{{ texto }}<br><span class="muted" style="font-size:.78rem">Fuente: {{ fuente }}</span></p>
+{% empty %}<p class="muted" style="margin:.2rem 0">Sin avisos para esta visita.</p>{% endfor %}
+{% if prep.materiales %}<details style="margin-top:.5rem"><summary>Qué llevar ({{ prep.materiales|length }})</summary>
+<ul style="margin:.3rem 0;padding-left:1.1rem;font-size:.9rem">{% for m in prep.materiales %}<li>{{ m.material.nombre }}: {{ m.necesito|floatformat:"-2" }}{% if m.estimado %} (estimado){% endif %} · tenés {{ m.tengo|floatformat:"-2" }}{% if m.reservado %} · reservado {{ m.reservado|floatformat:"-2" }}{% endif %}{% if m.falta %} · <b>falta {{ m.falta|floatformat:"-2" }}</b>{% endif %}</li>{% endfor %}</ul></details>{% endif %}
+{% if prep.visitas or prep.notas %}<details style="margin-top:.3rem"><summary>Antecedentes del cliente</summary>
+<ul style="margin:.3rem 0;padding-left:1.1rem;font-size:.9rem">{% for v in prep.visitas %}<li>{{ v.fecha|date:"d/m/y" }} · {{ v.orden.tipo }} · {{ v.get_resultado_display }}{% if v.motivo_no_resuelto %} ({{ v.get_motivo_no_resuelto_display }}){% endif %}{% if v.tecnico %} · {{ v.tecnico.apellido }}{% endif %}</li>{% endfor %}
+{% for n in prep.notas %}<li>Nota {{ n.creada|date:"d/m/y" }}{% if n.autor %} ({{ n.autor.apellido }}){% endif %}: {{ n.texto|truncatechars:90 }}</li>{% endfor %}</ul></details>
+{% elif prep.sin_antecedentes %}<p class="muted" style="font-size:.85rem;margin:.4rem 0 0">Sin visitas, notas ni incidentes previos en este cliente.</p>{% endif %}
+</div>{% endif %}
+
 <ul class="filas-nav">
   <li><a href="{% url 'movil:pedir' %}?orden={{ ot.id }}">{% icono 'carrito' %}<span class="txt"><b>LOM · Partes para esta llamada</b>
     <small>{% if pedidos %}{{ pedidos|length }} pedido{{ pedidos|length|pluralize }}: {{ pedidos.0.get_estado_display|lower }}{% else %}Pedir lo que lleva este trabajo{% endif %}</small></span>{% icono 'flecha-der' %}</a></li>

@@ -1,7 +1,7 @@
 from django.contrib import admin, messages
 
 from .models import (CompraEnCamino, DemandaComercial, EquipoRetirado, LoteIngreso, Material, MovimientoStockTecnico,
-                     PedidoItem, PedidoMaterial, RecetaMaterial, Salida)
+                     MovimientoUnidad, PedidoItem, PedidoMaterial, RecetaMaterial, ReservaMaterial, Salida, UnidadEquipo)
 from .services import StockInsuficiente, registrar_salida
 
 
@@ -52,7 +52,7 @@ class SalidaAdmin(admin.ModelAdmin):
 
 @admin.register(RecetaMaterial)
 class RecetaAdmin(admin.ModelAdmin):
-    list_display = ["tipo_tarea", "material", "cantidad"]
+    list_display = ["tipo_tarea", "material", "cantidad", "condicion"]
     list_filter = ["tipo_tarea"]
 
 
@@ -103,3 +103,57 @@ class CompraEnCaminoAdmin(admin.ModelAdmin):
     list_filter = ["recibida"]
     list_editable = ["recibida"]
     autocomplete_fields = ["material"]
+
+
+class MovimientoUnidadInline(admin.TabularInline):
+    model = MovimientoUnidad
+    extra = 0
+    can_delete = False
+    readonly_fields = ["fecha", "desde", "hacia", "custodio", "intento", "condicion", "motivo"]
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(UnidadEquipo)
+class UnidadEquipoAdmin(admin.ModelAdmin):
+    """Alta y consulta de equipos por serie. Los cambios de ubicación se registran como movimientos."""
+    list_display = ["numero_serie", "material", "propietario", "condicion", "ubicacion", "custodio", "cliente"]
+    list_filter = ["propietario", "condicion", "ubicacion", "material"]
+    search_fields = ["numero_serie"]
+    autocomplete_fields = ["material", "custodio"]
+    inlines = [MovimientoUnidadInline]
+    actions = ["marcar_funciona", "marcar_defectuoso"]
+
+    @admin.action(description="Revisado: funciona (vuelve al suministro)")
+    def marcar_funciona(self, request, queryset):
+        from .equipos import revisar
+        for u in queryset:
+            revisar(u, True, f"Revisado por {request.user}")
+
+    @admin.action(description="Revisado: defectuoso (fuera del suministro)")
+    def marcar_defectuoso(self, request, queryset):
+        from .equipos import revisar
+        for u in queryset:
+            revisar(u, False, f"Revisado por {request.user}")
+
+
+@admin.register(ReservaMaterial)
+class ReservaMaterialAdmin(admin.ModelAdmin):
+    list_display = ["material", "cantidad", "orden", "necesaria_para", "estado", "responsable"]
+    list_filter = ["estado"]
+    list_editable = ["estado"]
+    autocomplete_fields = ["material"]
+    raw_id_fields = ["orden"]
+
+    def save_model(self, request, obj, form, change):
+        if change:
+            return super().save_model(request, obj, form, change)
+        from django.core.exceptions import ValidationError
+
+        from .services import reservar
+        try:
+            nueva = reservar(obj.orden, obj.material, obj.cantidad, responsable=request.user.get_username())
+            obj.pk = nueva.pk
+        except ValidationError as e:
+            messages.error(request, " ".join(e.messages))

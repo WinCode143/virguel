@@ -1,6 +1,41 @@
 from django.contrib import admin
 
-from .models import AccionCorrectiva, EncuestaSemanal, EncuestaSupervisor, InformeControl, TareaSupervisor
+from django.utils import timezone
+
+from core.roles import persona_de
+
+from .models import (AccionCorrectiva, EncuestaSemanal, EncuestaSupervisor, InformeControl, ItemPlantilla,
+                     PlantillaInspeccion, ResultadoItem, TareaSupervisor)
+
+
+class ItemInline(admin.TabularInline):
+    model = ItemPlantilla
+    extra = 1
+
+
+@admin.register(PlantillaInspeccion)
+class PlantillaAdmin(admin.ModelAdmin):
+    list_display = ["nombre", "version", "tipo", "vigente", "creada"]
+    list_filter = ["vigente", "tipo"]
+    inlines = [ItemInline]
+    actions = ["nueva_version"]
+
+    @admin.action(description="Crear nueva versión (la actual deja de estar vigente)")
+    def nueva_version(self, request, queryset):
+        for pl in queryset:
+            items = list(pl.items.all())
+            ultima = PlantillaInspeccion.objects.filter(nombre=pl.nombre).order_by("-version").first()
+            PlantillaInspeccion.objects.filter(nombre=pl.nombre).update(vigente=False)
+            nueva = PlantillaInspeccion.objects.create(nombre=pl.nombre, tipo=pl.tipo, version=ultima.version + 1)
+            for i in items:
+                i.pk, i.plantilla = None, nueva
+                i.save()
+        self.message_user(request, "Versión nueva creada: editá sus puntos; los controles anteriores conservan la suya.")
+
+
+class ResultadoInline(admin.TabularInline):
+    model = ResultadoItem
+    extra = 0
 
 
 class AccionInline(admin.TabularInline):
@@ -12,14 +47,15 @@ class AccionInline(admin.TabularInline):
 
 @admin.register(InformeControl)
 class InformeAdmin(admin.ModelAdmin):
-    list_display = ["fecha", "supervisor", "tecnico", "tipo", "puntaje", "desvio_detectado", "calidad"]
-    list_filter = ["tipo", "desvio_detectado", "supervisor", "fecha"]
+    list_display = ["fecha", "supervisor", "tecnico", "tipo", "motivo_seleccion", "puntaje", "desvio_detectado",
+                    "calidad"]
+    list_filter = ["tipo", "motivo_seleccion", "desvio_detectado", "supervisor", "fecha"]
     search_fields = ["tecnico__apellido", "supervisor__apellido", "descripcion"]
     date_hierarchy = "fecha"
     autocomplete_fields = ["supervisor", "tecnico", "orden"]
-    inlines = [AccionInline]
+    inlines = [ResultadoInline, AccionInline]
 
-    @admin.display(description="Calidad del informe")
+    @admin.display(description="Completitud documental")
     def calidad(self, obj):
         return f"{obj.calidad_informe}/100"
 
@@ -34,10 +70,30 @@ class AccionAdmin(admin.ModelAdmin):
 
 @admin.register(TareaSupervisor)
 class TareaAdmin(admin.ModelAdmin):
-    list_display = ["fecha", "supervisor", "descripcion", "meta", "resultado", "estado"]
-    list_filter = ["estado", "supervisor", "fecha"]
-    list_editable = ["resultado", "estado"]
+    list_display = ["fecha", "supervisor", "descripcion", "criterio_aceptacion", "meta", "resultado", "estado",
+                    "verificacion", "evidencia"]
+    list_filter = ["verificacion", "estado", "supervisor", "fecha"]
     date_hierarchy = "fecha"
+    readonly_fields = ["verificado_por", "fecha_verificacion", "historial_meta"]
+    actions = ["verificar", "rechazar"]
+
+    def _verificar(self, request, queryset, estado):
+        n = 0
+        for t in queryset.exclude(verificacion="sin_reporte"):
+            if t.supervisor_id and persona_de(request.user) and persona_de(request.user).pk == t.supervisor_id:
+                continue  # nadie verifica su propio objetivo
+            t.verificacion, t.verificado_por, t.fecha_verificacion = estado, persona_de(request.user), timezone.now()
+            t.save()
+            n += 1
+        self.message_user(request, f"{n} objetivo(s) marcados como {estado}. Los sin reporte no se tocan.")
+
+    @admin.action(description="Verificar lo reportado (cuenta para el puntaje)")
+    def verificar(self, request, queryset):
+        self._verificar(request, queryset, "verificado")
+
+    @admin.action(description="Rechazar lo reportado (cuenta 0)")
+    def rechazar(self, request, queryset):
+        self._verificar(request, queryset, "rechazado")
 
 
 @admin.register(EncuestaSupervisor)

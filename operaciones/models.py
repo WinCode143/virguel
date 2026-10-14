@@ -13,9 +13,6 @@ class TipoTarea(models.Model):
         default=60, help_text="Tiempo estándar esperado para completar la tarea.")
     puede_requerir_decodificador = models.BooleanField(
         default=False, help_text="Si en esta tarea el cliente puede pedir decodificador para TV.")
-    precio_claro = models.DecimalField(
-        "Precio que paga Claro", max_digits=12, decimal_places=2, default=Decimal("0"),
-        help_text="Por orden completada (baremo). Se usa para calcular la liquidación esperada de Claro.")
     activo = models.BooleanField(default=True)
 
     class Meta:
@@ -48,6 +45,28 @@ class Jornada(models.Model):
 
     def __str__(self):
         return f"{self.fecha} - {self.tecnico}"
+
+
+class TarifaClaro(models.Model):
+    """Precio que paga Claro por orden completada de un tipo de tarea, con vigencia.
+
+    Cambiar una tarifa crea una nueva vigencia: el trabajo ya hecho se valoriza con la tarifa vigente
+    a su fecha de ejecución (no se revaloriza en silencio)."""
+
+    tipo_tarea = models.ForeignKey(TipoTarea, on_delete=models.CASCADE, related_name="tarifas")
+    precio = models.DecimalField(max_digits=12, decimal_places=2)
+    vigente_desde = models.DateField()
+    provisoria = models.BooleanField(default=True, help_text="Valor provisorio / de prueba hasta confirmarlo con Claro.")
+    fuente = models.CharField(max_length=120, blank=True, help_text="De dónde sale el valor (contrato, acta, prueba).")
+
+    class Meta:
+        ordering = ["tipo_tarea", "-vigente_desde"]
+        unique_together = [("tipo_tarea", "vigente_desde")]
+        verbose_name = "Tarifa de Claro"
+        verbose_name_plural = "Tarifas de Claro"
+
+    def __str__(self):
+        return f"{self.tipo_tarea}: ${self.precio} desde {self.vigente_desde:%d/%m/%Y}"
 
 
 class Atribucion(models.TextChoices):
@@ -98,6 +117,11 @@ class OrdenTrabajo(models.Model):
     estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.PENDIENTE, db_index=True)
     minutos_reales = models.PositiveIntegerField(null=True, blank=True)
     decodificador_solicitado = models.BooleanField(default=False)
+    equipos_requeridos = models.PositiveSmallIntegerField(
+        "Equipos que indica la orden", null=True, blank=True,
+        help_text="Cantidad conocida (p. ej. televisores/decos que pide Claro). Vacío = desconocido: se estima.")
+    requiere_recambio = models.BooleanField(null=True, blank=True,
+                                            help_text="Si la reparación necesita reemplazar el equipo (vacío = no se sabe).")
     decodificadores_instalados = models.PositiveSmallIntegerField(default=0)
     es_retrabajo = models.BooleanField(
         default=False, help_text="Visita para corregir un trabajo anterior mal hecho (indicador de calidad).")
@@ -148,6 +172,16 @@ class Intento(models.Model):
         FALLIDA = "fallida", "Fallida / no resuelta"
         REPROGRAMADA = "reprogramada", "Reprogramada"
 
+    class Revision(models.TextChoices):
+        SIN_REVISAR = "sin_revisar", "Sin revisión técnica"
+        APROBADA = "aprobada", "Revisión aprobada"
+        RECHAZADA = "rechazada", "Revisión rechazada"
+
+    class Aceptacion(models.TextChoices):
+        PENDIENTE = "pendiente", "Pendiente"
+        ACEPTADA = "aceptada", "Aceptada por Claro"
+        RECHAZADA = "rechazada", "Rechazada por Claro"
+
     orden = models.ForeignKey(OrdenTrabajo, on_delete=models.CASCADE, related_name="intentos")
     numero = models.PositiveSmallIntegerField(default=1)
     tecnico = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL, related_name="intentos")
@@ -164,6 +198,19 @@ class Intento(models.Model):
         help_text="La confirma el supervisor; si está vacía vale la del catálogo de motivos.")
     atribucion_confirmada_por = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL,
                                                   related_name="+")
+    # Evidencias del cierre (instantánea de esta visita)
+    series_instaladas = models.CharField(max_length=300, blank=True)
+    series_retiradas = models.CharField(max_length=300, blank=True)
+    foto = models.CharField(max_length=200, blank=True, help_text="Archivo de la foto del trabajo de esta visita.")
+    firma = models.CharField(max_length=200, blank=True)
+    conforme = models.CharField("Conformidad del cliente", max_length=200, blank=True)
+    lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    # Estados separados: finalizar la visita ≠ revisión técnica ≠ aceptación para liquidar
+    revision_tecnica = models.CharField(max_length=12, choices=Revision.choices, default=Revision.SIN_REVISAR)
+    revisado_por = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    aceptacion_claro = models.CharField("Aceptación de Claro", max_length=12, choices=Aceptacion.choices,
+                                        default=Aceptacion.PENDIENTE)
     creado = models.DateTimeField(default=timezone.now)
 
     class Meta:
@@ -174,6 +221,88 @@ class Intento(models.Model):
 
     def __str__(self):
         return f"{self.orden.numero} #{self.numero} {self.get_resultado_display()} ({self.fecha:%d/%m/%Y})"
+
+
+class Cuadrilla(models.Model):
+    """Equipo de trabajo de campo. Su composición cambia por período (MiembroCuadrilla); una visita
+    conserva quiénes participaron ese día aunque después cambie el equipo. Unipersonal es válido."""
+
+    nombre = models.CharField(max_length=80, unique=True)
+    activa = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["nombre"]
+        verbose_name_plural = "Cuadrillas"
+
+    def __str__(self):
+        return self.nombre
+
+    def miembros_en(self, fecha):
+        from django.db.models import Q
+        return self.miembros.filter(desde__lte=fecha).filter(Q(hasta__isnull=True) | Q(hasta__gte=fecha))
+
+
+class MiembroCuadrilla(models.Model):
+    class Funcion(models.TextChoices):
+        RESPONSABLE = "responsable", "Responsable"
+        AYUDANTE = "ayudante", "Ayudante"
+
+    cuadrilla = models.ForeignKey(Cuadrilla, on_delete=models.CASCADE, related_name="miembros")
+    persona = models.ForeignKey(Persona, on_delete=models.CASCADE, related_name="cuadrillas")
+    funcion = models.CharField(max_length=12, choices=Funcion.choices, default=Funcion.RESPONSABLE)
+    desde = models.DateField(default=timezone.localdate)
+    hasta = models.DateField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["cuadrilla", "-desde"]
+        verbose_name = "Integrante de cuadrilla (por período)"
+        verbose_name_plural = "Integrantes de cuadrillas (por período)"
+
+    def __str__(self):
+        return f"{self.persona} en {self.cuadrilla} ({self.get_funcion_display()})"
+
+
+class ParticipacionVisita(models.Model):
+    """Quiénes trabajaron en una visita y con qué función: una orden, varias contribuciones."""
+
+    class Funcion(models.TextChoices):
+        EJECUTOR = "ejecutor", "Ejecutor (responsable de la visita)"
+        AYUDANTE = "ayudante", "Ayudante"
+        TUTOR = "tutor", "Tutor (ejecución tutelada)"
+
+    intento = models.ForeignKey("Intento", on_delete=models.CASCADE, related_name="participantes")
+    persona = models.ForeignKey(Persona, on_delete=models.PROTECT, related_name="participaciones_visita")
+    funcion = models.CharField(max_length=10, choices=Funcion.choices, default=Funcion.EJECUTOR)
+    minutos = models.PositiveIntegerField(null=True, blank=True)
+
+    class Meta:
+        unique_together = [("intento", "persona")]
+        verbose_name = "Participante de la visita"
+        verbose_name_plural = "Participantes de las visitas"
+
+    def __str__(self):
+        return f"{self.persona} · {self.get_funcion_display()}"
+
+
+class RectificacionVisita(models.Model):
+    """Corrección explícita de una visita ya registrada: conserva antes, después, motivo y autor."""
+
+    intento = models.ForeignKey("Intento", on_delete=models.CASCADE, related_name="rectificaciones")
+    campo = models.CharField(max_length=40)
+    antes = models.CharField(max_length=200, blank=True)
+    despues = models.CharField(max_length=200, blank=True)
+    motivo = models.CharField(max_length=200)
+    autor = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    usuario = models.CharField(max_length=150, blank=True)
+    fecha = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-fecha"]
+        verbose_name = "Rectificación de visita"
+        verbose_name_plural = "Rectificaciones de visitas"
+
+    def __str__(self):
+        return f"{self.intento}: {self.campo} {self.antes} → {self.despues}"
 
 
 class NotaOrden(models.Model):
@@ -209,6 +338,7 @@ class GastoOrden(models.Model):
         RECHAZADO = "rechazado", "Rechazado"
 
     orden = models.ForeignKey(OrdenTrabajo, on_delete=models.CASCADE, related_name="gastos")
+    intento = models.ForeignKey("Intento", null=True, blank=True, on_delete=models.SET_NULL, related_name="gastos")
     tecnico = models.ForeignKey(Persona, on_delete=models.PROTECT, related_name="gastos_orden")
     fecha = models.DateField(default=timezone.localdate)
     descripcion = models.CharField("Qué se compró", max_length=200)

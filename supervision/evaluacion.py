@@ -4,7 +4,8 @@ Cuatro ejes, cada uno 0-100:
   * Imagen / trato    - promedio de la encuesta diaria de sus técnicos.
   * Control en calle  - cantidad de informes por día trabajado y calidad de documentación.
   * Gestión de desvíos- % de desvíos detectados que tuvieron acción correctiva y en cuántos días.
-  * Objetivos         - cumplimiento de las tareas diarias asignadas por gerencia.
+  * Objetivos         - cumplimiento de las tareas asignadas por gerencia: sólo cuenta lo VERIFICADO por
+                        un tercero (lo reportado espera verificación; lo vencido sin reporte cuenta 0).
 """
 from collections import defaultdict
 from dataclasses import dataclass
@@ -31,7 +32,8 @@ class EvaluacionSupervisor:
     informes_por_dia: float = 0.0
     calidad_documentacion: float = 0.0
     desvios: int = 0
-    desvios_con_accion: int = 0
+    desvios_con_accion: int = 0          # con acción indicada
+    desvios_corregidos: int = 0          # con acción CUMPLIDA (ejecutada)
     dias_respuesta_prom: float | None = None
     encuestas_enviadas: int = 0
     encuestas_respondidas: int = 0
@@ -43,11 +45,18 @@ class EvaluacionSupervisor:
     nota_semanal: float | None = None      # promedio de la evaluación semanal (1-5)
     semanales: int = 0
     siniestros_equipo: int = 0
-    score_imagen: float = 0.0
-    score_control: float = 0.0
-    score_desvios: float = 0.0
-    score_objetivos: float = 0.0
-    score_total: float = 0.0
+    personas_encuesta: int = 0             # técnicos distintos que respondieron
+    encuesta_suficiente: bool = False
+    score_imagen: float | None = None
+    score_control: float | None = None
+    score_desvios: float | None = None
+    score_objetivos: float | None = None
+    score_total: float | None = None
+    sin_datos: list = None
+
+    @property
+    def sin_evidencia(self) -> bool:
+        return self.score_total is None
 
     @property
     def nota_encuesta(self):
@@ -60,10 +69,14 @@ class EvaluacionSupervisor:
 
     @property
     def color(self):
+        if self.score_total is None:
+            return "info"
         return "ok" if self.score_total >= 70 else "aviso" if self.score_total >= 50 else "critico"
 
 
 def evaluar_supervisores(hasta: date | None = None, dias: int = 30):
+    from core.models import Parametros
+    par = Parametros.actual()
     hasta = hasta or timezone.localdate()
     desde = hasta - timedelta(days=dias - 1)
     sups = list(Persona.objects.filter(rol=Persona.Rol.SUPERVISOR, activo=True))
@@ -97,7 +110,12 @@ def evaluar_supervisores(hasta: date | None = None, dias: int = 30):
             acciones = list(inf.acciones.all())
             if acciones:
                 e.desvios_con_accion += 1
-                respuesta[inf.supervisor_id].append(min((a.fecha - inf.fecha).days for a in acciones))
+            cumplidas = [a for a in acciones if a.cumplida]
+            if cumplidas:
+                # sólo una acción EJECUTADA cuenta como corrección (una indicada pendiente no)
+                e.desvios_corregidos += 1
+                respuesta[inf.supervisor_id].append(min(((a.fecha_cumplida or a.fecha) - inf.fecha).days
+                                                        for a in cumplidas))
 
     enc = EncuestaSupervisor.objects.filter(supervisor_id__in=ids, fecha__range=(desde, hasta))
     for r in enc.values("supervisor_id").annotate(n=Count("id")):
@@ -108,10 +126,17 @@ def evaluar_supervisores(hasta: date | None = None, dias: int = 30):
         e.encuestas_respondidas = r["n"]
         e.nota_trato, e.nota_claridad, e.nota_apoyo, e.nota_presencia = (
             float(r[k]) if r[k] is not None else None for k in "tcap")
+    for r in (enc.filter(respondida__isnull=False).values("supervisor_id")
+              .annotate(p=Count("tecnico", distinct=True))):
+        evs[r["supervisor_id"]].personas_encuesta = r["p"]
 
     semanal = defaultdict(list)
+    personas_semanal = defaultdict(set)
     for e in EncuestaSemanal.objects.filter(supervisor_id__in=ids, semana__range=(desde - timedelta(days=6), hasta)):
         semanal[e.supervisor_id].append(e.promedio)
+        personas_semanal[e.supervisor_id].add(e.tecnico_id)
+    for sid, personas in personas_semanal.items():
+        evs[sid].personas_encuesta = max(evs[sid].personas_encuesta, len(personas))
     for sid, notas in semanal.items():
         evs[sid].nota_semanal = sum(notas) / len(notas)
         evs[sid].semanales = len(notas)
@@ -136,19 +161,38 @@ def evaluar_supervisores(hasta: date | None = None, dias: int = 30):
         if tareas[sid]:
             e.cumplimiento_tareas = sum(tareas[sid]) / len(tareas[sid])
 
+        # Suficiencia de la encuesta: con pocas respuestas o personas no se consolida una nota de trato
+        # (y se protege la confidencialidad en grupos chicos).
+        e.encuesta_suficiente = (e.encuestas_respondidas + e.semanales >= par.encuesta_min_respuestas
+                                 and e.personas_encuesta >= par.encuesta_min_personas)
+        if not e.encuesta_suficiente:
+            e.nota_trato = e.nota_claridad = e.nota_apoyo = e.nota_presencia = e.nota_semanal = None
+        e.sin_datos = []
         # Imagen: promedio de la encuesta diaria y de la evaluación semanal (las que haya)
         notas_img = [n for n in (e.nota_encuesta, e.nota_semanal) if n]
-        e.score_imagen = (sum(notas_img) / len(notas_img) - 1) / 4 * 100 if notas_img else 0.0
-        cantidad = min(1.0, e.informes_por_dia / INFORMES_OBJETIVO_DIA) * 100
-        e.score_control = 0.6 * cantidad + 0.4 * e.calidad_documentacion
+        if notas_img:
+            e.score_imagen = (sum(notas_img) / len(notas_img) - 1) / 4 * 100
+        else:
+            e.sin_datos.append("encuestas insuficientes")
+        # Control: sólo evaluable si su equipo trabajó en el período
+        if e.dias_habiles:
+            cantidad = min(1.0, e.informes_por_dia / INFORMES_OBJETIVO_DIA) * 100
+            e.score_control = 0.6 * cantidad + 0.4 * e.calidad_documentacion
+        else:
+            e.sin_datos.append("su equipo no tuvo jornadas")
+        # Desvíos: corregidos = con acción CUMPLIDA; sin desvíos detectados no hay qué evaluar
         if e.desvios:
-            cobertura = e.desvios_con_accion / e.desvios * 100
-            rapidez = 100 if e.dias_respuesta_prom is None else max(0, 100 - max(0, e.dias_respuesta_prom - 1) * 25)
+            cobertura = e.desvios_corregidos / e.desvios * 100
+            rapidez = 0 if e.dias_respuesta_prom is None else max(0, 100 - max(0, e.dias_respuesta_prom - 1) * 25)
             e.score_desvios = 0.7 * cobertura + 0.3 * rapidez
         else:
-            # Sin desvíos detectados: si casi no controla, no se le da puntaje alto
-            e.score_desvios = 50.0 if e.informes_por_dia < 1 else 80.0
-        e.score_objetivos = (e.cumplimiento_tareas or 0) * 100
-        e.score_total = round(0.30 * e.score_imagen + 0.25 * e.score_control
-                              + 0.20 * e.score_desvios + 0.25 * e.score_objetivos, 1)
-    return sorted(evs.values(), key=lambda e: -e.score_total)
+            e.sin_datos.append("sin desvíos detectados")
+        if e.cumplimiento_tareas is not None:
+            e.score_objetivos = e.cumplimiento_tareas * 100
+        else:
+            e.sin_datos.append("sin objetivos asignados")
+        pesos = {"score_imagen": .30, "score_control": .25, "score_desvios": .20, "score_objetivos": .25}
+        con = {k: getattr(e, k) for k in pesos if getattr(e, k) is not None}
+        total = sum(pesos[k] for k in con)
+        e.score_total = round(sum(pesos[k] * v for k, v in con.items()) / total, 1) if con else None
+    return sorted(evs.values(), key=lambda e: (e.score_total is None, -(e.score_total or 0)))

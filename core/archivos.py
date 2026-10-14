@@ -56,6 +56,14 @@ def _orden(rol, yo, obj):
     return _personal(rol, yo, obj.tecnico_id)
 
 
+def _visita(rol, yo, obj):
+    return _personal(rol, yo, obj.tecnico_id)
+
+
+def _reporte(rol, yo, obj):
+    return _personal(rol, yo, obj.asignacion.persona_id)
+
+
 def _informe(rol, yo, obj):
     if rol == GERENCIA:
         return True
@@ -64,8 +72,9 @@ def _informe(rol, yo, obj):
 
 def _reglas():
     from finanzas.models import Egreso, Liquidacion
-    from operaciones.models import GastoOrden, OrdenTrabajo
+    from operaciones.models import GastoOrden, Intento, OrdenTrabajo
     from personal.models import DocumentoPersonal, Novedad
+    from herramientas.models import ReporteCondicion
     from supervision.models import InformeControl
     # carpeta (upload_to) -> [(modelo, campo, permiso)]
     return {
@@ -74,9 +83,9 @@ def _reglas():
         "recibos": [(Liquidacion, "recibo", _recibo)],
         "egresos": [(Egreso, "comprobante", _egreso)],
         "gastos": [(GastoOrden, "comprobante", _gasto)],
-        "ordenes": [(OrdenTrabajo, "foto_trabajo", _orden)],
-        "firmas": [(OrdenTrabajo, "firma", _orden)],
-        "informes": [(InformeControl, "foto", _informe)],
+        "ordenes": [(OrdenTrabajo, "foto_trabajo", _orden), (Intento, "foto", _visita)],
+        "firmas": [(OrdenTrabajo, "firma", _orden), (Intento, "firma", _visita)],
+        "informes": [(InformeControl, "foto", _informe), (ReporteCondicion, "foto", _reporte)],
     }
 
 
@@ -93,7 +102,13 @@ def puede_ver(user, ruta: str):
         # Puede verlo si puede ver alguno de los registros que usan ese archivo
         for obj in modelo.objects.filter(**{campo: ruta})[:50]:
             if permiso(rol, yo, obj):
-                return getattr(obj, campo)
+                archivo = getattr(obj, campo)
+                if isinstance(archivo, str):  # referencia guardada como texto (instantánea de una visita)
+                    from django.db.models.fields.files import FieldFile
+
+                    from operaciones.models import OrdenTrabajo
+                    return FieldFile(None, OrdenTrabajo._meta.get_field("foto_trabajo"), archivo) if archivo else None
+                return archivo
     return None
 
 

@@ -20,12 +20,12 @@ async function login(page, usuario) {
 const PANTALLAS = {
   gerencia: ['/tablero/', '/tablero/tecnicos/', '/tablero/supervisores/', '/tablero/productividad/',
     '/tablero/productividad/supervisores/', '/tablero/stock/', '/tablero/planificacion/', '/tablero/importar/',
-    '/tablero/operacion/', '/tablero/capacitacion/', '/finanzas/', '/finanzas/caja/', '/finanzas/ingresos/',
+    '/tablero/operacion/', '/tablero/capacitacion/', '/tablero/indicadores/', '/finanzas/', '/finanzas/caja/', '/finanzas/ingresos/',
     '/finanzas/comprobantes/', '/finanzas/comprobantes/?ver=a_pagar', '/personal/legajos/', '/personal/asistencia/'],
   contable: ['/finanzas/', '/finanzas/caja/', '/finanzas/ingresos/', '/finanzas/comprobantes/', '/finanzas/sueldos/',
     '/finanzas/alternativas-de-pago/?nombre_1=Contado&anticipo_1=1000000&nombre_2=Cuotas&cuotas_2=6&monto_cuota_2=180000'],
   deposito: ['/tablero/stock/', '/tablero/stock/tecnicos/', '/tablero/pedidos/', '/tablero/partes-adeudadas/'],
-  s001: ['/app/', '/app/no-resueltas/', '/app/novedades/', '/app/indicadores/', '/tablero/tecnicos/'],
+  s001: ['/app/', '/app/informe/', '/app/informe/?plantilla=1', '/app/no-resueltas/', '/app/novedades/', '/app/indicadores/', '/tablero/tecnicos/'],
   t001: ['/app/', '/app/stock/', '/app/desempeno/', `/app/orden/${ORDEN}/`, '/app/asistencia/'],
 };
 
@@ -135,6 +135,35 @@ const PANTALLAS = {
     const aviso2 = await page.textContent('#pendientes-offline').catch(() => '');
     ok('otro usuario: no envía el pendiente ajeno', p.length === 1 && envios === 0, `${JSON.stringify(p)} envíos=${envios}`);
     ok('otro usuario: se le avisa', (aviso2 || '').includes('otro usuario'), (aviso2 || '').slice(0, 100));
+    await ctx.close();
+  }
+
+  // 4. Service worker activo y cambio de cuenta sin cerrar sesión: no quedan pantallas del anterior (V10)
+  {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    await login(page, 't001');
+    await page.goto(`${BASE}/app/`);
+    await page.evaluate(() => navigator.serviceWorker.ready);
+    await page.reload();             // ya controlada por el service worker: guarda /app/ de t001
+    await page.waitForTimeout(1500);
+    const nombre1 = (await page.textContent('.movil-header .titulo b')).trim();
+    await ctx.clearCookies();        // la sesión vence (sin pasar por "Salir")
+    await login(page, 't002');
+    await page.goto(`${BASE}/app/`);
+    await page.waitForTimeout(2000);
+    const guardadas = await page.evaluate(async () => {
+      const textos = [];
+      for (const k of await caches.keys()) {
+        if (!k.startsWith('virguel-paginas')) continue;
+        const c = await caches.open(k);
+        for (const req of await c.keys()) textos.push(await (await c.match(req)).text());
+      }
+      return textos;
+    });
+    const deT001 = guardadas.filter((t) => t.includes(nombre1)).length;
+    ok('cambio de cuenta: no quedan pantallas del usuario anterior', deT001 === 0,
+       `${guardadas.length} guardadas, ${deT001} de "${nombre1}"`);
     await ctx.close();
   }
 

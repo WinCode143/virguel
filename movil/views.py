@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 from django.contrib import messages
 from django.db import transaction
-from django.db.models import Count, Max
+from django.db.models import Count, Max, Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -20,7 +20,8 @@ from herramientas.models import Asignacion
 from incidentes.models import Siniestro
 from operaciones.models import Jornada, OrdenTrabajo
 from supervision.evaluacion import evaluar_supervisores
-from supervision.models import AccionCorrectiva, EncuestaSupervisor, InformeControl, TareaSupervisor
+from supervision.models import (AccionCorrectiva, EncuestaSupervisor, InformeControl, PlantillaInspeccion,
+                                ResultadoItem, TareaSupervisor)
 
 from .forms import (AccionForm, CerrarOrdenForm, EncuestaForm, EncuestaSemanalForm, FinJornadaForm, InformeForm,
                     InicioJornadaForm, NotaForm, NovedadForm, PedidoForm, SiniestroMovilForm)
@@ -88,12 +89,17 @@ def _inicio_supervisor(request, p):
     resumen = {r["estado"]: r["n"] for r in ots_hoy.values("estado").annotate(n=Count("id"))}
     informes_hoy = InformeControl.objects.filter(supervisor=p, fecha=hoy).count()
     tareas = TareaSupervisor.objects.filter(supervisor=p, fecha=hoy)
+    lunes = hoy - timedelta(days=hoy.weekday())
+    controlados = InformeControl.objects.filter(fecha__range=(lunes, hoy)).values("tecnico_id")
+    sin_control = (equipo.filter(jornadas__fecha__range=(lunes, hoy), jornadas__en_calle=True)
+                   .exclude(pk__in=controlados).distinct().order_by("apellido"))
     desvios_sin_accion = (InformeControl.objects.filter(supervisor=p, desvio_detectado=True,
                                                         fecha__gte=hoy - timedelta(days=14))
                           .annotate(n=Count("acciones")).filter(n=0).select_related("tecnico")[:10])
     return render(request, "movil/inicio_supervisor.html", {
         "p": p, "equipo": equipo.count(), "en_calle": en_calle, "resumen": resumen, "total_ots": ots_hoy.count(),
         "informes_hoy": informes_hoy, "tareas": tareas, "desvios_sin_accion": desvios_sin_accion, "tab": "inicio",
+        "sin_control": sin_control,
         "asistencia": Asistencia.objects.filter(persona=p, fecha=hoy).first(), "faltan": faltan,
         "tarde": [e for e in estado_equipo if e.situacion[0] == "aviso"],
         "novedades_pendientes": Novedad.objects.filter(persona__supervisor=p, estado="pendiente").count(),
@@ -173,9 +179,9 @@ def jornada(request, accion):
                     j.hectareas_cubiertas = f.cleaned_data["hectareas_cubiertas"]
                 j.horas_trabajadas = a.horas_trabajadas
                 j.save()
-                if j.vehiculo and j.km_fin and j.km_fin > j.vehiculo.km_actual:
-                    j.vehiculo.km_actual = j.km_fin
-                    j.vehiculo.save(update_fields=["km_actual"])
+                if j.vehiculo and j.km_fin:
+                    from flota.models import registrar_lectura
+                    registrar_lectura(j.vehiculo, j.km_fin, "jornada", persona=p, momento=momento)
             messages.success(request, f"Salida registrada a las {timezone.localtime(momento):%H:%M} "
                                       f"({a.horas_trabajadas:g} h)." + (" No olvides la encuesta del día." if es_tecnico else ""))
             # La encuesta se genera al cerrar la jornada (además del proceso nocturno)
@@ -315,8 +321,9 @@ def orden(request, pk):
     elif ot.cliente and ot.cliente.direccion:
         destino = f"{ot.cliente.direccion}, {ot.zona or ''}"
     notas = _notas_de(ot)
+    from operaciones.preparacion import preparar_visita
     return render(request, "movil/orden.html", {
-        "ot": ot, "abierta": abierta, "tab": "inicio",
+        "ot": ot, "abierta": abierta, "tab": "inicio", "prep": preparar_visita(ot) if abierta else None,
         "mapa": f"https://www.google.com/maps/dir/?api=1&destination={quote(destino)}" if destino else "",
         "n_notas": notas.count() + (1 if ot.observaciones else 0), "ultima_nota": notas.first(),
         "pedidos": PedidoMaterial.objects.filter(orden=ot).prefetch_related("items__material"),
@@ -388,22 +395,31 @@ def orden_cierre(request, pk):
                     ot.fecha_programada = hoy + timedelta(days=1)
                     ot.inicio_trabajo = None
                 ot._sin_notificar = True
+                ot._visita_explicita = True
                 ot.save()
+                from operaciones.visitas import crear_visita
+                visita = crear_visita(ot)
                 if d.get("nota"):
                     NotaOrden.objects.create(orden=ot, autor=p, tipo=NotaOrden.Tipo.CIERRE, texto=d["nota"], creada=fin)
                 for desc, monto, comprobante in f.gastos():
-                    GastoOrden.objects.create(orden=ot, tecnico=p, fecha=hoy, descripcion=desc, monto=monto,
-                                              comprobante=comprobante or "")
+                    GastoOrden.objects.create(orden=ot, intento=visita, tecnico=p, fecha=hoy, descripcion=desc,
+                                              monto=monto, comprobante=comprobante or "")
                 from inventario.models import EquipoRetirado
                 series = [x.strip() for x in re.split(r"[,;\s]+", d["series_retiradas"] or "") if x.strip()]
                 if not series and ot.tipo.codigo == "RET":
                     series = ["(sin informar)"]
                 for serie in series:
-                    EquipoRetirado.objects.create(orden=ot, tecnico=p, numero_serie=serie[:60], fecha_retiro=hoy)
+                    EquipoRetirado.objects.create(orden=ot, intento=visita, tecnico=p, numero_serie=serie[:60],
+                                                  fecha_retiro=hoy)
                 if series:
                     avisos.append(f"Tenés {len(series)} equipo(s) retirado(s) para entregar en el depósito.")
+                from inventario.equipos import registrar_cierre
+                from inventario.models import ReservaMaterial
+                instaladas = [x.strip() for x in re.split(r"[,;\s]+", d["series_instaladas"] or "") if x.strip()]
+                avisos += registrar_cierre(visita, instaladas, series)
+                ReservaMaterial.objects.filter(orden=ot, estado="activa").update(estado="consumida")
                 for material, cantidad in f.materiales():
-                    if not consumir(p, ot, material, cantidad, hoy):
+                    if not consumir(p, ot, material, cantidad, hoy, intento=visita):
                         avisos.append(f"{material.nombre}: usaste más de lo que figuraba a tu cargo. Avisale a tu supervisor.")
             for a in avisos:
                 messages.warning(request, a)
@@ -598,14 +614,31 @@ def push_suscribir(request):
 
 @requiere_rol(TECNICO)
 def mi_epp(request):
+    from herramientas.models import ReporteCondicion
     p = _persona(request)
     if request.method == "POST":
+        if request.POST.get("accion") == "reportar":
+            a = get_object_or_404(Asignacion, persona=p, pk=request.POST.get("asignacion"), estado="en_uso")
+            desc = request.POST.get("descripcion", "").strip()
+            if not desc:
+                messages.error(request, "Contá qué le pasó al elemento.")
+                return redirect("movil:epp")
+            ReporteCondicion.objects.create(asignacion=a, tipo=request.POST.get("tipo") or "rotura",
+                                            descripcion=desc[:300], foto=request.FILES.get("foto") or "",
+                                            reportado_por=p, responsable=p.supervisor)
+            if p.supervisor:
+                from core.notificaciones import notificar
+                notificar(p.supervisor, f"{p.nombre_completo} reportó {a.elemento}",
+                          desc[:200], "/app/")
+            messages.success(request, f"Reporte enviado: {a.elemento} queda fuera de uso hasta su reposición.")
+            return redirect("movil:epp")
         Asignacion.objects.filter(persona=p, pk=request.POST.get("asignacion")).update(conformidad_firmada=True)
         messages.success(request, "Recepción confirmada.")
         return redirect("movil:epp")
     return render(request, "movil/epp.html", {
         "asignaciones": p.asignaciones.filter(estado="en_uso").select_related("elemento"),
-        "hoy": timezone.localdate(), "tab": "epp"})
+        "reportes": ReporteCondicion.objects.filter(asignacion__persona=p).select_related("asignacion__elemento")[:10],
+        "tipos": ReporteCondicion.Tipo.choices, "hoy": timezone.localdate(), "tab": "epp"})
 
 
 @requiere_rol(TECNICO)
@@ -662,7 +695,8 @@ def mi_desempeno(request):
         "min_real": tiempo["real"], "min_est": tiempo["est"],
         "retrabajos": OrdenTrabajo.objects.filter(es_retrabajo=True, orden_original__tecnico=p,
                                                   fecha_programada__range=(desde, hoy)).count(),
-        "controles": p.informes_recibidos.filter(fecha__range=(desde, hoy)).aggregate(n=Count("id"), prom=Avg("puntaje")),
+        "controles": p.informes_recibidos.filter(fecha__range=(desde, hoy)).aggregate(
+            n=Count("id"), prom=Avg("puntaje", filter=~Q(motivo_seleccion__in=("sospecha", "reclamo")))),
         "motivos": [(nombres.get(k, k), n) for k, n in motivos.most_common()],
         "asis": asis, "semanas": semanas})
 
@@ -699,16 +733,16 @@ def encuesta(request, token):
     """Accesible con el link (sin login) para poder enviarse por WhatsApp/SMS."""
     e = get_object_or_404(EncuestaSupervisor.objects.select_related("supervisor", "tecnico"), token=token)
     if e.respondida:
-        return render(request, "movil/mensaje.html", {"titulo": "¡Gracias!",
-                                                      "texto": "Esta encuesta ya fue respondida."})
+        return render(request, "movil/mensaje.html", {
+            "titulo": "¡Gracias!", "texto": "La encuesta quedó respondida. Tu respuesta es confidencial: tu supervisor "
+                                           "sólo ve promedios de grupo."})
     if request.method == "POST":
         f = EncuestaForm(request.POST, instance=e)
         if f.is_valid():
             e = f.save(commit=False)
             e.respondida = timezone.now()
             e.save()
-            return render(request, "movil/mensaje.html", {
-                "titulo": "¡Gracias!", "texto": "Tu respuesta es confidencial: tu supervisor sólo ve promedios."})
+            return redirect(request.path)  # aceptado: redirección (también confirma el envío sin señal)
     else:
         f = EncuestaForm(instance=e)
     return render(request, "movil/encuesta.html", {"e": e, "form": f})
@@ -718,20 +752,31 @@ def encuesta(request, token):
 @requiere_rol(SUPERVISOR)
 def nuevo_informe(request):
     p = _persona(request)
+    plantillas = PlantillaInspeccion.objects.filter(vigente=True)
+    plantilla = plantillas.filter(pk=request.POST.get("plantilla") or request.GET.get("plantilla") or 0).first()
     if request.method == "POST":
-        f = InformeForm(request.POST, request.FILES, supervisor=p)
+        f = InformeForm(request.POST, request.FILES, supervisor=p, plantilla=plantilla)
         if f.is_valid():
             inf = f.save(commit=False)
             inf.supervisor = p
             inf.fecha = fecha_operacion(request)
-            inf.save()
-            messages.success(request, f"Informe guardado (calidad de documentación {inf.calidad_informe}/100).")
+            inf.plantilla = plantilla
+            resultados = f.resultados()
+            if any(r == "no_cumple" and i.critico for i, r, _ in resultados):
+                inf.desvio_detectado = True  # un punto crítico que no cumple es un desvío
+            with transaction.atomic():
+                inf.save()
+                ResultadoItem.objects.bulk_create(
+                    [ResultadoItem(informe=inf, item=i, resultado=r, medida=m) for i, r, m in resultados])
+            messages.success(request, f"Informe guardado (completitud documental {inf.calidad_informe}/100).")
             if inf.desvio_detectado:
                 return redirect(f"{reverse('movil:accion')}?informe={inf.pk}&tecnico={inf.tecnico_id}")
             return redirect("movil:inicio")
     else:
-        f = InformeForm(supervisor=p, initial={"tecnico": request.GET.get("tecnico")})
-    return render(request, "movil/informe.html", {"form": f, "tab": "control"})
+        f = InformeForm(supervisor=p, plantilla=plantilla, initial={
+            "tecnico": request.GET.get("tecnico"), "motivo_seleccion": request.GET.get("motivo", "programado")})
+    return render(request, "movil/informe.html", {"form": f, "tab": "control", "plantillas": plantillas,
+                                                  "plantilla": plantilla})
 
 
 @requiere_rol(SUPERVISOR)
@@ -767,12 +812,15 @@ def tarea(request, pk):
         except ValueError:
             t.resultado = 0
         t.comentario = request.POST.get("comentario", "")
+        t.evidencia = request.POST.get("evidencia", "")[:250]
         if t.meta:
             t.estado = "cumplida" if t.resultado >= t.meta else "parcial" if t.resultado else "no_cumplida"
         else:
             t.estado = request.POST.get("estado", t.estado)
+        if t.verificacion != "verificado":
+            t.verificacion = "reportado"  # lo declarado por el supervisor espera verificación de gerencia
         t.save()
-        messages.success(request, "Objetivo actualizado.")
+        messages.success(request, "Objetivo reportado: queda a verificar por gerencia.")
     return redirect("movil:inicio")
 
 

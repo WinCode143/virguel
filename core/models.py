@@ -57,6 +57,12 @@ class Parametros(models.Model):
     dias_max_stock = models.PositiveIntegerField(
         "Días máximos de stock parado", default=60,
         help_text="Un lote con más días que esto sin consumirse genera alerta crítica.")
+    reloj_antiguedad = models.CharField(
+        "Reloj que activa la regla de días máximos de stock", max_length=12, default="original",
+        choices=[("original", "Edad original (desde el ingreso a la empresa)"),
+                 ("permanencia", "Permanencia en la ubicación o custodio actual")],
+        help_text="Edad original: un traslado o devolución no rejuvenece la unidad. Permanencia: cuenta desde que "
+                  "llegó al depósito o al técnico actual.")
     dias_aviso_stock = models.PositiveIntegerField(
         "Días de aviso previo", default=45,
         help_text="A partir de estos días el lote aparece como 'por vencer'.")
@@ -67,6 +73,9 @@ class Parametros(models.Model):
     tecnicos_por_cuadrilla = models.PositiveSmallIntegerField(
         "Técnicos por cuadrilla", default=2,
         help_text="Las hectáreas/día se miden por cuadrilla; esto convierte técnicos en cuadrillas.")
+    minutos_traslado_promedio = models.PositiveIntegerField(
+        "Minutos de traslado promedio entre órdenes", default=30,
+        help_text="Se suma al tiempo estándar de cada orden para ver si entra en la jornada.")
     clientes_por_tecnico_dia = models.DecimalField(
         "Clientes atendibles por técnico/día", max_digits=5, decimal_places=2, default=Decimal("6"),
         help_text="Tope operativo de visitas diarias por técnico.")
@@ -97,12 +106,26 @@ class Parametros(models.Model):
     tasa_descuento_mensual = models.DecimalField(
         "Costo del dinero (% mensual)", max_digits=5, decimal_places=2, default=Decimal("3"),
         help_text="Para comparar alternativas de pago (contado vs. cuotas) a valor presente.")
+    encuesta_min_respuestas = models.PositiveIntegerField(
+        "Encuestas: respuestas mínimas para consolidar la nota de un supervisor", default=5)
+    encuesta_min_personas = models.PositiveIntegerField(
+        "Encuestas: técnicos distintos mínimos (confidencialidad)", default=3,
+        help_text="Con menos personas no se muestra ni se usa la nota: podría identificarse quién respondió.")
     controles_verificacion_accion = models.PositiveIntegerField(
         "Acciones correctivas: controles posteriores para verificarlas", default=2,
         help_text="Una acción cumplida se considera efectiva sólo si después hubo al menos estos controles sin "
                   "repetir el desvío; con menos queda 'no verificada'.")
     dias_verificacion_accion = models.PositiveIntegerField(
         "Acciones correctivas: días de seguimiento", default=30)
+    prob_recambio = models.DecimalField(
+        "Prob. de recambio en reparaciones (si no se sabe)", max_digits=4, decimal_places=3, default=Decimal("0.30"),
+        validators=[MinValueValidator(0), MaxValueValidator(1)])
+    dias_necesidad_inmediata = models.PositiveIntegerField(
+        "Días que se consideran necesidad inmediata", default=3,
+        help_text="Órdenes asignadas en estos días; lo demás (sin técnico, más adelante o pronóstico) es backlog.")
+    abastecer_backlog = models.BooleanField(
+        "Abastecer también el backlog", default=True,
+        help_text="Si está apagado, la sugerencia de compra cubre sólo la necesidad inmediata y ejecutable.")
     dias_cobertura_stock_min = models.PositiveIntegerField(
         "Días mínimos de cobertura de stock", default=7,
         help_text="Si el stock alcanza para menos días que esto, se alerta faltante.")
@@ -336,6 +359,21 @@ class Indicador(models.Model):
     peso = models.PositiveSmallIntegerField(default=10, help_text="Peso en el índice (0 = sólo informativo).")
     orden = models.PositiveSmallIntegerField(default=0)
     activo = models.BooleanField(default=True)
+    # Contrato de cálculo (diccionario de indicadores): qué población, qué se cuenta, sobre qué, en qué
+    # ventana, de dónde sale y qué pasa si falta el dato.
+    poblacion = models.CharField("Población", max_length=200, blank=True)
+    numerador = models.CharField(max_length=250, blank=True)
+    denominador = models.CharField(max_length=250, blank=True)
+    ventana = models.CharField(max_length=120, blank=True)
+    fuente = models.CharField("Fuente de cálculo", max_length=200, blank=True,
+                              help_text="Función única que usan la app, el escritorio y la exportación.")
+    sin_dato = models.CharField("Si falta el dato", max_length=250, blank=True)
+    version = models.PositiveIntegerField("Versión del criterio", default=1)
+    historial = models.JSONField(default=list, blank=True,
+                                 help_text="Cambios de meta, límite, peso o sentido: separa cambios de criterio "
+                                           "de cambios reales de desempeño.")
+
+    CRITERIO = ("meta", "minimo", "peso", "mayor_es_mejor", "activo")
 
     class Meta:
         ordering = ["rol", "orden"]
@@ -344,6 +382,18 @@ class Indicador(models.Model):
 
     def __str__(self):
         return f"{self.get_rol_display()}: {self.nombre}"
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            antes = Indicador.objects.filter(pk=self.pk).values(*self.CRITERIO).first()
+            if antes:
+                cambios = {c: [str(antes[c]), str(getattr(self, c))] for c in self.CRITERIO
+                           if str(antes[c]) != str(getattr(self, c))}
+                if cambios:
+                    self.version += 1
+                    self.historial = (self.historial or []) + [
+                        {"version": self.version, "fecha": timezone.localdate().isoformat(), "cambios": cambios}]
+        super().save(*args, **kwargs)
 
     def estado(self, valor) -> str:
         """verde = cumple la meta · amarillo = no la cumple pero no pasó el límite · rojo = pasó el límite."""
@@ -508,6 +558,7 @@ class OperacionOffline(models.Model):
     id_operacion = models.UUIDField(unique=True)
     usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
     ruta = models.CharField(max_length=200)
+    huella = models.CharField(max_length=64, blank=True, help_text="Huella del contenido enviado.")
     recibida = models.DateTimeField(default=timezone.now)
 
     class Meta:

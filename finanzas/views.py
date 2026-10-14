@@ -151,7 +151,7 @@ class ComprobanteForm(forms.ModelForm):
     class Meta:
         model = Egreso
         fields = ["comprobante", "tipo_comprobante", "numero_comprobante", "fecha", "vencimiento", "categoria",
-                  "monto", "descripcion", "pagado", "fecha_pago", "medio_pago"]
+                  "monto", "descripcion", "pagado", "fecha_pago", "medio_pago", "prioridad", "motivo_prioridad"]
         labels = {"comprobante": "Archivo (foto o PDF)", "descripcion": "Concepto", "categoria": "Categoría",
                   "fecha_pago": "Fecha de pago", "medio_pago": "Medio de pago",
                   "pagado": "Ya está pagado"}
@@ -166,8 +166,12 @@ class ComprobanteForm(forms.ModelForm):
         self.fields["categoria"].empty_label = "— la habitual del proveedor —"
         self.fields["descripcion"].required = False
         self.fields["monto"] = CampoPesos(label="Total")
+        self.fields["prioridad"].required = False
         if self.instance.pk and self.instance.proveedor_ref:
             self.fields["proveedor_nombre"].initial = self.instance.proveedor_ref.nombre
+
+    def clean_prioridad(self):
+        return self.cleaned_data.get("prioridad") or "normal"
 
     def clean_monto(self):
         v = self.cleaned_data["monto"]
@@ -350,7 +354,18 @@ def caja(request):
         "proy": proy, "g": g, "semanas": semanas, "estimados": request.GET.get("estimados", "1") == "1",
         "cuentas": [(c, c.saldo()) for c in Cuenta.objects.filter(activa=True)],
         "a_cobrar": ingresos_a_cobrar().order_by("fecha_esperada_cobro", "fecha")[:30],
+        "por_prioridad": _a_pagar_por_prioridad(),
         "cap": cuentas_a_pagar()})
+
+
+def _a_pagar_por_prioridad():
+    from django.db.models import Case, IntegerField, Value, When
+
+    from .caja import egresos_a_pagar
+    orden = Case(When(prioridad="critica", then=Value(0)), When(prioridad="alta", then=Value(1)),
+                 When(prioridad="normal", then=Value(2)), default=Value(3), output_field=IntegerField())
+    return (egresos_a_pagar().annotate(o=orden).order_by("o", F("vencimiento").asc(nulls_last=True))
+            .select_related("categoria")[:25])
 
 
 @requiere_rol(*ROLES)
@@ -370,6 +385,15 @@ def ingresos(request):
                 messages.error(request, "No hay órdenes completadas con precio en ese mes (revisar el precio de Claro "
                                         "de cada tipo de tarea).")
             return redirect(f"{request.path}?mes_claro={mes_claro:%Y-%m}")
+        if accion == "confirmar":
+            i = get_object_or_404(Ingreso, pk=request.POST.get("ingreso"))
+            monto = _decimal(request.POST.get("monto"))
+            if not monto or monto <= 0:
+                messages.error(request, "Indicá el monto que aceptó Claro.")
+            else:
+                liquidacion_claro.confirmar(i, monto, request.user, request.POST.get("nota", ""))
+                messages.success(request, f"Liquidación confirmada: {pesos(monto)} (estimado {pesos(i.monto_estimado)}).")
+            return redirect("finanzas:ingresos")
         if accion == "cobro":
             i = get_object_or_404(Ingreso, pk=request.POST.get("ingreso"))
             monto = _decimal(request.POST.get("monto")) or i.saldo
@@ -393,7 +417,7 @@ def ingresos(request):
     qs = Ingreso.objects.prefetch_related("cobros__cuenta").order_by("-fecha")[:200]
     return render(request, "finanzas/ingresos.html", {
         "form": form, "ingresos": qs, "cuentas": Cuenta.objects.filter(activa=True), "hoy": timezone.localdate(),
-        "claro": liquidacion_claro.calcular(mes_claro)})
+        "claro": liquidacion_claro.calcular(mes_claro), "ingreso_claro": liquidacion_claro.ingreso_del_mes(mes_claro)})
 
 
 @requiere_rol(*ROLES)

@@ -52,7 +52,13 @@ def egreso_de(instancia):
 def sincronizar(instancia):
     datos = egreso_de(instancia)
     if datos:
-        registrar_egreso_automatico(*datos)
+        egreso = registrar_egreso_automatico(*datos)
+        # Marcar un sueldo como "pagado" es la acción explícita de pago: se registra el pago del saldo
+        # (sin cuenta si no se indicó: queda como diferencia a imputar en la caja).
+        if egreso and isinstance(instancia, Liquidacion) and instancia.estado == "pagada" and egreso.saldo > 0:
+            from .models import Pago
+            Pago.objects.create(egreso=egreso, monto=egreso.saldo, fecha=egreso.fecha,
+                                observaciones="Sueldo marcado como pagado")
 
 
 MODELOS = (LoteIngreso, ServiceRealizado, Asignacion, CompraElemento, Siniestro, GastoOrden, Liquidacion)

@@ -44,13 +44,14 @@
         {% if es_supervisor %}{% nav 'personal:usuarios' 'Accesos de mi equipo' 'llave' %}{% endif %}
       </details>
 
-      <details class="nav-grupo" {% grupo_abierto 'tablero:prod_general' 'tablero:prod_tecnicos' 'tablero:prod_supervisores' 'tablero:prod_ficha' 'tablero:metas' %}>
+      <details class="nav-grupo" {% grupo_abierto 'tablero:prod_general' 'tablero:prod_tecnicos' 'tablero:prod_supervisores' 'tablero:prod_ficha' 'tablero:metas' 'tablero:diccionario' %}>
         <summary>Productividad {% icono 'abajo' %}</summary>
         {% if es_gerencia %}{% nav 'tablero:prod_general' 'Panel general' 'grafico' %}{% endif %}
         {% nav 'tablero:prod_tecnicos' 'Técnicos (IPT)' 'trofeo' %}
         {% if es_gerencia %}{% nav 'tablero:prod_supervisores' 'Supervisores (IGS)' 'estrella' %}{% endif %}
         {% if es_supervisor %}{% nav 'tablero:prod_ficha' 'Mi índice (IGS)' 'estrella' 0 request.user.persona.id %}{% endif %}
         {% nav 'tablero:metas' 'Metas y semáforos' 'ajustes' %}
+        {% nav 'tablero:diccionario' 'Diccionario de indicadores' 'lista' %}
       </details>
 
       <details class="nav-grupo" {% grupo_abierto 'tablero:tecnicos' 'tablero:capacitacion' 'tablero:supervisores' 'tablero:encuestas' 'tablero:incidentes' %}>

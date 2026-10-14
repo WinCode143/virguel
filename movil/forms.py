@@ -218,8 +218,8 @@ class EncuestaSemanalForm(forms.ModelForm):
 class InformeForm(forms.ModelForm):
     class Meta:
         model = InformeControl
-        fields = ["tecnico", "orden", "tipo", "puntaje", "desvio_detectado", "descripcion", "foto",
-                  "latitud", "longitud"]
+        fields = ["tecnico", "orden", "motivo_seleccion", "revision_visita", "tipo", "puntaje", "desvio_detectado",
+                  "descripcion", "foto", "latitud", "longitud"]
         labels = {"puntaje": "Puntaje del trabajo (1 = muy mal, 5 = excelente)",
                   "desvio_detectado": "Detecté un desvío / problema",
                   "descripcion": "Qué controlaste y qué encontraste"}
@@ -227,8 +227,18 @@ class InformeForm(forms.ModelForm):
                    "puntaje": forms.NumberInput(attrs={"min": 1, "max": 5}),
                    "foto": forms.ClearableFileInput(attrs={"accept": "image/*", "capture": "environment"})}
 
-    def __init__(self, *args, supervisor=None, **kwargs):
+    def __init__(self, *args, supervisor=None, plantilla=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.plantilla = plantilla
+        if plantilla:
+            # Un punto por ítem de la plantilla: cumple / no cumple / no aplica, con su medida
+            for item in plantilla.items.all():
+                self.fields[f"item_{item.pk}"] = forms.ChoiceField(
+                    label=f"{item.punto}{' (crítico)' if item.critico else ''} — {item.criterio}",
+                    choices=[("cumple", "Cumple"), ("no_cumple", "No cumple"), ("na", "No aplica")],
+                    widget=forms.RadioSelect)
+                self.fields[f"medida_{item.pk}"] = forms.CharField(label="Medida / observación", required=False,
+                                                                   max_length=120)
         equipo = Persona.objects.filter(rol="tecnico", activo=True)
         if supervisor:
             equipo = equipo.filter(supervisor=supervisor)
@@ -237,6 +247,13 @@ class InformeForm(forms.ModelForm):
         self.fields["orden"].queryset = OrdenTrabajo.objects.filter(
             tecnico__in=equipo, fecha_programada__gte=hoy - timedelta(days=3))
         self.fields["orden"].required = False
+
+    def resultados(self):
+        """[(item, resultado, medida)] de la plantilla, ya validados."""
+        if not self.plantilla:
+            return []
+        return [(i, self.cleaned_data[f"item_{i.pk}"], self.cleaned_data.get(f"medida_{i.pk}", ""))
+                for i in self.plantilla.items.all()]
 
 
 class AccionForm(forms.ModelForm):

@@ -1,6 +1,7 @@
 from django.contrib import admin
 
-from .models import CategoriaEgreso, Cobro, CostoFijo, Cuenta, Cuota, Egreso, Ingreso, Liquidacion, Pago, Proveedor
+from .models import (CategoriaEgreso, Cobro, CostoFijo, Cuenta, Cuota, Egreso, EstimacionLiquidacion, Ingreso, Liquidacion,
+                     Pago, Proveedor, TransferenciaCuenta)
 
 
 @admin.register(CategoriaEgreso)
@@ -57,7 +58,8 @@ class CobroInline(admin.TabularInline):
 
 @admin.register(Ingreso)
 class IngresoAdmin(admin.ModelAdmin):
-    list_display = ["fecha", "pagador", "concepto", "monto", "fecha_esperada_cobro", "estado"]
+    list_display = ["fecha", "pagador", "concepto", "monto", "confirmacion", "monto_estimado", "fecha_esperada_cobro",
+                    "estado"]
     search_fields = ["concepto", "pagador", "numero_comprobante"]
     date_hierarchy = "fecha"
     inlines = [CobroInline]
@@ -65,8 +67,9 @@ class IngresoAdmin(admin.ModelAdmin):
 
 @admin.register(Pago)
 class PagoAdmin(admin.ModelAdmin):
-    list_display = ["fecha", "egreso", "monto", "cuenta", "medio", "automatico"]
-    list_filter = ["cuenta", "automatico"]
+    list_display = ["fecha", "egreso", "monto", "cuenta", "medio", "automatico", "conciliado"]
+    list_filter = ["cuenta", "automatico", "conciliado"]
+    list_editable = ["conciliado"]
     date_hierarchy = "fecha"
 
 
@@ -74,3 +77,21 @@ class PagoAdmin(admin.ModelAdmin):
 class CuotaAdmin(admin.ModelAdmin):
     list_display = ["egreso", "numero", "vencimiento", "monto"]
     date_hierarchy = "vencimiento"
+
+
+@admin.register(EstimacionLiquidacion)
+class EstimacionLiquidacionAdmin(admin.ModelAdmin):
+    list_display = ["periodo", "version", "creada", "bruto", "retencion", "neto", "aplicada"]
+    readonly_fields = [f.name for f in EstimacionLiquidacion._meta.fields]
+
+
+@admin.register(TransferenciaCuenta)
+class TransferenciaCuentaAdmin(admin.ModelAdmin):
+    list_display = ["fecha", "origen", "destino", "monto", "observaciones"]
+
+
+@admin.register(Cobro)
+class CobroAdmin(admin.ModelAdmin):
+    list_display = ["fecha", "ingreso", "monto", "cuenta", "conciliado"]
+    list_filter = ["cuenta", "conciliado"]
+    list_editable = ["conciliado"]

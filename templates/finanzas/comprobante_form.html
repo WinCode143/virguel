@@ -29,6 +29,10 @@
     <div class="form-movil" style="margin:0">{{ form.fecha_pago.label_tag }}{{ form.fecha_pago }}</div>
     <div class="form-movil" style="margin:0">{{ form.medio_pago.label_tag }}{{ form.medio_pago }}</div>
   </div>
+  <div class="grid g2" style="margin-top:.6rem">
+    <div class="form-movil" style="margin:0">{{ form.prioridad.label_tag }}{{ form.prioridad }}</div>
+    <div class="form-movil" style="margin:0">{{ form.motivo_prioridad.label_tag }}{{ form.motivo_prioridad }}</div>
+  </div>
   <p class="muted" style="font-size:.82rem">Las notas de crédito se guardan en negativo (restan del gasto).</p>
   <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1.2rem">
     <button class="btn">{% icono 'check' 'sm' %} Guardar</button>

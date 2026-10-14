@@ -1,0 +1,20 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Diccionario de indicadores · Virguel{% endblock %}
+{% block encabezado %}<h1>Diccionario de indicadores</h1><p class="sub">Qué mide cada indicador, sobre quién, con qué cuenta y de dónde sale. La app, el escritorio y la exportación usan la misma fuente de cálculo. Cada cambio de meta, límite o peso sube la versión del criterio: así un cambio de criterio no se confunde con un cambio de desempeño.{% if es_gerencia %} <a href="{% url 'admin:core_indicador_changelist' %}">Editar</a>{% endif %}</p>{% endblock %}
+{% block contenido %}
+<p class="muted">Los índices (IPT, IGS) son un resumen ponderado para ordenar la revisión: no son una probabilidad de aptitud ni reemplazan la mirada sobre producción, calidad, recursos y conducta por separado.</p>
+{% for nombre, inds in grupos %}
+<div class="card"><h2>{{ nombre }}</h2>
+<div class="tabla-scroll"><table><thead><tr><th>Indicador</th><th>Población</th><th>Numerador</th><th>Denominador</th><th>Ventana</th><th>Meta / límite</th><th>Peso</th><th>Si falta el dato</th><th>Fuente</th><th>Versión</th></tr></thead><tbody>
+{% for i in inds %}<tr{% if not i.activo %} class="muted"{% endif %}>
+  <td><b>{{ i.nombre }}</b><br><span class="muted" style="font-size:.8rem">{{ i.codigo }}{% if not i.activo %} · inactivo{% endif %}</span></td>
+  <td>{{ i.poblacion|default:"—" }}</td><td>{{ i.numerador|default:"—" }}</td><td>{{ i.denominador|default:"— (promedio o conteo)" }}</td>
+  <td>{{ i.ventana|default:"—" }}</td>
+  <td class="num">{{ i.meta|num }} / {{ i.minimo|num }} {{ i.unidad }}<br><span class="muted" style="font-size:.8rem">{% if i.mayor_es_mejor %}más es mejor{% else %}menos es mejor{% endif %}</span></td>
+  <td class="num">{% if i.peso %}{{ i.peso }}{% else %}info{% endif %}</td>
+  <td>{{ i.sin_dato|default:"—" }}</td><td style="font-size:.8rem">{{ i.fuente|default:"—" }}</td>
+  <td class="num">v{{ i.version }}{% with u=i.historial|last %}{% if u %}<br><span class="muted" style="font-size:.8rem">{{ u.fecha }}</span>{% endif %}{% endwith %}</td>
+</tr>{% endfor %}
+</tbody></table></div></div>
+{% endfor %}
+{% endblock %}

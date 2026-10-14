@@ -14,7 +14,15 @@
   {% else %}<p class="muted">La orden no está cerrada: no hace falta reabrirla.</p>{% endif %}
   <p><a href="{% url 'tablero:importar' %}">Volver</a></p>
 </form>
-<div><div class="card"><h2>Visitas (historial)</h2><table><tbody>{% for i in intentos %}<tr><td>#{{ i.numero }} {{ i.fecha|date:"d/m/Y" }}</td><td>{{ i.get_resultado_display }}{% if i.motivo_no_resuelto %} ({{ i.get_motivo_no_resuelto_display }}){% endif %}</td><td>{{ i.tecnico.nombre_completo|default:"—" }}{% if i.supervisor %}<br><small class="muted">sup. {{ i.supervisor.nombre_completo }}</small>{% endif %}</td></tr>{% empty %}<tr><td class="muted">Sin visitas registradas.</td></tr>{% endfor %}</tbody></table>
+<div><div class="card"><h2>Visitas (historial)</h2><table><tbody>{% for i in intentos %}<tr><td>#{{ i.numero }} {{ i.fecha|date:"d/m/Y" }}</td><td>{{ i.get_resultado_display }}{% if i.motivo_no_resuelto %} ({{ i.get_motivo_no_resuelto_display }}){% endif %}</td><td>{{ i.tecnico.nombre_completo|default:"—" }}{% if i.supervisor %}<br><small class="muted">sup. {{ i.supervisor.nombre_completo }}</small>{% endif %}</td></tr>
+<tr><td colspan="3">{% for r in i.rectificaciones.all %}<small class="muted">Rectificado {{ r.fecha|date:"d/m/Y H:i" }} por {{ r.usuario }}: {{ r.campo }} {{ r.antes|default:"—" }} → {{ r.despues|default:"—" }} ({{ r.motivo }})</small><br>{% endfor %}
+<details><summary class="muted" style="font-size:.85rem">Rectificar esta visita</summary>
+<form method="post" action="{% url 'tablero:rectificar_visita' i.id %}" class="form-movil">{% csrf_token %}
+  <label>Resultado</label><select name="resultado">{% for v, n in resultados %}<option value="{{ v }}" {% if v == i.resultado %}selected{% endif %}>{{ n }}</option>{% endfor %}</select>
+  <label>Motivo de no resolución</label><select name="motivo_no_resuelto"><option value="">—</option>{% for v, n in motivos %}<option value="{{ v }}" {% if v == i.motivo_no_resuelto %}selected{% endif %}>{{ n }}</option>{% endfor %}</select>
+  <label>Quién hizo la visita</label><select name="tecnico">{% for t in tecnicos %}<option value="{{ t.id }}" {% if t.id == i.tecnico_id %}selected{% endif %}>{{ t }}</option>{% endfor %}</select>
+  <label>Motivo de la rectificación (obligatorio)</label><input name="motivo" required maxlength="200">
+  <button class="btn sec">Rectificar</button></form></details></td></tr>{% empty %}<tr><td class="muted">Sin visitas registradas.</td></tr>{% endfor %}</tbody></table>
 <p class="muted" style="font-size:.82rem">Reabrir no borra estas visitas: quedan en la historia de quien las hizo.</p></div>
 <div class="card"><h2>Notas de la orden</h2><table><tbody>{% for n in notas %}<tr><td>{{ n.creada|date:"d/m/Y H:i" }}</td><td>{{ n.get_tipo_display }}</td><td>{{ n.texto }}</td></tr>{% empty %}<tr><td class="muted">Sin notas.</td></tr>{% endfor %}</tbody></table></div></div>
 </div>

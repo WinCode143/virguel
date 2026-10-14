@@ -50,12 +50,17 @@ def entregar(tecnico, material, cantidad, fecha: date | None = None, pedido=None
     salida = registrar_salida(Salida(material=material, cantidad=cantidad, fecha=fecha, tecnico=tecnico,
                                      motivo=Salida.Motivo.ENTREGA, observaciones=f"Pedido {pedido.id}" if pedido else ""),
                               permitir_negativo=permitir_negativo)
+    if pedido is not None and pedido.orden_id:
+        # lo reservado para esa orden ya salió del depósito: la reserva queda consumida (no se descuenta dos veces)
+        from .models import ReservaMaterial
+        ReservaMaterial.objects.filter(orden_id=pedido.orden_id, material=material, estado="activa").update(
+            estado="consumida")
     return MovimientoStockTecnico.objects.create(tecnico=tecnico, material=material, fecha=fecha, tipo=T.ENTREGA,
                                                  cantidad=Decimal(cantidad), pedido=pedido, salida=salida)
 
 
 @transaction.atomic
-def consumir(tecnico, orden, material, cantidad, fecha: date | None = None) -> bool:
+def consumir(tecnico, orden, material, cantidad, fecha: date | None = None, intento=None) -> bool:
     """Material usado en una orden: se descuenta del stock del técnico.
 
     Devuelve False si el técnico no tenía suficiente (queda saldo negativo y se avisa:
@@ -64,9 +69,9 @@ def consumir(tecnico, orden, material, cantidad, fecha: date | None = None) -> b
     cantidad = Decimal(cantidad)
     alcanzaba = saldo(tecnico, material) >= cantidad
     MovimientoStockTecnico.objects.create(tecnico=tecnico, material=material, fecha=fecha, tipo=T.CONSUMO,
-                                          cantidad=-cantidad, orden=orden)
+                                          cantidad=-cantidad, orden=orden, intento=intento)
     # Registro del consumo para los indicadores (no toca los lotes del depósito: ya salieron en la entrega)
-    Salida.objects.create(material=material, fecha=fecha, cantidad=cantidad, tecnico=tecnico, orden=orden,
+    Salida.objects.create(material=material, fecha=fecha, cantidad=cantidad, tecnico=tecnico, orden=orden, intento=intento,
                           motivo=Salida.Motivo.CONSUMO, costo_total=cantidad * material.costo_unitario,
                           observaciones="Del stock del técnico")
     return alcanzaba
@@ -133,48 +138,70 @@ def devolver(tecnico, material, cantidad, fecha: date | None = None, observacion
     for (_, f_ingreso, costo), (lote, q) in por_origen.items():
         lotes.append(LoteIngreso.objects.create(
             material=material, fecha=f_ingreso, cantidad=q, costo_unitario=costo,
-            origen=LoteIngreso.Origen.DEVOLUCION, lote_origen=lote,
+            origen=LoteIngreso.Origen.DEVOLUCION, lote_origen=lote, recibido=fecha,
             proveedor=f"Devolución {tecnico.legajo}", remito=f"Dev. {fecha:%d/%m/%Y}"))
     return lotes
 
 
 def partes_paradas(tecnicos=None, hoy: date | None = None, dias: int | None = None):
-    """Partes en manos de técnicos hace más de N días sin usarse (FIFO sobre sus movimientos)."""
+    """Partes en manos de técnicos que superan los días máximos (FIFO sobre sus movimientos).
+
+    Cada unidad tiene dos relojes: la edad original (ingreso a la empresa, según su lote) y la
+    permanencia en el técnico (desde que se la entregaron). Parámetros → reloj_antiguedad decide cuál
+    activa la alerta; ambos se informan."""
+    p = Parametros.actual()
     hoy = hoy or timezone.localdate()
-    dias = dias or Parametros.actual().dias_max_stock
+    dias = dias or p.dias_max_stock
     qs = MovimientoStockTecnico.objects.order_by("fecha", "id")
     if tecnicos is not None:
         qs = qs.filter(tecnico__in=tecnicos)
-    colas = defaultdict(deque)  # (tecnico_id, material_id) -> [[fecha, cantidad]]
-    # tuplas en vez de objetos: el libro de movimientos puede tener cientos de miles de filas
-    for tid, mid, fecha, cantidad in qs.values_list("tecnico_id", "material_id", "fecha", "cantidad").iterator(
-            chunk_size=5000):
+    movs = list(qs.values_list("tecnico_id", "material_id", "fecha", "cantidad", "salida_id"))
+    origen = defaultdict(list)  # salida_id -> [(fecha_lote, cantidad)]
+    for sid, f, c in ConsumoLote.objects.filter(salida_id__in={m[4] for m in movs if m[4]}).order_by(
+            "lote__fecha", "lote_id").values_list("salida_id", "lote__fecha", "cantidad"):
+        origen[sid].append((f, c))
+    colas = defaultdict(deque)  # (tecnico_id, material_id) -> [[fecha_entrega, fecha_original, cantidad]]
+    for tid, mid, fecha, cantidad, sid in movs:
         cola = colas[(tid, mid)]
         if cantidad > 0:
-            cola.append([fecha, cantidad])
+            pendiente = cantidad
+            for f_orig, c in origen.get(sid, ()):
+                tomado = min(c, pendiente)
+                if tomado > 0:  # una unidad no puede ser más nueva en la empresa que su entrega
+                    cola.append([fecha, min(f_orig, fecha), tomado])
+                    pendiente -= tomado
+            if pendiente > 0:
+                cola.append([fecha, fecha, pendiente])
         else:
             resto = -cantidad
             while resto > 0 and cola:
-                tomado = min(cola[0][1], resto)
-                cola[0][1] -= tomado
+                tomado = min(cola[0][2], resto)
+                cola[0][2] -= tomado
                 resto -= tomado
-                if cola[0][1] <= 0:
+                if cola[0][2] <= 0:
                     cola.popleft()
+    usar_original = p.reloj_antiguedad == "original"
     viejas_por_par = {}
     for k, cola in colas.items():
-        viejas = [(f, c) for f, c in cola if (hoy - f).days >= dias]
+        viejas = [(fe, fo, c) for fe, fo, c in cola if (hoy - (fo if usar_original else fe)).days >= dias]
         if viejas:
             viejas_por_par[k] = viejas
     from core.models import Persona
+
     from .models import Material
     personas = Persona.objects.in_bulk({t for t, _ in viejas_por_par})
     mats = Material.objects.in_bulk({m for _, m in viejas_por_par})
     filas = []
     for (tid, mid), viejas in viejas_por_par.items():
         tec, mat = personas[tid], mats[mid]
-        cant = sum(c for _, c in viejas)
-        filas.append({"tecnico": tec, "material": mat, "cantidad": cant, "desde": viejas[0][0],
-                      "dias": (hoy - viejas[0][0]).days, "valor": cant * mat.costo_unitario})
+        cant = sum(c for _, _, c in viejas)
+        entrega = min(fe for fe, _, _ in viejas)
+        original = min(fo for _, fo, _ in viejas)
+        filas.append({"tecnico": tec, "material": mat, "cantidad": cant, "desde": entrega,
+                      "dias_custodia": (hoy - entrega).days, "dias_original": (hoy - original).days,
+                      "reloj": "edad original" if usar_original else "permanencia en el técnico",
+                      "dias": (hoy - (original if usar_original else entrega)).days,
+                      "valor": cant * mat.costo_unitario})
     return sorted(filas, key=lambda f: -f["dias"])
 
 
@@ -188,9 +215,13 @@ def faltante_para_ordenes(tecnico, hasta: date | None = None):
     recetas = defaultdict(list)
     for r in RecetaMaterial.objects.select_related("material"):
         recetas[r.tipo_tarea_id].append(r)
+    from core.models import Parametros
+    from .services import _factor
+    p = Parametros.actual()
     for o in pendientes:
         for r in recetas[o.tipo_id]:
-            necesidad[r.material] += r.cantidad
+            # misma regla que la previsión: la condición de la receta (por equipo, si hay recambio)
+            necesidad[r.material] += r.cantidad * Decimal(_factor(r, o.equipos_requeridos, o.requiere_recambio, p)[0])
     tengo = saldos(tecnico)
     filas = []
     for m, q in sorted(necesidad.items(), key=lambda kv: kv[0].nombre):

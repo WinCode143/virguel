@@ -4,15 +4,21 @@ Los formularios con [data-offline] mandan `_id_operacion` (un UUID por envío):
 
 * Si ese envío ya fue aceptado, no se vuelve a aplicar (evita fichadas, cierres o
   consumos duplicados cuando la respuesta se perdió y el celular reintenta).
+* La operación y el registro de su aceptación se confirman en UNA transacción: si la vista falla
+  o no acepta los datos, no queda ni el cambio ni la marca (no hay "guardado sin aceptación").
+* El mismo identificador con contenido distinto es un conflicto (409), no una repetición.
+* Dos envíos concurrentes del mismo identificador tienen un único efecto (clave única).
 * Cuando el envío viene de la sincronización automática (cabecera X-Virguel-Sync),
   la respuesta es JSON y explícita: `{"ok": true}` sólo si el servidor aceptó la
   operación; si el formulario tuvo errores, `{"ok": false, "mensaje": ..., "html": ...}`
   para que el técnico lo corrija. El celular borra el pendiente únicamente con ok=true.
 """
+import hashlib
 import uuid
 
 from django.conf import settings
 from django.contrib.messages import ERROR
+from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import resolve_url
 
@@ -24,6 +30,20 @@ def _id(request):
         return uuid.UUID(request.POST.get("_id_operacion", ""))
     except ValueError:
         return None
+
+
+def _huella(request) -> str:
+    """Contenido del envío (sin el token CSRF, que cambia entre sesiones)."""
+    h = hashlib.sha256(request.path.encode())
+    for k in sorted(request.POST):
+        if k == "csrfmiddlewaretoken":
+            continue
+        for v in request.POST.getlist(k):
+            h.update(f"{k}={v}\n".encode())
+    for k in sorted(request.FILES):
+        for f in request.FILES.getlist(k):
+            h.update(f"{k}:{f.name}:{f.size}\n".encode())
+    return h.hexdigest()
 
 
 def _es_login(resp):
@@ -49,24 +69,33 @@ class SincronizacionOfflineMiddleware:
         if ident is None:
             return self.get_response(request)
         es_sync = request.headers.get("X-Virguel-Sync") == "1"
-        previo = OperacionOffline.objects.filter(id_operacion=ident).first()
-        if previo is not None:
-            if previo.usuario_id != request.user.pk:
-                return JsonResponse({"ok": False, "mensaje": "Envío de otro usuario."}, status=409)
-            # Ya aplicado: no se repite.
-            return JsonResponse({"ok": True, "repetido": True}) if es_sync else self._a_inicio()
+        huella = _huella(request)
+        with transaction.atomic():
+            op, creada = OperacionOffline.objects.get_or_create(id_operacion=ident, defaults={
+                "usuario": request.user, "ruta": request.path[:200], "huella": huella})
+            if not creada:
+                if op.usuario_id != request.user.pk:
+                    return JsonResponse({"ok": False, "mensaje": "Envío de otro usuario."}, status=409)
+                if op.huella and op.huella != huella:
+                    return JsonResponse({"ok": False, "conflicto": True,
+                                         "mensaje": "Ese envío ya se registró con otros datos: revisar antes de "
+                                                    "volver a mandarlo."}, status=409)
+                # Ya aplicado: no se repite.
+                return JsonResponse({"ok": True, "repetido": True}) if es_sync else self._a_inicio()
 
-        resp = self.get_response(request)
+            resp = self.get_response(request)
 
-        if resp.status_code in (301, 302, 303) and not _es_login(resp):
-            errores = _errores_en_mensajes(request)
-            if not errores:
-                OperacionOffline.objects.get_or_create(id_operacion=ident, defaults={
-                    "usuario": request.user, "ruta": request.path[:200]})
+            aceptado = resp.status_code in (301, 302, 303) and not _es_login(resp)
+            errores = _errores_en_mensajes(request) if aceptado else []
+            if aceptado and not errores:
                 return JsonResponse({"ok": True}) if es_sync else resp
+            # No aceptado: no queda la marca; en la sincronización tampoco ningún cambio parcial.
             if es_sync:
-                return JsonResponse({"ok": False, "mensaje": " ".join(errores)})
-            return resp
+                transaction.set_rollback(True)
+            else:
+                op.delete()
+        if errores and es_sync:
+            return JsonResponse({"ok": False, "mensaje": " ".join(errores)})
         if es_sync and resp.status_code == 200 and "text/html" in resp.get("Content-Type", ""):
             # La vista volvió a mostrar el formulario: hubo errores de validación.
             return JsonResponse({"ok": False, "mensaje": "El servidor no aceptó los datos: revisar el formulario.",

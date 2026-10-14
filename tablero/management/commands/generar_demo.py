@@ -564,6 +564,10 @@ class Command(BaseCommand):
                 vencimiento_vtv=self.hoy + timedelta(days=r.randint(-5, 330)),
                 vencimiento_seguro=self.hoy + timedelta(days=r.randint(5, 360)))
             v.km_dia = r.uniform(55, 95)
+            v.planes.set(self.tipos_service)
+            if i == 15:  # uno sin antecedentes cargados (muestra "faltan antecedentes")
+                self.vehiculos.append(v)
+                continue
             self.vehiculos.append(v)
             # historial de services
             for ts in self.tipos_service:
@@ -912,8 +916,13 @@ class Command(BaseCommand):
                         res = None
                         if meta and fecha != self.hoy:
                             res = meta if estado == "cumplida" else (r.randint(1, meta - 1) if estado == "parcial" else 0)
+                        # lo reportado se verifica a los pocos días (determinístico: no altera la semilla)
+                        verif = ("sin_reporte" if estado == "pendiente" else
+                                 "verificado" if (self.hoy - fecha).days > 3 else "reportado")
                         tareas.append(TareaSupervisor(supervisor=s, fecha=fecha, descripcion=desc, meta=meta,
-                                                      resultado=res, estado=estado))
+                                                      resultado=res, estado=estado, verificacion=verif,
+                                                      criterio_aceptacion="Informes con foto y ubicación" if meta else
+                                                      "Planilla de EPP firmada"))
                 for _ in range(poisson(r, pf["informes"])):
                     t = r.choice(equipo)
                     prob = PERFILES[t.perfil]["desvio"]
@@ -925,7 +934,10 @@ class Command(BaseCommand):
                     puntaje = r.randint(1, 3) if desvio else r.randint(4, 5)
                     doc = r.random() < pf["doc"]
                     ots = ots_de.get((t.id, fecha))
+                    sel = (t.id + fecha.toordinal()) % 10
                     inf = InformeControl(supervisor=s, tecnico=t, fecha=fecha, tipo=r.choice(InformeControl.Tipo.values),
+                                         motivo_seleccion="sospecha" if sel == 0 else "reclamo" if sel == 1 else
+                                         "aleatorio" if sel < 5 else "programado",
                                          puntaje=puntaje, desvio_detectado=desvio,
                                          descripcion=(r.choice(frases_mal) if desvio else r.choice(frases_ok)) +
                                          (" Se conversó con el técnico en el lugar y se dejó registro fotográfico."
@@ -969,6 +981,18 @@ class Command(BaseCommand):
             for inf, t, s, tipo, f in acciones_pend], batch_size=2000)
         EncuestaSupervisor.objects.bulk_create(encuestas, batch_size=5000)
         TareaSupervisor.objects.bulk_create(tareas, batch_size=2000)
+        # Plantilla de control de calidad (valores de prueba, a reemplazar por la de la empresa)
+        from supervision.models import ItemPlantilla, PlantillaInspeccion
+        PlantillaInspeccion.objects.all().delete()
+        pl = PlantillaInspeccion.objects.create(nombre="Instalación FTTH (prueba)")
+        for i, (punto, criterio, defecto, critico) in enumerate([
+                ("Potencia óptica en la roseta", "Entre -8 y -25 dBm", "Potencia fuera de rango", True),
+                ("Conectores con protector", "Todos protegidos", "Conector sin protector", False),
+                ("Cableado interno", "Grampeado y sin curvas cerradas", "Cableado suelto o forzado", False),
+                ("Servicio probado con el cliente", "Navegación y TV funcionando", "Servicio sin probar", True),
+                ("Orden y limpieza al terminar", "Sin restos en el domicilio", "Restos de material", False)], 1):
+            ItemPlantilla.objects.create(plantilla=pl, orden=i, punto=punto, criterio=criterio, defecto=defecto,
+                                         critico=critico)
         # Evaluación semanal al supervisor (≈65 % de los técnicos la responde cada semana)
         from supervision.models import EncuestaSemanal
         semanales = []
@@ -1020,7 +1044,7 @@ class Command(BaseCommand):
             dias = (self.hoy - fecha).days
             cerrado = dias > 25 and r.random() < .85
             resol = r.choice(["reparacion", "acuerdo", "seguro"]) if cerrado else "pendiente"
-            Siniestro.objects.create(
+            sin = Siniestro.objects.create(
                 numero=f"S-{fecha:%Y}-{n:05d}", fecha=fecha, tipo=tipo, gravedad=grav,
                 responsabilidad_civil=r.random() < .85, tecnico=t, supervisor=t.supervisor, zona=t.zona,
                 direccion=f"Calle {r.randint(1, 180)} N° {r.randint(100, 4999)}",
@@ -1182,15 +1206,33 @@ class Command(BaseCommand):
         gasto_mes = (Egreso.objects.filter(fecha__gte=self.inicio).aggregate(t=Sum("monto"))["t"] or Decimal("0")) \
             / Decimal(str(meses))
 
+        # 0. Incidentes: algunos investigados (atribución confirmada o descartada con fundamento), el resto pendiente
+        from incidentes.models import Siniestro
+        for k, sin in enumerate(Siniestro.objects.order_by("fecha")):
+            if k % 3 == 0:
+                sin.investigacion, sin.atribucion = "concluida", "confirmada"
+                sin.atribucion_fundamento = "Testigos y fotos: no se usó el detector de cañerías (prueba)."
+            elif k % 3 == 1:
+                sin.investigacion, sin.atribucion = "concluida", "descartada"
+                sin.atribucion_fundamento = "Instalación previa del cliente fuera de norma (prueba)."
+            else:
+                sin.investigacion = "en_curso"
+            sin.atribucion_por_id = sin.supervisor_id
+            sin.responsable_gestion_id = sin.supervisor_id
+            sin.save()
+
         # 1. Precio por tipo de tarea (baremo de Claro): relativos, escalados para que el ingreso cubra el gasto + 15 %
         relativo = {"INST-FO": 1.0, "INST-TV": .7, "REP": .45, "MUD": .9, "RET": .2, "REL": .15}
         unidades = sum(relativo.get(t, .3) * n for t, n in OrdenTrabajo.objects.filter(
             estado="completada", es_retrabajo=False, fecha_ejecucion__gte=self.inicio)
             .values_list("tipo__codigo").annotate(n=Count("id"))) / meses
         base = gasto_mes * Decimal("1.15") / Decimal("0.97") / Decimal(str(unidades or 1))
+        from operaciones.models import TarifaClaro
+        from datetime import date as _date
         for codigo, tipo in self.tipos.items():
-            tipo.precio_claro = (base * Decimal(str(relativo.get(codigo, .3)))).quantize(Decimal("100"))
-            tipo.save(update_fields=["precio_claro"])
+            TarifaClaro.objects.create(tipo_tarea=tipo, vigente_desde=_date(2000, 1, 1), provisoria=True,
+                                       fuente="Valor de prueba (a reemplazar por el baremo real)",
+                                       precio=(base * Decimal(str(relativo.get(codigo, .3)))).quantize(Decimal("100")))
 
         # 2. Cuentas con saldo inicial al comienzo de la demo
         banco = Cuenta.objects.create(nombre="Banco (cuenta corriente)", tipo="banco",
@@ -1199,6 +1241,11 @@ class Command(BaseCommand):
         Cuenta.objects.create(nombre="Caja chica", tipo="efectivo", saldo_inicial=Decimal("300000"),
                               fecha_saldo_inicial=self.inicio - timedelta(days=1))
         Pago.objects.filter(fecha__gt=banco.fecha_saldo_inicial).update(cuenta=banco)
+        # Los gastos registrados quedan pendientes hasta que se paga (obligación ≠ pago): en la demo se
+        # registran los pagos de lo que tiene más de 10 días; lo más reciente queda a pagar.
+        for e in Egreso.objects.filter(pagado=False, monto__gt=0, fecha__lt=self.hoy - timedelta(days=10)):
+            Pago.objects.create(egreso=e, monto=e.saldo, cuenta=banco, medio="transferencia",
+                                fecha=min(self.hoy, (e.vencimiento or e.fecha) + timedelta(days=r.randint(0, 5))))
 
         # 3. Liquidaciones esperadas de Claro (meses cerrados) y sus cobros
         m = self.inicio.replace(day=1)

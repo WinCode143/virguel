@@ -14,6 +14,9 @@ class Importacion(models.Model):
     creados = models.PositiveIntegerField(default=0)
     actualizados = models.PositiveIntegerField(default=0)
     omitidos = models.PositiveIntegerField(default=0, help_text="Filas no aplicadas (duplicadas u órdenes cerradas).")
+    huella = models.CharField("Huella del archivo (SHA-256)", max_length=64, blank=True, db_index=True)
+    resultado_filas = models.JSONField(default=list, blank=True,
+                                       help_text="Por fila: clave, resultado y valores anteriores de lo que cambió.")
 
     class Meta:
         ordering = ["-fecha"]

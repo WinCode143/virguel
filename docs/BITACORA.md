@@ -526,3 +526,23 @@ Ejecutar el plan `docs/PLAN_CORRECCIONES.md` hasta donde no haga falta informaci
   asignaciones de EPP existentes conservan su egreso (se migran como "compra").
 - Pendiente de la empresa: liquidación de Claro, saldos y cuentas, deudas, atribución de motivos,
   pesos, propiedad de decodificadores, cuadrillas.
+
+## 2026-10-14 — Contraste con el modelo de referencia (13/10)
+
+### Hecho
+- M01 (P0): permisos sin `is_staff` implícito, supervisor sin evidencia, atribución de incidentes,
+  pañol con libro de movimientos, apertura/custodia de stock, mantenimiento con base, liquidación
+  confirmada vs. estimada, obligación vs. pago, caja vs. costo, offline idempotente y atómico,
+  service worker por cuenta, visitas rectificables.
+- M02–M07: cuadrillas y participación, evidencia por visita, equipos por serie, reservas, recetas
+  condicionadas, dos relojes de antigüedad, agenda por minutos con bloqueos explicados, formación
+  evaluada, plan de mejora, plantillas de inspección, motivo de cada control, objetivos verificados,
+  actuaciones de incidentes, odómetro, transferencias, prioridades de pago, diccionario de
+  indicadores versionado.
+- M08 (P2): preparación de visita determinística (sin IA).
+- Estado criterio por criterio: `docs/CONTRASTE_FACTIBILIDAD.md`. Validado: 204 tests en
+  PostgreSQL y recorrido Playwright.
+
+### Decisiones
+- Lo que depende de reglas de la empresa corre con valores de prueba marcados como provisorios.
+- La IA queda para una segunda etapa, como borradores que el usuario confirma sobre las mismas reglas.

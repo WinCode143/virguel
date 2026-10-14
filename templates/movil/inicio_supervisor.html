@@ -24,10 +24,17 @@
 <div class="card"><h2>Mis objetivos de hoy</h2>
 {% for t in tareas %}<form method="post" action="{% url 'movil:tarea' t.id %}" class="form-movil" style="border-bottom:1px solid var(--grid);padding-bottom:.6rem">{% csrf_token %}
   <b>{{ t.descripcion }}</b>{% if t.meta %} <span class="muted">(meta {{ t.meta }})</span>{% endif %}
+  <span class="muted" style="font-size:.85rem">· {{ t.get_verificacion_display }}</span>
+  {% if t.criterio_aceptacion %}<br><span class="muted" style="font-size:.85rem">Se acepta si: {{ t.criterio_aceptacion }}</span>{% endif %}
   {% if t.meta %}<label>Resultado</label><input type="number" name="resultado" value="{{ t.resultado|default:'' }}" min="0">
   {% else %}<label>Estado</label><select name="estado">{% for k, v in t.Estado.choices %}<option value="{{ k }}" {% if k == t.estado %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>{% endif %}
-  <button class="btn sec">Actualizar</button></form>
+  <label>Evidencia (qué controlaste, n.º de orden, informe…)</label><input name="evidencia" value="{{ t.evidencia }}" maxlength="250">
+  <button class="btn sec">Reportar</button></form>
 {% empty %}<p class="muted">Gerencia no te asignó objetivos para hoy.</p>{% endfor %}</div>
+{% if sin_control %}<div class="card" style="border-color:var(--aviso)"><h2>Sin control esta semana ({{ sin_control|length }})</h2>
+<ul class="lista-ot">{% for t in sin_control %}<li><div>{{ t.nombre_completo }}</div>
+<a class="btn sec" href="{% url 'movil:informe' %}?tecnico={{ t.id }}">Controlar</a></li>{% endfor %}</ul>
+<p class="muted" style="font-size:.85rem;margin:.4rem 0 0">Trabajaron esta semana y todavía no tuvieron ningún control.</p></div>{% endif %}
 <div class="card"><h2>Desvíos sin acción correctiva</h2>
 <ul class="lista-ot">{% for i in desvios_sin_accion %}<li><div>{{ i.tecnico.nombre_completo }}<br><span class="muted" style="font-size:.85rem">{{ i.fecha|date:"d/m" }} · {{ i.descripcion|truncatechars:50 }}</span></div>
 <a class="btn sec" href="{% url 'movil:accion' %}?informe={{ i.id }}&tecnico={{ i.tecnico_id }}">Resolver</a></li>

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import ServiceRealizado, TipoService, Vehiculo
+from .models import LecturaOdometro, ServiceRealizado, TipoService, Vehiculo
 
 
 class ServiceInline(admin.TabularInline):
@@ -15,6 +15,7 @@ class VehiculoAdmin(admin.ModelAdmin):
     list_filter = ["estado", "marca"]
     search_fields = ["patente", "marca", "modelo"]
     autocomplete_fields = ["asignado_a"]
+    filter_horizontal = ["planes"]
     inlines = [ServiceInline]
 
 
@@ -28,3 +29,15 @@ class ServiceAdmin(admin.ModelAdmin):
     list_display = ["vehiculo", "tipo", "fecha", "km", "costo", "taller"]
     list_filter = ["tipo", "vehiculo"]
     date_hierarchy = "fecha"
+
+
+@admin.register(LecturaOdometro)
+class LecturaOdometroAdmin(admin.ModelAdmin):
+    list_display = ["vehiculo", "momento", "km", "fuente", "registrada_por", "anomalia"]
+    list_filter = ["fuente", "vehiculo"]
+
+    def save_model(self, request, obj, form, change):
+        if change:
+            return super().save_model(request, obj, form, change)
+        from .models import registrar_lectura
+        registrar_lectura(obj.vehiculo, obj.km, obj.fuente, persona=obj.registrada_por, momento=obj.momento)

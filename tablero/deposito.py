@@ -126,6 +126,8 @@ def deudas(request):
                 e.observaciones = request.POST.get("observaciones", "")[:200]
                 e.save()
                 if accion == "recibir":
+                    from inventario.equipos import recibir_en_deposito
+                    recibir_en_deposito(e.numero_serie, e.material, yo)  # queda "a revisar": no es stock utilizable
                     notificar(e.tecnico, "Equipo recibido en el depósito", f"Serie {e.numero_serie}: regularizado.", "/app/stock/")
                 messages.success(request, f"Equipo {e.numero_serie}: {e.get_estado_display().lower()}.")
             elif accion == "entrega_pendiente":

@@ -184,7 +184,8 @@ def evaluar_tecnicos(hasta: date | None = None, dias: int | None = None, tecnico
         serie[tid].setdefault(fecha, 0)
 
     # Controles de supervisores
-    for r in (InformeControl.objects.filter(tecnico_id__in=ids, fecha__range=(desde, hasta))
+    # (los controles dirigidos por sospecha o reclamo no representan la calidad general del técnico)
+    for r in (InformeControl.objects.representativos().filter(tecnico_id__in=ids, fecha__range=(desde, hasta))
               .values("tecnico_id").annotate(p=Avg("puntaje"), n=Count("id"))):
         evs[r["tecnico_id"]].puntaje_controles = float(r["p"])
         evs[r["tecnico_id"]].controles = r["n"]
@@ -198,8 +199,10 @@ def evaluar_tecnicos(hasta: date | None = None, dias: int | None = None, tecnico
         evs[tid].puntos_disciplina += peso_accion.get(tipo, 1)
 
     # Seguridad: siniestros + EPP obligatorio faltante o vencido
+    # Sólo siniestros con conducta del técnico CONFIRMADA (estar vinculado no acredita haberlo causado)
     for tid, grav in Siniestro.objects.filter(
-            tecnico_id__in=ids, fecha__range=(desde, hasta)).values_list("tecnico_id", "gravedad"):
+            tecnico_id__in=ids, fecha__range=(desde, hasta), atribucion=Siniestro.Atribucion.CONFIRMADA
+    ).values_list("tecnico_id", "gravedad"):
         evs[tid].puntos_siniestros += peso_siniestro.get(grav, 1)
     obligatorios = set(Elemento.objects.filter(obligatorio_tecnicos=True).values_list("id", flat=True))
     vigentes = defaultdict(set)
@@ -290,8 +293,10 @@ def _puntuar(e: EvaluacionTecnico, mediana: float, dias: int = 90, criterio: dic
         e.motivos.append(f"Calidad sin dato: {ejecutadas} órdenes y {e.controles} controles en la ventana")
     # Disciplina: puntos de sanción cada 30 días (un apercibimiento por mes ≈ 70/100)
     e.score_disciplina = _clamp(100 - e.puntos_disciplina * 30 / max(dias, 1) * 15)
-    # Seguridad: un siniestro grave ≈ -36; cada EPP obligatorio faltante o vencido -10
-    e.score_seguridad = _clamp(100 - e.puntos_siniestros * 12 - e.epp_faltantes * 10)
+    # Seguridad: un siniestro grave confirmado ≈ -36. El EPP faltante o vencido NO resta: que la empresa
+    # no lo haya entregado es un bloqueo de suministro (alerta), no una conducta del técnico; el
+    # incumplimiento de uso se registra en los controles.
+    e.score_seguridad = _clamp(100 - e.puntos_siniestros * 12)
 
     # Índice ponderado sobre las dimensiones con dato (los pesos se reparten entre las disponibles)
     pesos = criterio["dimensiones"]

@@ -6,3 +6,4 @@ media/
 staticfiles/
 *.sqlite3
 capturas/
+.claude/settings.local.json
