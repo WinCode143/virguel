@@ -20,12 +20,12 @@ async function login(page, usuario) {
 const PANTALLAS = {
   gerencia: ['/tablero/', '/tablero/tecnicos/', '/tablero/supervisores/', '/tablero/productividad/',
     '/tablero/productividad/supervisores/', '/tablero/stock/', '/tablero/planificacion/', '/tablero/importar/',
-    '/tablero/operacion/', '/tablero/capacitacion/', '/finanzas/', '/finanzas/caja/', '/finanzas/ingresos/',
+    '/tablero/operacion/', '/tablero/capacitacion/', '/tablero/indicadores/', '/finanzas/', '/finanzas/caja/', '/finanzas/ingresos/',
     '/finanzas/comprobantes/', '/finanzas/comprobantes/?ver=a_pagar', '/personal/legajos/', '/personal/asistencia/'],
   contable: ['/finanzas/', '/finanzas/caja/', '/finanzas/ingresos/', '/finanzas/comprobantes/', '/finanzas/sueldos/',
     '/finanzas/alternativas-de-pago/?nombre_1=Contado&anticipo_1=1000000&nombre_2=Cuotas&cuotas_2=6&monto_cuota_2=180000'],
   deposito: ['/tablero/stock/', '/tablero/stock/tecnicos/', '/tablero/pedidos/', '/tablero/partes-adeudadas/'],
-  s001: ['/app/', '/app/no-resueltas/', '/app/novedades/', '/app/indicadores/', '/tablero/tecnicos/'],
+  s001: ['/app/', '/app/informe/', '/app/informe/?plantilla=1', '/app/no-resueltas/', '/app/novedades/', '/app/indicadores/', '/tablero/tecnicos/'],
   t001: ['/app/', '/app/stock/', '/app/desempeno/', `/app/orden/${ORDEN}/`, '/app/asistencia/'],
 };
 
