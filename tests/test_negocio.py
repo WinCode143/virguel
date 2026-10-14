@@ -417,7 +417,7 @@ class AsignacionTests(TestCase):
         rapido = persona("R", zona=norte)
         lento = persona("L", zona=norte)
         otro = persona("O", zona=sur)
-        tipo = TipoTarea.objects.create(codigo="I", nombre="Inst")
+        tipo = TipoTarea.objects.create(codigo="I", nombre="Inst", minutos_estandar=45)  # 6 × (45 + 30) entran en 8 h
         n = 0
         for d in range(1, 11):
             f = HOY - timedelta(days=d)

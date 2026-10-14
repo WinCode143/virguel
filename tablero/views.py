@@ -313,6 +313,7 @@ def tecnico_detalle(request, pk):
         "acciones": t.acciones_correctivas.select_related("aplicada_por")[:20],
         "siniestros": t.siniestros.all()[:20],
         "informes": t.informes_recibidos.select_related("supervisor")[:15],
+        "planes": t.planes_mejora.prefetch_related("objetivos")[:5],
         "asignaciones": t.asignaciones.select_related("elemento").filter(estado="en_uso"),
     })
 

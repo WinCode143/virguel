@@ -67,6 +67,9 @@ class Parametros(models.Model):
     tecnicos_por_cuadrilla = models.PositiveSmallIntegerField(
         "Técnicos por cuadrilla", default=2,
         help_text="Las hectáreas/día se miden por cuadrilla; esto convierte técnicos en cuadrillas.")
+    minutos_traslado_promedio = models.PositiveIntegerField(
+        "Minutos de traslado promedio entre órdenes", default=30,
+        help_text="Se suma al tiempo estándar de cada orden para ver si entra en la jornada.")
     clientes_por_tecnico_dia = models.DecimalField(
         "Clientes atendibles por técnico/día", max_digits=5, decimal_places=2, default=Decimal("6"),
         help_text="Tope operativo de visitas diarias por técnico.")

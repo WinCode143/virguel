@@ -333,3 +333,79 @@ class HistoriaRectificableTests(TestCase):
         ot.save()
         hist = list(ot.intentos.order_by("numero").values_list("tecnico__legajo", "resultado"))
         self.assertEqual(hist, [("TA", "fallida"), ("TB", "completada")])
+
+
+class AgendaEjecutableTests(TestCase):
+    """B04/B05/B17/V04: minutos de la jornada, disponibilidad unificada y competencias."""
+
+    def setUp(self):
+        from operaciones.models import OrdenTrabajo, TipoTarea
+        from core.models import Zona
+        self.z = Zona.objects.create(nombre="N")
+        self.t = persona("T1", zona=self.z)
+        self.larga = TipoTarea.objects.create(codigo="L", nombre="Larga", minutos_estandar=450)
+        self.corta = TipoTarea.objects.create(codigo="C", nombre="Corta", minutos_estandar=30)
+        self.OT = OrdenTrabajo
+
+    def proponer(self):
+        from core.models import Persona
+        from tablero.asignacion import proponer
+        return proponer(HOY, Persona.objects.filter(rol="tecnico"))
+
+    def test_tarea_que_llena_la_jornada_no_admite_otra(self):
+        self.OT.objects.create(numero="1", tipo=self.larga, zona=self.z, fecha_programada=HOY)
+        self.OT.objects.create(numero="2", tipo=self.corta, zona=self.z, fecha_programada=HOY)
+        p = self.proponer()
+        self.assertEqual([o.numero for o in p["cupos"][0].nuevas], ["1"])
+        self.assertEqual([(o.numero, "sin capacidad" in o.causa) for o in p["sin_asignar"]], [("2", True)])
+
+    def test_licencia_aprobada_y_vehiculo_en_taller_bloquean(self):
+        from flota.models import Vehiculo
+        from personal.models import Novedad
+        self.OT.objects.create(numero="1", tipo=self.corta, zona=self.z, fecha_programada=HOY)
+        n = Novedad.objects.create(persona=self.t, tipo="enfermedad", desde=HOY, hasta=HOY)
+        p = self.proponer()
+        self.assertEqual(p["bloqueados"][0][1][0], "pendiente")  # pendiente de aprobar ≠ disponible
+        n.estado = "aprobada"
+        n.save()
+        p = self.proponer()
+        self.assertEqual((p["bloqueados"][0][1][0], p["cupos"]), ("no_disponible", []))
+        n.delete()
+        Vehiculo.objects.create(patente="AA1", marca="X", modelo="Y", anio=2020, asignado_a=self.t, estado="taller")
+        p = self.proponer()
+        self.assertIn("taller", p["bloqueados"][0][1][1])
+
+    def test_competencia_faltante_bloquea_y_se_explica(self):
+        from capacitacion.models import Competencia, EvaluacionCompetencia, RequisitoCompetencia
+        fo = Competencia.objects.create(nombre="Fusión de fibra")
+        RequisitoCompetencia.objects.create(tipo_tarea=self.corta, competencia=fo, nivel_minimo=3)
+        self.OT.objects.create(numero="1", tipo=self.corta, zona=self.z, fecha_programada=HOY)
+        p = self.proponer()
+        self.assertIn("competencia", p["sin_asignar"][0].causa)
+        EvaluacionCompetencia.objects.create(persona=self.t, competencia=fo, nivel=3)
+        self.assertEqual(len(self.proponer()["cupos"][0].nuevas), 1)
+        # una habilitación vencida no cuenta
+        EvaluacionCompetencia.objects.update(vence=HOY - timedelta(days=1))
+        self.assertEqual(self.proponer()["cupos"][0].nuevas, [])
+
+
+class FormacionTests(TestCase):
+    """B18/B19: asistir no aprueba; una decisión de plan requiere fundamento."""
+
+    def test_participacion_pendiente(self):
+        from capacitacion.models import Capacitacion, Curso, Participacion
+        cap = Capacitacion.objects.create(curso=Curso.objects.create(nombre="EPP"))
+        p = Participacion.objects.create(capacitacion=cap, persona=persona("T1"))
+        self.assertEqual((p.aprobado, p.resultado), (None, "Pendiente de evaluación"))
+        p.aprobado = True
+        with self.assertRaises(ValidationError):
+            p.full_clean()
+        p.evaluador, p.evidencia = persona("S1", rol="supervisor"), "Práctica observada en obra"
+        p.full_clean()
+
+    def test_plan_requiere_fundamento(self):
+        from capacitacion.models import PlanMejora
+        pl = PlanMejora(persona=persona("T1"), revisar_el=HOY + timedelta(days=30), motivo="Baja producción",
+                        decision="no_cumplido")
+        with self.assertRaises(ValidationError):
+            pl.full_clean()
