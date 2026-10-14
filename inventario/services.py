@@ -221,8 +221,9 @@ def prevision_materiales(desde: date, hasta: date):
                            .annotate(t=Sum("cantidad")).values_list("tecnico_id", "material_id", "t")):
         if q and q > 0:
             tiene[(tec, mat_id)] = q
-    deposito = dict(LoteIngreso.objects.exclude(origen=LoteIngreso.Origen.CUSTODIA).values_list("material")
-                    .annotate(t=Sum("cantidad_disponible")))
+    # Lo recibido en custodia (equipos de Claro) se instala igual: es suministro utilizable aunque no sea
+    # propiedad ni costo de la empresa.
+    deposito = dict(LoteIngreso.objects.values_list("material").annotate(t=Sum("cantidad_disponible")))
     reservas = dict(ReservaMaterial.objects.filter(estado="activa").values_list("material")
                     .annotate(t=Sum("cantidad")))
     camino, camino_inm = defaultdict(Decimal), defaultdict(Decimal)
@@ -283,8 +284,8 @@ def reservar(orden, material, cantidad, responsable="") -> "ReservaMaterial":
     from .models import ReservaMaterial
     with transaction.atomic():
         Material.objects.select_for_update().filter(pk=material.pk).first()
-        stock = (LoteIngreso.objects.filter(material=material).exclude(origen=LoteIngreso.Origen.CUSTODIA)
-                 .aggregate(t=Sum("cantidad_disponible"))["t"] or Decimal("0"))
+        stock = (LoteIngreso.objects.filter(material=material).aggregate(t=Sum("cantidad_disponible"))["t"]
+                 or Decimal("0"))
         ya = (ReservaMaterial.objects.filter(material=material, estado="activa").aggregate(t=Sum("cantidad"))["t"]
               or Decimal("0"))
         if stock - ya < Decimal(cantidad):
