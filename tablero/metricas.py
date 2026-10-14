@@ -162,7 +162,7 @@ def valores_tecnicos(desde: date, hasta: date, tecnicos) -> dict:
         ejecutadas[vis.tecnico_id] += 1
         if atribucion(vis.resultado, vis.motivo, vis.confirmada, catalogo) == "tecnico":
             evitables[vis.tecnico_id] += 1
-    controles = dict(InformeControl.objects.filter(tecnico_id__in=ids, fecha__range=(desde, hasta))
+    controles = dict(InformeControl.objects.representativos().filter(tecnico_id__in=ids, fecha__range=(desde, hasta))
                      .values_list("tecnico_id").annotate(p=Avg("puntaje")))
 
     # Consumo de materiales vs. estándar (sin decodificadores: dependen del cliente)

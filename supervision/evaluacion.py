@@ -4,7 +4,8 @@ Cuatro ejes, cada uno 0-100:
   * Imagen / trato    - promedio de la encuesta diaria de sus técnicos.
   * Control en calle  - cantidad de informes por día trabajado y calidad de documentación.
   * Gestión de desvíos- % de desvíos detectados que tuvieron acción correctiva y en cuántos días.
-  * Objetivos         - cumplimiento de las tareas diarias asignadas por gerencia.
+  * Objetivos         - cumplimiento de las tareas asignadas por gerencia: sólo cuenta lo VERIFICADO por
+                        un tercero (lo reportado espera verificación; lo vencido sin reporte cuenta 0).
 """
 from collections import defaultdict
 from dataclasses import dataclass

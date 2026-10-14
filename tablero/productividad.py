@@ -37,6 +37,18 @@ def tecnicos(request):
                      [{"nombre": "IPT", "datos": [tb.indice for tb in tbs], "serie": 1}], max=100)})
 
 
+@requiere_rol(GERENCIA, SUPERVISOR)
+def diccionario(request):
+    """Diccionario de indicadores: contrato de cálculo y versión de criterio de cada medida (B35)."""
+    from django.shortcuts import render
+    grupos = []
+    for rol, nombre in Indicador.Rol.choices:
+        inds = list(Indicador.objects.filter(rol=rol).order_by("orden"))
+        if inds:
+            grupos.append((nombre, inds))
+    return render(request, "tablero/diccionario_indicadores.html", {"grupos": grupos})
+
+
 @requiere_rol(GERENCIA)
 def supervisores(request):
     dias = _dias(request)

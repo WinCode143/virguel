@@ -215,9 +215,13 @@ def faltante_para_ordenes(tecnico, hasta: date | None = None):
     recetas = defaultdict(list)
     for r in RecetaMaterial.objects.select_related("material"):
         recetas[r.tipo_tarea_id].append(r)
+    from core.models import Parametros
+    from .services import _factor
+    p = Parametros.actual()
     for o in pendientes:
         for r in recetas[o.tipo_id]:
-            necesidad[r.material] += r.cantidad
+            # misma regla que la previsión: la condición de la receta (por equipo, si hay recambio)
+            necesidad[r.material] += r.cantidad * Decimal(_factor(r, o.equipos_requeridos, o.requiere_recambio, p)[0])
     tengo = saldos(tecnico)
     filas = []
     for m, q in sorted(necesidad.items(), key=lambda kv: kv[0].nombre):

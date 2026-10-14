@@ -691,3 +691,217 @@ class AbastecimientoTests(TestCase):
         u = revisar(u, False)
         self.assertFalse(u.utilizable)
         self.assertEqual(u.movimientos.count(), 4)
+
+
+class ObjetivosVerificadosTests(TestCase):
+    """B23: lo que el supervisor reporta no cuenta hasta que un tercero lo verifica; la meta se versiona."""
+
+    def test_reportado_verificado_rechazado(self):
+        from supervision.evaluacion import evaluar_supervisores
+        from supervision.models import TareaSupervisor
+        s = persona("S1", rol="supervisor", usuario=User.objects.create_user("s", password="x"))
+        t = TareaSupervisor.objects.create(supervisor=s, fecha=HOY, descripcion="Controlar 3", meta=3,
+                                           criterio_aceptacion="3 informes con foto")
+        self.client.force_login(s.usuario)
+        self.client.post(f"/app/tarea/{t.pk}/", {"resultado": 3, "evidencia": "informes 1, 2 y 3"})
+        t.refresh_from_db()
+        self.assertEqual((t.verificacion, t.estado, t.evidencia), ("reportado", "cumplida", "informes 1, 2 y 3"))
+        self.assertIsNone(t.cumplimiento)
+        self.assertIsNone(evaluar_supervisores(HOY, 30)[0].cumplimiento_tareas)
+        t.verificacion = "verificado"
+        t.save()
+        self.assertEqual(evaluar_supervisores(HOY, 30)[0].cumplimiento_tareas, 1.0)
+        t.verificacion = "rechazado"
+        t.save()
+        self.assertEqual(t.cumplimiento, 0.0)
+
+    def test_vencido_sin_reporte_y_meta_versionada(self):
+        from supervision.models import TareaSupervisor
+        s = persona("S1", rol="supervisor")
+        t = TareaSupervisor.objects.create(supervisor=s, fecha=HOY, descripcion="x", meta=3)
+        self.assertIsNone(t.cumplimiento)  # todavía pendiente: sin dato
+        t.meta = 5
+        t.save()
+        self.assertEqual([(h["antes"], h["despues"]) for h in t.historial_meta], [(3, 5)])
+        t.estado = "no_cumplida"
+        t.save()
+        self.assertEqual(t.cumplimiento, 0.0)
+
+    def test_nadie_verifica_lo_propio(self):
+        from supervision.admin import TareaAdmin
+        from supervision.models import TareaSupervisor
+        from django.contrib.admin.sites import site
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        from django.test import RequestFactory
+        s = persona("S1", rol="supervisor", usuario=User.objects.create_user("s", password="x", is_staff=True))
+        t = TareaSupervisor.objects.create(supervisor=s, fecha=HOY, descripcion="x", verificacion="reportado")
+        req = RequestFactory().post("/")
+        req.user, req.session = s.usuario, {}
+        req._messages = FallbackStorage(req)
+        TareaAdmin(TareaSupervisor, site).verificar(req, TareaSupervisor.objects.all())
+        t.refresh_from_db()
+        self.assertEqual(t.verificacion, "reportado")
+
+
+class MotivoSeleccionTests(TestCase):
+    """B21: un control por sospecha o reclamo no entra en la calidad general; se ve quién no tuvo control."""
+
+    def test_sospecha_no_es_representativa(self):
+        from capacitacion.evaluacion import evaluar_tecnicos
+        from supervision.models import InformeControl
+        s = persona("S1", rol="supervisor")
+        t = persona("T1", supervisor=s)
+        InformeControl.objects.create(supervisor=s, tecnico=t, fecha=HOY, puntaje=1, motivo_seleccion="sospecha")
+        InformeControl.objects.create(supervisor=s, tecnico=t, fecha=HOY, puntaje=5, motivo_seleccion="aleatorio")
+        self.assertEqual(InformeControl.objects.representativos().count(), 1)
+        e = [x for x in evaluar_tecnicos(HOY, 30) if x.tecnico == t][0]
+        self.assertEqual(e.puntaje_controles, 5.0)
+
+    def test_equipo_sin_control(self):
+        from operaciones.models import Jornada
+        from supervision.models import InformeControl
+        s = persona("S1", rol="supervisor", usuario=User.objects.create_user("s", password="x"))
+        t1, t2 = persona("T1", supervisor=s), persona("T2", supervisor=s)
+        for t in (t1, t2):
+            Jornada.objects.create(tecnico=t, fecha=HOY, en_calle=True)
+        InformeControl.objects.create(supervisor=s, tecnico=t1, fecha=HOY, puntaje=4)
+        self.client.force_login(s.usuario)
+        r = self.client.get("/app/")
+        self.assertEqual(list(r.context["sin_control"]), [t2])
+
+
+class PlantillaInspeccionTests(TestCase):
+    """B20: plantilla versionada con puntos y criterio; un punto crítico que no cumple es desvío."""
+
+    def test_control_con_plantilla(self):
+        from supervision.models import InformeControl, ItemPlantilla, PlantillaInspeccion
+        s = persona("S1", rol="supervisor", usuario=User.objects.create_user("s", password="x"))
+        t = persona("T1", supervisor=s)
+        pl = PlantillaInspeccion.objects.create(nombre="Instalación FTTH")
+        i1 = ItemPlantilla.objects.create(plantilla=pl, orden=1, punto="Potencia óptica", criterio="≥ -25 dBm",
+                                          defecto="Potencia baja", critico=True)
+        i2 = ItemPlantilla.objects.create(plantilla=pl, orden=2, punto="Orden del cableado", criterio="Grampeado",
+                                          defecto="Cableado suelto")
+        self.client.force_login(s.usuario)
+        r = self.client.get(f"/app/informe/?plantilla={pl.pk}")
+        self.assertContains(r, "Potencia óptica")
+        r = self.client.post("/app/informe/", {
+            "plantilla": pl.pk, "tecnico": t.pk, "motivo_seleccion": "aleatorio", "tipo": "calidad", "puntaje": 3,
+            "descripcion": "control", f"item_{i1.pk}": "no_cumple", f"medida_{i1.pk}": "-28 dBm",
+            f"item_{i2.pk}": "cumple"})
+        self.assertEqual(r.status_code, 302)
+        inf = InformeControl.objects.get()
+        self.assertTrue(inf.desvio_detectado)
+        self.assertEqual([h.item.defecto for h in inf.hallazgos], ["Potencia baja"])
+        self.assertEqual(inf.plantilla, pl)
+
+    def test_completitud_cae_si_faltan_puntos(self):
+        from supervision.models import InformeControl, ItemPlantilla, PlantillaInspeccion, ResultadoItem
+        s, t = persona("S1", rol="supervisor"), persona("T1")
+        pl = PlantillaInspeccion.objects.create(nombre="P")
+        items = [ItemPlantilla.objects.create(plantilla=pl, punto=f"p{i}", criterio="c", defecto="d") for i in range(2)]
+        inf = InformeControl.objects.create(supervisor=s, tecnico=t, fecha=HOY, puntaje=4, descripcion="x" * 80)
+        base = inf.calidad_informe
+        inf.plantilla = pl
+        inf.save()
+        ResultadoItem.objects.create(informe=inf, item=items[0], resultado="cumple")
+        self.assertEqual(inf.calidad_informe, base // 2)
+
+
+class ActuacionesIncidenteTests(TestCase):
+    """B28: cronología del expediente con plazos y alerta cuando vencen."""
+
+    def test_plazo_vencido_alerta(self):
+        from core.models import Alerta
+        from incidentes.models import ActuacionIncidente, Siniestro, proximo_plazo
+        from tablero.automatizacion import alertas_incidentes
+        sin = Siniestro.objects.create(numero="S-1", tipo="vehiculo", gravedad="leve", descripcion="x")
+        ActuacionIncidente.objects.create(siniestro=sin, tipo="aseguradora", descripcion="Presentar denuncia",
+                                          vence=HOY + timedelta(days=10))
+        a = ActuacionIncidente.objects.create(siniestro=sin, tipo="descargo", descripcion="Descargo del técnico",
+                                              vence=HOY - timedelta(days=1))
+        self.assertEqual(proximo_plazo(sin), a)
+        self.assertTrue(a.vencida)
+        alertas_incidentes(HOY)
+        self.assertTrue(Alerta.objects.filter(clave=f"incidentes:plazo-{a.id}", nivel="critica").exists())
+        a.cumplida = True
+        a.save()
+        alertas_incidentes(HOY)
+        self.assertFalse(Alerta.objects.filter(clave=f"incidentes:plazo-{a.id}", resuelta=False).exists())
+
+
+class DiccionarioIndicadoresTests(TestCase):
+    """B35: cada indicador publica su contrato; los cambios de criterio se versionan; un único cálculo."""
+
+    def test_contrato_y_version(self):
+        from core.models import Indicador
+        i = Indicador.objects.get(codigo="eficiencia_jornada")
+        self.assertTrue(i.poblacion and i.ventana and i.fuente and i.sin_dato)
+        self.assertIn("Horas estándar", i.numerador)
+        self.assertTrue(i.denominador)
+        v = i.version
+        i.nombre = "Eficiencia"  # no es criterio: no cambia la versión
+        i.save()
+        self.assertEqual(i.version, v)
+        i.meta = 75
+        i.save()
+        self.assertEqual(i.version, v + 1)
+        self.assertEqual(i.historial[-1]["cambios"]["meta"][1], "75")
+        g = User.objects.create_user("g", password="x")
+        g.groups.add(Group.objects.create(name="Gerencia"))
+        self.client.force_login(g)
+        r = self.client.get("/tablero/indicadores/")
+        self.assertContains(r, "Eficiencia")
+        self.assertContains(r, f"v{v + 1}")
+
+    def test_mismo_valor_en_app_y_escritorio(self):
+        from operaciones.models import Jornada, OrdenTrabajo, TipoTarea
+        s = persona("S1", rol="supervisor")
+        t = persona("T1", supervisor=s, usuario=User.objects.create_user("t", password="x"))
+        tipo = TipoTarea.objects.create(codigo="INS", nombre="Instalación", minutos_estandar=60)
+        for d in range(1, 4):
+            f = HOY - timedelta(days=d)
+            Jornada.objects.create(tecnico=t, fecha=f, en_calle=True)
+            OrdenTrabajo.objects.create(numero=f"O{d}", tipo=tipo, tecnico=t, estado="completada",
+                                        fecha_programada=f, fecha_ejecucion=f)
+        g = User.objects.create_user("g", password="x")
+        g.groups.add(Group.objects.create(name="Gerencia"))
+        self.client.force_login(t.usuario)
+        app = self.client.get("/app/desempeno/").context["tb"]
+        self.client.force_login(g)
+        esc = self.client.get(f"/tablero/productividad/{t.pk}/").context["tb"]
+        self.assertEqual([(m.indicador.codigo, m.valor) for m in app.mediciones],
+                         [(m.indicador.codigo, m.valor) for m in esc.mediciones])
+
+
+class PreparacionVisitaTests(TestCase):
+    """B40 (primer paso, sin IA): antecedentes y avisos con fuente, sin modificar nada."""
+
+    def test_avisos_con_fuente(self):
+        from core.models import Cliente
+        from incidentes.models import Siniestro
+        from inventario.models import Material, RecetaMaterial
+        from operaciones.models import Intento, OrdenTrabajo, TipoTarea
+        from operaciones.preparacion import preparar_visita
+        t = persona("T1", usuario=User.objects.create_user("t", password="x"))
+        tipo = TipoTarea.objects.create(codigo="INS", nombre="Instalación", minutos_estandar=60)
+        mat = Material.objects.create(codigo="M1", nombre="Conector", unidad="u", costo_unitario=10)
+        RecetaMaterial.objects.create(tipo_tarea=tipo, material=mat, cantidad=2)
+        cli = Cliente.objects.create(numero="C1", nombre="Cliente")
+        vieja = OrdenTrabajo.objects.create(numero="O0", tipo=tipo, cliente=cli, tecnico=t, estado="fallida",
+                                            fecha_programada=HOY - timedelta(days=5))
+        Intento.objects.create(orden=vieja, fecha=HOY - timedelta(days=5), resultado="fallida",
+                               motivo_no_resuelto="cliente_ausente", tecnico=t)
+        Siniestro.objects.create(numero="S1", tipo="otro", cliente=cli, descripcion="x")
+        ot = OrdenTrabajo.objects.create(numero="O1", tipo=tipo, cliente=cli, tecnico=t, estado="asignada",
+                                         fecha_programada=HOY)
+        n_intentos = Intento.objects.count()
+        prep = preparar_visita(ot)
+        textos = " | ".join(a[1] for a in prep["avisos"])
+        self.assertIn("llamá al cliente", textos)
+        self.assertIn("incidente", textos)
+        self.assertIn("Te falta: Conector (2)", textos)
+        self.assertTrue(all(a[2] for a in prep["avisos"]))  # todo aviso dice de dónde sale
+        self.assertEqual(Intento.objects.count(), n_intentos)
+        self.client.force_login(t.usuario)
+        self.assertContains(self.client.get(f"/app/orden/{ot.pk}/"), "Preparar la visita")

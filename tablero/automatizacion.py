@@ -132,6 +132,14 @@ def alertas_incidentes(hoy):
             if sin.gravedad == Siniestro.Gravedad.CRITICA or dias > 30:
                 s.alerta(f"abierto-{sin.id}", f"Siniestro {sin.numero} abierto hace {dias} días ({sin.get_gravedad_display()})",
                          sin.recomendacion_legal(), C if sin.gravedad != "leve" else A, url)
+        # Plazos del expediente (actuaciones): vencidos o que vencen en 3 días
+        from incidentes.models import ActuacionIncidente
+        for a in (ActuacionIncidente.objects.filter(cumplida=False, vence__lte=hoy + timedelta(days=3))
+                  .select_related("siniestro", "responsable")):
+            vencido = a.vence < hoy
+            s.alerta(f"plazo-{a.id}", f"Siniestro {a.siniestro.numero}: {a.get_tipo_display().lower()} "
+                     f"{'VENCIDO el' if vencido else 'vence el'} {a.vence:%d/%m}",
+                     f"{a.descripcion} · Responsable: {a.responsable or 'sin asignar'}", C if vencido else A, url)
         mes = hoy.replace(day=1)
         graves = Siniestro.objects.filter(fecha__gte=mes, responsabilidad_civil=True).exclude(gravedad="leve").count()
         if graves >= 3:

@@ -359,6 +359,21 @@ class Indicador(models.Model):
     peso = models.PositiveSmallIntegerField(default=10, help_text="Peso en el índice (0 = sólo informativo).")
     orden = models.PositiveSmallIntegerField(default=0)
     activo = models.BooleanField(default=True)
+    # Contrato de cálculo (diccionario de indicadores): qué población, qué se cuenta, sobre qué, en qué
+    # ventana, de dónde sale y qué pasa si falta el dato.
+    poblacion = models.CharField("Población", max_length=200, blank=True)
+    numerador = models.CharField(max_length=250, blank=True)
+    denominador = models.CharField(max_length=250, blank=True)
+    ventana = models.CharField(max_length=120, blank=True)
+    fuente = models.CharField("Fuente de cálculo", max_length=200, blank=True,
+                              help_text="Función única que usan la app, el escritorio y la exportación.")
+    sin_dato = models.CharField("Si falta el dato", max_length=250, blank=True)
+    version = models.PositiveIntegerField("Versión del criterio", default=1)
+    historial = models.JSONField(default=list, blank=True,
+                                 help_text="Cambios de meta, límite, peso o sentido: separa cambios de criterio "
+                                           "de cambios reales de desempeño.")
+
+    CRITERIO = ("meta", "minimo", "peso", "mayor_es_mejor", "activo")
 
     class Meta:
         ordering = ["rol", "orden"]
@@ -367,6 +382,18 @@ class Indicador(models.Model):
 
     def __str__(self):
         return f"{self.get_rol_display()}: {self.nombre}"
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            antes = Indicador.objects.filter(pk=self.pk).values(*self.CRITERIO).first()
+            if antes:
+                cambios = {c: [str(antes[c]), str(getattr(self, c))] for c in self.CRITERIO
+                           if str(antes[c]) != str(getattr(self, c))}
+                if cambios:
+                    self.version += 1
+                    self.historial = (self.historial or []) + [
+                        {"version": self.version, "fecha": timezone.localdate().isoformat(), "cambios": cambios}]
+        super().save(*args, **kwargs)
 
     def estado(self, valor) -> str:
         """verde = cumple la meta · amarillo = no la cumple pero no pasó el límite · rojo = pasó el límite."""

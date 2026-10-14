@@ -91,12 +91,16 @@ class NotificacionAdmin(admin.ModelAdmin):
 
 @admin.register(Indicador)
 class IndicadorAdmin(admin.ModelAdmin):
-    list_display = ["nombre", "rol", "meta", "minimo", "unidad", "mayor_es_mejor", "peso", "activo"]
+    list_display = ["nombre", "rol", "meta", "minimo", "unidad", "mayor_es_mejor", "peso", "activo", "version"]
     list_editable = ["meta", "minimo", "peso", "activo"]
     list_filter = ["rol", "activo"]
-    readonly_fields = ["codigo"]
-    fields = ["codigo", "rol", "nombre", "descripcion", "unidad", "meta", "minimo", "mayor_es_mejor", "peso", "orden",
-              "activo"]
+    readonly_fields = ["codigo", "version", "historial", "fuente"]
+    fieldsets = [
+        (None, {"fields": ["codigo", "rol", "nombre", "descripcion", "unidad", "meta", "minimo", "mayor_es_mejor",
+                           "peso", "orden", "activo"]}),
+        ("Contrato de cálculo (diccionario)", {"fields": ["poblacion", "numerador", "denominador", "ventana",
+                                                          "fuente", "sin_dato", "version", "historial"]}),
+    ]
 
     def has_add_permission(self, request):
         return False  # los indicadores tienen un cálculo programado; aquí sólo se ajustan

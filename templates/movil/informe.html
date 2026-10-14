@@ -1,8 +1,12 @@
 {% extends "movil/base_movil.html" %}
 {% block titulo_movil %}Informe de control{% endblock %}
 {% block contenido %}
-<p class="muted">Un buen informe tiene descripción, foto y ubicación: suma a tu calidad de documentación.</p>
+<p class="muted">Un informe completo tiene descripción, foto, ubicación y todos los puntos de la plantilla: suma a la completitud documental (no es la nota del trabajo).</p>
+{% if plantillas %}<p class="muted">Plantilla de control:
+  {% for pl in plantillas %}<a href="?plantilla={{ pl.pk }}{% if request.GET.tecnico %}&tecnico={{ request.GET.tecnico }}{% endif %}"{% if pl == plantilla %} style="font-weight:bold"{% endif %}>{{ pl }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}
+  {% if plantilla %}· <a href="?{% if request.GET.tecnico %}tecnico={{ request.GET.tecnico }}{% endif %}">sin plantilla</a>{% endif %}</p>{% endif %}
 <form method="post" class="card form-movil" enctype="multipart/form-data" data-offline="/app/">{% csrf_token %}
+  {% if plantilla %}<input type="hidden" name="plantilla" value="{{ plantilla.pk }}">{% endif %}
   {{ form.non_field_errors }}
   {% for f in form.visible_fields %}{% if f.field.widget.input_type == 'checkbox' %}<div class="check">{{ f }} {{ f.label_tag }}</div>{% else %}{{ f.label_tag }}{{ f }}{% endif %}{{ f.errors }}{% endfor %}
   {% for f in form.hidden_fields %}{{ f }}{% endfor %}

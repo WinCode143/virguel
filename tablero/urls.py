@@ -18,6 +18,7 @@ urlpatterns = [
     path("productividad/excel/", exportar_excel.exportar, name="prod_excel"),
     path("productividad/", productividad.tecnicos, name="prod_tecnicos"),
     path("productividad/supervisores/", productividad.supervisores, name="prod_supervisores"),
+    path("indicadores/", productividad.diccionario, name="diccionario"),
     path("productividad/<int:pk>/", productividad.ficha, name="prod_ficha"),
     path("supervisores/", views.supervisores, name="supervisores"),
     path("incidentes/", views.incidentes, name="incidentes"),

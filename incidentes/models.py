@@ -123,3 +123,44 @@ class Siniestro(models.Model):
         if self.gravedad == self.Gravedad.CRITICA or self.tipo == self.Tipo.LESION or costo >= Decimal("500000"):
             return "Derivar a legales y aseguradora según el procedimiento aprobado."
         return "Decidir reparación, acuerdo o cierre según el procedimiento aprobado y registrar la decisión."
+
+
+def proximo_plazo(siniestro):
+    """Actuación con el plazo abierto más próximo (o None)."""
+    return siniestro.actuaciones.filter(cumplida=False, vence__isnull=False).order_by("vence").first()
+
+
+class ActuacionIncidente(models.Model):
+    """Cronología del expediente: cada denuncia, presentación, descargo, pago o recupero con su plazo."""
+
+    class Tipo(models.TextChoices):
+        DENUNCIA = "denuncia", "Denuncia (policial / ART)"
+        ASEGURADORA = "aseguradora", "Presentación a la aseguradora"
+        DESCARGO = "descargo", "Descargo del técnico"
+        PERITAJE = "peritaje", "Peritaje / inspección"
+        RECLAMO = "reclamo", "Reclamo de tercero"
+        NOTIFICACION = "notificacion", "Notificación recibida"
+        PAGO = "pago", "Pago"
+        RECUPERO = "recupero", "Recupero"
+        OTRO = "otro", "Otro"
+
+    siniestro = models.ForeignKey(Siniestro, on_delete=models.CASCADE, related_name="actuaciones")
+    fecha = models.DateField(default=timezone.localdate)
+    tipo = models.CharField(max_length=15, choices=Tipo.choices)
+    descripcion = models.CharField(max_length=250)
+    responsable = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    referencia = models.CharField("Referencia / n.º de expediente o documento", max_length=120, blank=True)
+    vence = models.DateField("Próximo plazo", null=True, blank=True)
+    cumplida = models.BooleanField("Plazo cumplido", default=False)
+
+    class Meta:
+        ordering = ["siniestro", "fecha", "id"]
+        verbose_name = "Actuación del incidente"
+        verbose_name_plural = "Actuaciones del incidente"
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} {self.fecha:%d/%m/%Y}"
+
+    @property
+    def vencida(self) -> bool:
+        return bool(self.vence and not self.cumplida and self.vence < timezone.localdate())

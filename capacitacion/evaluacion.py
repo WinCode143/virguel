@@ -184,7 +184,8 @@ def evaluar_tecnicos(hasta: date | None = None, dias: int | None = None, tecnico
         serie[tid].setdefault(fecha, 0)
 
     # Controles de supervisores
-    for r in (InformeControl.objects.filter(tecnico_id__in=ids, fecha__range=(desde, hasta))
+    # (los controles dirigidos por sospecha o reclamo no representan la calidad general del técnico)
+    for r in (InformeControl.objects.representativos().filter(tecnico_id__in=ids, fecha__range=(desde, hasta))
               .values("tecnico_id").annotate(p=Avg("puntaje"), n=Count("id"))):
         evs[r["tecnico_id"]].puntaje_controles = float(r["p"])
         evs[r["tecnico_id"]].controles = r["n"]
