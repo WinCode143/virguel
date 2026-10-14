@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from .models import (CategoriaEgreso, Cobro, CostoFijo, Cuenta, Cuota, Egreso, EstimacionLiquidacion, Ingreso, Liquidacion,
-                     Pago, Proveedor)
+                     Pago, Proveedor, TransferenciaCuenta)
 
 
 @admin.register(CategoriaEgreso)
@@ -67,8 +67,9 @@ class IngresoAdmin(admin.ModelAdmin):
 
 @admin.register(Pago)
 class PagoAdmin(admin.ModelAdmin):
-    list_display = ["fecha", "egreso", "monto", "cuenta", "medio", "automatico"]
-    list_filter = ["cuenta", "automatico"]
+    list_display = ["fecha", "egreso", "monto", "cuenta", "medio", "automatico", "conciliado"]
+    list_filter = ["cuenta", "automatico", "conciliado"]
+    list_editable = ["conciliado"]
     date_hierarchy = "fecha"
 
 
@@ -82,3 +83,15 @@ class CuotaAdmin(admin.ModelAdmin):
 class EstimacionLiquidacionAdmin(admin.ModelAdmin):
     list_display = ["periodo", "version", "creada", "bruto", "retencion", "neto", "aplicada"]
     readonly_fields = [f.name for f in EstimacionLiquidacion._meta.fields]
+
+
+@admin.register(TransferenciaCuenta)
+class TransferenciaCuentaAdmin(admin.ModelAdmin):
+    list_display = ["fecha", "origen", "destino", "monto", "observaciones"]
+
+
+@admin.register(Cobro)
+class CobroAdmin(admin.ModelAdmin):
+    list_display = ["fecha", "ingreso", "monto", "cuenta", "conciliado"]
+    list_filter = ["cuenta", "conciliado"]
+    list_editable = ["conciliado"]

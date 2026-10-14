@@ -65,7 +65,32 @@ class Cuenta(models.Model):
         f = {"fecha__gt": self.fecha_saldo_inicial, "fecha__lte": al}
         entra = self.cobros.filter(**f).aggregate(t=models.Sum("monto"))["t"] or Decimal("0")
         sale = self.pagos.filter(**f).aggregate(t=models.Sum("monto"))["t"] or Decimal("0")
-        return self.saldo_inicial + entra - sale
+        recibe = self.transferencias_recibidas.filter(**f).aggregate(t=models.Sum("monto"))["t"] or Decimal("0")
+        envia = self.transferencias_enviadas.filter(**f).aggregate(t=models.Sum("monto"))["t"] or Decimal("0")
+        return self.saldo_inicial + entra - sale + recibe - envia
+
+
+class TransferenciaCuenta(models.Model):
+    """Movimiento entre cuentas propias: cambia el saldo de cada una, no el total de la empresa."""
+
+    origen = models.ForeignKey(Cuenta, on_delete=models.PROTECT, related_name="transferencias_enviadas")
+    destino = models.ForeignKey(Cuenta, on_delete=models.PROTECT, related_name="transferencias_recibidas")
+    fecha = models.DateField(default=timezone.localdate)
+    monto = models.DecimalField(max_digits=14, decimal_places=2)
+    observaciones = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ["-fecha"]
+        verbose_name = "Transferencia entre cuentas propias"
+        verbose_name_plural = "Transferencias entre cuentas propias"
+
+    def __str__(self):
+        return f"{self.fecha} {self.origen} → {self.destino}: ${self.monto}"
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.origen_id and self.origen_id == self.destino_id:
+            raise ValidationError("Origen y destino deben ser cuentas distintas.")
 
 
 class Egreso(models.Model):
@@ -109,6 +134,10 @@ class Egreso(models.Model):
     cargado_por = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
                                     editable=False)
     automatico = models.BooleanField(default=False, editable=False)
+    prioridad = models.CharField(max_length=8, default="normal", choices=[
+        ("critica", "Crítica"), ("alta", "Alta"), ("normal", "Normal"), ("baja", "Baja")],
+        help_text="Revisable: explicar el motivo (consecuencia de no pagar a tiempo).")
+    motivo_prioridad = models.CharField("Motivo de la prioridad", max_length=200, blank=True)
     origen = models.CharField(max_length=60, blank=True, editable=False,
                               help_text="Referencia al registro que lo originó (modelo:id).")
 
@@ -181,6 +210,7 @@ class Pago(models.Model):
     observaciones = models.CharField(max_length=200, blank=True)
     automatico = models.BooleanField(default=False, editable=False,
                                      help_text="Generado por el tilde 'pagado' (pago total sin detalle).")
+    conciliado = models.BooleanField(default=False, help_text="Verificado contra el extracto de la cuenta.")
 
     class Meta:
         ordering = ["-fecha", "-id"]
@@ -305,6 +335,7 @@ class Cobro(models.Model):
     monto = models.DecimalField(max_digits=14, decimal_places=2)
     cuenta = models.ForeignKey(Cuenta, null=True, blank=True, on_delete=models.PROTECT, related_name="cobros")
     observaciones = models.CharField(max_length=200, blank=True)
+    conciliado = models.BooleanField(default=False, help_text="Verificado contra el extracto de la cuenta.")
 
     class Meta:
         ordering = ["-fecha", "-id"]

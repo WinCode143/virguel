@@ -473,3 +473,54 @@ class CuadrillasTests(TestCase):
         mb.save()
         MiembroCuadrilla.objects.create(cuadrilla=cu, persona=c, funcion="ayudante", desde=HOY)
         self.assertEqual(sorted(it.participantes.values_list("persona__legajo", flat=True)), ["TA", "TB"])
+
+
+class RelojesAntiguedadTests(TestCase):
+    """B12: trasladar material de 59 días no lo vuelve nuevo; la pantalla dice qué reloj alerta."""
+
+    def test_entrega_no_rejuvenece(self):
+        from core.models import Parametros
+        from inventario.models import LoteIngreso, Material
+        from inventario.stock_tecnico import entregar, partes_paradas
+        m = Material.objects.create(codigo="R", nombre="Roseta", costo_unitario=Decimal("1"))
+        LoteIngreso.objects.create(material=m, cantidad=10, fecha=HOY - timedelta(days=59), origen="apertura")
+        t = persona("T1")
+        entregar(t, m, 5, fecha=HOY - timedelta(days=1))
+        self.assertEqual(partes_paradas([t], hoy=HOY), [])            # 60 días todavía no
+        f = partes_paradas([t], hoy=HOY + timedelta(days=1))[0]       # al día 60 por edad original
+        self.assertEqual((f["dias_original"], f["dias_custodia"], f["reloj"]), (60, 2, "edad original"))
+        p = Parametros.actual()
+        p.reloj_antiguedad = "permanencia"
+        p.save()
+        self.assertEqual(partes_paradas([t], hoy=HOY + timedelta(days=1)), [])
+
+    def test_devolucion_conserva_edad_y_registra_permanencia(self):
+        from inventario.models import LoteIngreso, Material
+        from inventario.services import lotes_envejecidos
+        from inventario.stock_tecnico import devolver, entregar
+        m = Material.objects.create(codigo="R", nombre="Roseta", costo_unitario=Decimal("1"))
+        LoteIngreso.objects.create(material=m, cantidad=4, fecha=HOY - timedelta(days=70), origen="apertura")
+        t = persona("T1")
+        entregar(t, m, 4, fecha=HOY - timedelta(days=10))
+        devolver(t, m, 4, fecha=HOY - timedelta(days=2))
+        f = lotes_envejecidos(HOY)[0]
+        self.assertEqual((f["dias_original"], f["dias_permanencia"], f["estado"]), (70, 2, "critico"))
+
+
+class TransferenciasTests(TestCase):
+    """B34: transferir entre cuentas propias no altera el total; simular cuotas no paga."""
+
+    def test_transferencia(self):
+        from finanzas.caja import saldo_cuentas
+        from finanzas.models import Cuenta, TransferenciaCuenta
+        a = Cuenta.objects.create(nombre="Banco", saldo_inicial=Decimal("1000"), fecha_saldo_inicial=HOY - timedelta(days=5))
+        b = Cuenta.objects.create(nombre="Caja", saldo_inicial=Decimal("100"), fecha_saldo_inicial=HOY - timedelta(days=5))
+        total = saldo_cuentas(HOY)
+        TransferenciaCuenta.objects.create(origen=a, destino=b, monto=Decimal("300"), fecha=HOY)
+        self.assertEqual((a.saldo(HOY), b.saldo(HOY), saldo_cuentas(HOY)), (Decimal("700"), Decimal("400"), total))
+
+    def test_simular_no_paga(self):
+        from finanzas.alternativas import comparar
+        from finanzas.models import Pago
+        comparar([{"nombre": "Cuotas", "cuotas": 6, "monto_cuota": Decimal("10")}], Decimal("3"))
+        self.assertFalse(Pago.objects.exists())

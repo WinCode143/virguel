@@ -57,6 +57,12 @@ class Parametros(models.Model):
     dias_max_stock = models.PositiveIntegerField(
         "Días máximos de stock parado", default=60,
         help_text="Un lote con más días que esto sin consumirse genera alerta crítica.")
+    reloj_antiguedad = models.CharField(
+        "Reloj que activa la regla de días máximos de stock", max_length=12, default="original",
+        choices=[("original", "Edad original (desde el ingreso a la empresa)"),
+                 ("permanencia", "Permanencia en la ubicación o custodio actual")],
+        help_text="Edad original: un traslado o devolución no rejuvenece la unidad. Permanencia: cuenta desde que "
+                  "llegó al depósito o al técnico actual.")
     dias_aviso_stock = models.PositiveIntegerField(
         "Días de aviso previo", default=45,
         help_text="A partir de estos días el lote aparece como 'por vencer'.")

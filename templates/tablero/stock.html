@@ -18,7 +18,7 @@
   <div class="card"><h2>Lotes por vencer o vencidos</h2><div class="tabla-scroll" style="max-height:330px;overflow-y:auto"><table>
   <thead><tr><th>Material</th><th>Ingreso</th><th class="num">Disponible</th><th class="num">Días</th><th class="num">Valor</th></tr></thead>
   <tbody>{% for f in criticos %}<tr><td>{{ f.material.nombre }}</td><td>{{ f.lote.fecha|date:"d/m/Y" }}</td><td class="num">{{ f.lote.cantidad_disponible|num }}</td>
-  <td class="num"><span class="estado {{ f.estado }}">{{ f.dias }}</span></td><td class="num">{{ f.valor|pesos }}</td></tr>{% empty %}<tr><td class="muted">Ningún lote supera los {{ p.dias_aviso_stock }} días.</td></tr>{% endfor %}</tbody></table></div></div>
+  <td class="num"><span class="estado {{ f.estado }}">{{ f.dias }}</span>{% if f.dias_permanencia != f.dias_original %}<br><small class="muted" title="Edad original / días en el depósito desde que volvió">orig. {{ f.dias_original }} · depósito {{ f.dias_permanencia }}</small>{% endif %}</td><td class="num">{{ f.valor|pesos }}</td></tr>{% empty %}<tr><td class="muted">Ningún lote supera los {{ p.dias_aviso_stock }} días.</td></tr>{% endfor %}</tbody></table></div></div>
 </div>
 <div class="card"><h2>Previsión de materiales (sugerencia de compra)</h2>
 <p class="muted" style="font-size:.85rem">Necesario: órdenes abiertas (incluidas las atrasadas) + demanda comercial que excede a las órdenes ya creadas. Lo que cada técnico tiene cubre primero sus propias órdenes; lo que le sobra figura como libre (hay que devolverlo o transferirlo). Revisar antes de comprar.</p>

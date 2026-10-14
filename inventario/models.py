@@ -58,6 +58,8 @@ class LoteIngreso(models.Model):
     costo_unitario = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
     proveedor = models.CharField(max_length=120, blank=True)
     remito = models.CharField(max_length=50, blank=True)
+    recibido = models.DateField("Llegó a esta ubicación", null=True, blank=True,
+                                help_text="Para devoluciones: cuándo volvió al depósito (la fecha es la de ingreso original).")
     origen = models.CharField(max_length=12, choices=Origen.choices, default=Origen.COMPRA,
                               help_text="Sólo una compra es un gasto; apertura, custodia, devolución y ajuste no.")
     lote_origen = models.ForeignKey("self", null=True, blank=True, on_delete=models.PROTECT, related_name="reingresos",
@@ -81,6 +83,10 @@ class LoteIngreso(models.Model):
     @property
     def dias_en_stock(self) -> int:
         return (timezone.localdate() - self.fecha).days
+
+    @property
+    def dias_en_ubicacion(self) -> int:
+        return (timezone.localdate() - (self.recibido or self.fecha)).days
 
 
 class Salida(models.Model):

@@ -135,7 +135,9 @@ def proyeccion_caja(semanas: int = 12, hoy: date | None = None, estimados: bool 
                       "estimado": estimado[k].quantize(Decimal("0.01")), "neto": neto.quantize(Decimal("0.01")),
                       "saldo": saldo.quantize(Decimal("0.01")), "negativo": saldo < 0})
     from .models import Cobro, Pago
-    sin_cuenta = {"pagos": Pago.objects.filter(cuenta__isnull=True, automatico=False).aggregate(t=Sum("monto"))["t"] or CERO,
+    sin_cuenta = {"sin_conciliar": Pago.objects.filter(cuenta__isnull=False, conciliado=False).count()
+                  + Cobro.objects.filter(cuenta__isnull=False, conciliado=False).count(),
+                  "pagos": Pago.objects.filter(cuenta__isnull=True, automatico=False).aggregate(t=Sum("monto"))["t"] or CERO,
                   "n_pagos": Pago.objects.filter(cuenta__isnull=True, automatico=False).count(),
                   "cobros": Cobro.objects.filter(cuenta__isnull=True).aggregate(t=Sum("monto"))["t"] or CERO}
     return {"sin_cuenta": sin_cuenta, "saldo_inicial": saldo_cuentas(hoy), "filas": filas, "atrasado_cobrar": atrasado_cobrar,

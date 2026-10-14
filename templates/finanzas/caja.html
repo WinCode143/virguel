@@ -4,6 +4,7 @@
 {% block contenido %}
 {% if not proy.hay_cuentas %}<div class="card" style="border-color:var(--aviso)"><b>Falta cargar las cuentas</b> (banco, efectivo) con su saldo inicial para que la proyección parta del dinero real. Se cargan en <a href="{% url 'admin:finanzas_cuenta_add' %}">Cuentas</a>.</div>{% endif %}
 {% if proy.sin_cuenta.pagos or proy.sin_cuenta.cobros %}<div class="card" style="border-color:var(--aviso)"><b>Movimientos sin cuenta (diferencia a imputar):</b> pagos {{ proy.sin_cuenta.pagos|pesos }} ({{ proy.sin_cuenta.n_pagos }}) · cobros {{ proy.sin_cuenta.cobros|pesos }}. No afectan el saldo de ninguna cuenta hasta indicar de dónde salió o entró el dinero.</div>{% endif %}
+{% if proy.sin_cuenta.sin_conciliar %}<p class="muted" style="font-size:.85rem">{{ proy.sin_cuenta.sin_conciliar }} movimiento(s) con cuenta todavía sin conciliar contra el extracto (admin → Pagos / Cobros).</p>{% endif %}
 <div class="grid g4">
   <div class="card kpi"><div class="etq">Saldo en cuentas hoy</div><div class="valor">{{ proy.saldo_inicial|pesos }}</div><div class="det">{% for c, s in cuentas %}{{ c.nombre }}: {{ s|pesos }}{% if not forloop.last %} · {% endif %}{% empty %}sin cuentas cargadas{% endfor %}</div></div>
   <div class="card kpi"><div class="etq">A cobrar atrasado</div><div class="valor">{{ proy.atrasado_cobrar|pesos }}</div><div class="det"><a href="{% url 'finanzas:ingresos' %}">ver ingresos</a></div></div>
@@ -23,6 +24,7 @@
 <p class="muted" style="font-size:.82rem">Cobros: saldo de los ingresos por su fecha esperada. Pagos: saldo de cada comprobante por vencimiento (o por cuota). Estimado: proyección mensual de gastos (materiales, flota, EPP, siniestros, fijos y sueldos) menos lo ya registrado en el mes, repartido por día.</p></div>
 <div class="grid g2">
 <div class="card"><h2>A cobrar</h2><table><tbody>{% for i in a_cobrar %}<tr><td>{{ i.pagador }} · {{ i.concepto }}<br><small class="muted">{% if i.fecha_esperada_cobro %}se espera {{ i.fecha_esperada_cobro|date:"d/m/Y" }}{% else %}sin fecha esperada{% endif %}</small></td><td class="num">{{ i.saldo_pendiente|pesos }}</td></tr>{% empty %}<tr><td class="muted">Sin ingresos pendientes de cobro. <a href="{% url 'finanzas:ingresos' %}">Cargar ingresos</a></td></tr>{% endfor %}</tbody></table></div>
+<div class="card"><h2>A pagar por prioridad</h2><table><tbody>{% for e in por_prioridad %}<tr><td>{{ e.proveedor|default:e.descripcion }}<br><small class="muted">{{ e.get_prioridad_display }}{% if e.motivo_prioridad %} · {{ e.motivo_prioridad }}{% endif %}{% if e.vencimiento %} · vence {{ e.vencimiento|date:"d/m/Y" }}{% endif %}</small></td><td class="num">{{ e.saldo_pendiente|pesos }}</td></tr>{% empty %}<tr><td class="muted">Nada pendiente.</td></tr>{% endfor %}</tbody></table></div>
 <div class="card"><h2>Vencidos a pagar</h2><table><tbody>{% for e in cap.vencidas|slice:":20" %}<tr><td>{{ e.proveedor|default:e.descripcion }}<br><small class="muted">venció {{ e.vencimiento|date:"d/m/Y" }}</small></td><td class="num">{{ e.saldo_pendiente|pesos }}</td></tr>{% empty %}<tr><td class="muted">Nada vencido.</td></tr>{% endfor %}</tbody></table></div>
 </div>
 {% endblock %}

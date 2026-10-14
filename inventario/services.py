@@ -48,13 +48,16 @@ def registrar_salida(salida: Salida, permitir_negativo=False) -> Salida:
 
 
 def lotes_envejecidos(hoy: date | None = None):
-    """Lotes con stock disponible, con días en depósito y semáforo."""
+    """Lotes con stock disponible, con edad original, permanencia en depósito y semáforo según el reloj
+    elegido en Parámetros (por defecto la edad original: una devolución no rejuvenece la unidad)."""
     hoy = hoy or timezone.localdate()
     p = Parametros.actual()
     filas = []
     for lote in (LoteIngreso.objects.filter(cantidad_disponible__gt=0)
                  .select_related("material").order_by("fecha")):
-        dias = (hoy - lote.fecha).days
+        original = (hoy - lote.fecha).days
+        permanencia = (hoy - (lote.recibido or lote.fecha)).days
+        dias = original if p.reloj_antiguedad == "original" else permanencia
         if dias >= p.dias_max_stock:
             estado = "critico"
         elif dias >= p.dias_aviso_stock:
@@ -62,7 +65,8 @@ def lotes_envejecidos(hoy: date | None = None):
         else:
             estado = "ok"
         filas.append({
-            "lote": lote, "material": lote.material, "dias": dias, "estado": estado,
+            "lote": lote, "material": lote.material, "dias": dias, "dias_original": original,
+            "dias_permanencia": permanencia, "estado": estado,
             "valor": lote.cantidad_disponible * lote.costo_unitario,
         })
     return filas
