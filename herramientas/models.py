@@ -182,3 +182,93 @@ class Asignacion(models.Model):
     @property
     def vencida(self) -> bool:
         return bool(self.fecha_vencimiento and self.fecha_vencimiento < timezone.localdate())
+
+
+class ReporteCondicion(models.Model):
+    """Rotura, desgaste o pérdida reportada antes del vencimiento: el elemento deja de considerarse
+    utilizable y se abre la reparación o reposición, con responsable y constancia del reemplazo."""
+
+    class Tipo(models.TextChoices):
+        ROTURA = "rotura", "Rotura"
+        DESGASTE = "desgaste", "Desgaste / no protege"
+        PERDIDA = "perdida", "Pérdida / robo"
+
+    class Estado(models.TextChoices):
+        ABIERTO = "abierto", "Abierto"
+        RESUELTO = "resuelto", "Resuelto"
+
+    class Resolucion(models.TextChoices):
+        PENDIENTE = "pendiente", "Pendiente"
+        REPUESTO = "repuesto", "Repuesto (entregado otro)"
+        REPARADO = "reparado", "Reparado y devuelto"
+        SIN_ACCION = "sin_accion", "Sin acción (fundamentado)"
+
+    asignacion = models.ForeignKey("Asignacion", on_delete=models.CASCADE, related_name="reportes")
+    fecha = models.DateField(default=timezone.localdate)
+    tipo = models.CharField(max_length=10, choices=Tipo.choices, default=Tipo.ROTURA)
+    descripcion = models.CharField(max_length=300)
+    foto = models.FileField(upload_to="informes/%Y/%m/", blank=True)
+    reportado_por = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    responsable = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+                                    help_text="Quién gestiona la reposición o reparación.")
+    estado = models.CharField(max_length=10, choices=Estado.choices, default=Estado.ABIERTO)
+    resolucion = models.CharField(max_length=12, choices=Resolucion.choices, default=Resolucion.PENDIENTE)
+    reemplazo = models.ForeignKey("Asignacion", null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+                                  help_text="Constancia de la entrega sustituta.")
+    observaciones = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ["-fecha"]
+        verbose_name = "Reporte de rotura / condición"
+        verbose_name_plural = "Reportes de rotura / condición"
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} de {self.asignacion.elemento} ({self.fecha:%d/%m/%Y})"
+
+    def save(self, *args, **kwargs):
+        nuevo = self._state.adding
+        super().save(*args, **kwargs)
+        if nuevo:
+            # retiro preventivo: deja de contar como EPP vigente / herramienta utilizable
+            estado = Asignacion.Estado.PERDIDO if self.tipo == self.Tipo.PERDIDA else Asignacion.Estado.DANADO
+            Asignacion.objects.filter(pk=self.asignacion_id).update(estado=estado)
+
+    def reponer(self, responsable=None, origen="panol"):
+        """Entrega el sustituto y deja la constancia vinculada."""
+        a = self.asignacion
+        nueva = Asignacion.objects.create(persona=a.persona, elemento=a.elemento, cantidad=a.cantidad, origen=origen,
+                                          observaciones=f"Reposición por {self.get_tipo_display().lower()}")
+        self.reemplazo, self.resolucion, self.estado = nueva, self.Resolucion.REPUESTO, self.Estado.RESUELTO
+        self.responsable = self.responsable or responsable
+        self.save()
+        return nueva
+
+
+class RequisitoEPP(models.Model):
+    """EPP o herramienta que exige un tipo de tarea. La falta de entrega es un bloqueo de suministro
+    (la empresa debe entregarlo), no una conducta del técnico."""
+
+    tipo_tarea = models.ForeignKey("operaciones.TipoTarea", on_delete=models.CASCADE, related_name="requisitos_epp")
+    elemento = models.ForeignKey(Elemento, on_delete=models.CASCADE)
+
+    class Meta:
+        unique_together = [("tipo_tarea", "elemento")]
+        verbose_name = "EPP requerido por tarea"
+        verbose_name_plural = "EPP requerido por tarea"
+
+    def __str__(self):
+        return f"{self.tipo_tarea}: {self.elemento}"
+
+
+def epp_faltante(persona_id, tipo_tarea_id, fecha=None) -> list:
+    """Elementos requeridos por la tarea que la persona no tiene entregados y vigentes."""
+    from django.db.models import Q
+    fecha = fecha or timezone.localdate()
+    requeridos = set(RequisitoEPP.objects.filter(tipo_tarea_id=tipo_tarea_id).values_list("elemento_id", flat=True))
+    if not requeridos:
+        return []
+    vigentes = set(Asignacion.objects.filter(persona_id=persona_id, estado=Asignacion.Estado.EN_USO,
+                                             elemento_id__in=requeridos, fecha_entrega__lte=fecha)
+                   .filter(Q(fecha_vencimiento__isnull=True) | Q(fecha_vencimiento__gte=fecha))
+                   .values_list("elemento_id", flat=True))
+    return list(Elemento.objects.filter(pk__in=requeridos - vigentes).values_list("nombre", flat=True))

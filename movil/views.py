@@ -602,14 +602,31 @@ def push_suscribir(request):
 
 @requiere_rol(TECNICO)
 def mi_epp(request):
+    from herramientas.models import ReporteCondicion
     p = _persona(request)
     if request.method == "POST":
+        if request.POST.get("accion") == "reportar":
+            a = get_object_or_404(Asignacion, persona=p, pk=request.POST.get("asignacion"), estado="en_uso")
+            desc = request.POST.get("descripcion", "").strip()
+            if not desc:
+                messages.error(request, "Contá qué le pasó al elemento.")
+                return redirect("movil:epp")
+            ReporteCondicion.objects.create(asignacion=a, tipo=request.POST.get("tipo") or "rotura",
+                                            descripcion=desc[:300], foto=request.FILES.get("foto") or "",
+                                            reportado_por=p, responsable=p.supervisor)
+            if p.supervisor:
+                from core.notificaciones import notificar
+                notificar(p.supervisor, f"{p.nombre_completo} reportó {a.elemento}",
+                          desc[:200], "/app/")
+            messages.success(request, f"Reporte enviado: {a.elemento} queda fuera de uso hasta su reposición.")
+            return redirect("movil:epp")
         Asignacion.objects.filter(persona=p, pk=request.POST.get("asignacion")).update(conformidad_firmada=True)
         messages.success(request, "Recepción confirmada.")
         return redirect("movil:epp")
     return render(request, "movil/epp.html", {
         "asignaciones": p.asignaciones.filter(estado="en_uso").select_related("elemento"),
-        "hoy": timezone.localdate(), "tab": "epp"})
+        "reportes": ReporteCondicion.objects.filter(asignacion__persona=p).select_related("asignacion__elemento")[:10],
+        "tipos": ReporteCondicion.Tipo.choices, "hoy": timezone.localdate(), "tab": "epp"})
 
 
 @requiere_rol(TECNICO)

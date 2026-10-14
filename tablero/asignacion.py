@@ -120,11 +120,15 @@ def proponer(fecha: date, tecnicos_qs):
              for t in tecnicos}
     habil = {}
 
+    from herramientas.models import epp_faltante
+    epp = {}
+
     def puede(c, o):
         k = (c.tecnico.id, o.tipo_id)
         if k not in habil:
             habil[k] = habilitacion(c.tecnico.id, o.tipo_id, fecha)
-        return habil[k]["estado"] in ("habilitado", "sin_requisitos")
+            epp[k] = epp_faltante(c.tecnico.id, o.tipo_id, fecha)
+        return habil[k]["estado"] in ("habilitado", "sin_requisitos") and not epp[k]
     por_zona = defaultdict(list)
     for c in cupos.values():
         por_zona[c.tecnico.zona_id].append(c)
@@ -163,7 +167,10 @@ def proponer(fecha: date, tecnicos_qs):
         if o.id in otra_zona:
             continue
         if not any(puede(c, o) for c in cupos.values()):
-            o.causa = "ningún técnico disponible tiene la competencia requerida"
+            faltas = sorted({x for (tid, tipo), v in epp.items() if tipo == o.tipo_id for x in v})
+            o.causa = ("bloqueo de suministro: falta entregar " + ", ".join(faltas)) if faltas and all(
+                habil.get((c.tecnico.id, o.tipo_id), {}).get("estado") in ("habilitado", "sin_requisitos")
+                for c in cupos.values()) else "ningún técnico disponible tiene la competencia o el EPP requerido"
         elif not any(minutos_orden(o, p) <= c.minutos_jornada for c in cupos.values()):
             o.causa = "la tarea no entra en una jornada"
         else:

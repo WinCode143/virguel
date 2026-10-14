@@ -575,3 +575,49 @@ class OdometroTests(TestCase):
         v.refresh_from_db()
         self.assertTrue(mala.anomalia)
         self.assertEqual(v.km_actual, 1500)
+
+
+class RoturaYEppTests(TestCase):
+    """B15/B16: la rotura retira el elemento y el recambio queda vinculado; falta de entrega = suministro."""
+
+    def setUp(self):
+        from herramientas.models import CompraElemento, Elemento
+        self.casco = Elemento.objects.create(codigo="CAS", nombre="Casco", costo=Decimal("10"), vida_util_dias=365,
+                                             obligatorio_tecnicos=True)
+        CompraElemento.objects.create(elemento=self.casco, cantidad=5, costo_unitario=Decimal("10"))
+        self.sup = persona("S1", rol="supervisor")
+        self.t = persona("T1", supervisor=self.sup, usuario=User.objects.create_user("t", password="x"))
+
+    def test_rotura_y_recambio(self):
+        from herramientas.models import Asignacion, ReporteCondicion
+        a = Asignacion.objects.create(persona=self.t, elemento=self.casco)
+        self.client.force_login(self.t.usuario)
+        self.client.post("/app/epp/", {"accion": "reportar", "asignacion": a.id, "tipo": "rotura",
+                                       "descripcion": "Se partió la visera"})
+        a.refresh_from_db()
+        r = ReporteCondicion.objects.get()
+        self.assertEqual((a.estado, r.responsable_id), ("danado", self.sup.id))
+        nueva = r.reponer()
+        r.refresh_from_db()
+        self.assertEqual((r.estado, r.reemplazo_id, nueva.estado), ("resuelto", nueva.id, "en_uso"))
+
+    def test_falta_de_epp_no_resta_seguridad_y_bloquea_por_suministro(self):
+        from capacitacion.evaluacion import evaluar_tecnicos
+        from core.models import Persona, Zona
+        from herramientas.models import RequisitoEPP
+        from operaciones.models import Jornada, OrdenTrabajo, TipoTarea
+        from tablero.asignacion import proponer
+        tipo = TipoTarea.objects.create(codigo="A", nombre="Altura", minutos_estandar=30)
+        for d in range(1, 13):
+            Jornada.objects.create(tecnico=self.t, fecha=HOY - timedelta(days=d))
+            OrdenTrabajo.objects.create(numero=f"o{d}", tipo=tipo, tecnico=self.t, estado="completada",
+                                        fecha_ejecucion=HOY - timedelta(days=d))
+        e = evaluar_tecnicos(HOY, tecnicos=[self.t])[0]
+        self.assertEqual((e.epp_faltantes, e.score_seguridad), (1, 100))
+        RequisitoEPP.objects.create(tipo_tarea=tipo, elemento=self.casco)
+        z = Zona.objects.create(nombre="Z")
+        self.t.zona = z
+        self.t.save()
+        OrdenTrabajo.objects.create(numero="N1", tipo=tipo, zona=z, fecha_programada=HOY)
+        p = proponer(HOY, Persona.objects.filter(rol="tecnico"))
+        self.assertIn("suministro", p["sin_asignar"][0].causa)

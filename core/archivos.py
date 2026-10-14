@@ -60,6 +60,10 @@ def _visita(rol, yo, obj):
     return _personal(rol, yo, obj.tecnico_id)
 
 
+def _reporte(rol, yo, obj):
+    return _personal(rol, yo, obj.asignacion.persona_id)
+
+
 def _informe(rol, yo, obj):
     if rol == GERENCIA:
         return True
@@ -70,6 +74,7 @@ def _reglas():
     from finanzas.models import Egreso, Liquidacion
     from operaciones.models import GastoOrden, Intento, OrdenTrabajo
     from personal.models import DocumentoPersonal, Novedad
+    from herramientas.models import ReporteCondicion
     from supervision.models import InformeControl
     # carpeta (upload_to) -> [(modelo, campo, permiso)]
     return {
@@ -80,7 +85,7 @@ def _reglas():
         "gastos": [(GastoOrden, "comprobante", _gasto)],
         "ordenes": [(OrdenTrabajo, "foto_trabajo", _orden), (Intento, "foto", _visita)],
         "firmas": [(OrdenTrabajo, "firma", _orden), (Intento, "firma", _visita)],
-        "informes": [(InformeControl, "foto", _informe)],
+        "informes": [(InformeControl, "foto", _informe), (ReporteCondicion, "foto", _reporte)],
     }
 
 

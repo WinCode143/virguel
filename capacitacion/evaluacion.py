@@ -292,8 +292,10 @@ def _puntuar(e: EvaluacionTecnico, mediana: float, dias: int = 90, criterio: dic
         e.motivos.append(f"Calidad sin dato: {ejecutadas} órdenes y {e.controles} controles en la ventana")
     # Disciplina: puntos de sanción cada 30 días (un apercibimiento por mes ≈ 70/100)
     e.score_disciplina = _clamp(100 - e.puntos_disciplina * 30 / max(dias, 1) * 15)
-    # Seguridad: un siniestro grave ≈ -36; cada EPP obligatorio faltante o vencido -10
-    e.score_seguridad = _clamp(100 - e.puntos_siniestros * 12 - e.epp_faltantes * 10)
+    # Seguridad: un siniestro grave confirmado ≈ -36. El EPP faltante o vencido NO resta: que la empresa
+    # no lo haya entregado es un bloqueo de suministro (alerta), no una conducta del técnico; el
+    # incumplimiento de uso se registra en los controles.
+    e.score_seguridad = _clamp(100 - e.puntos_siniestros * 12)
 
     # Índice ponderado sobre las dimensiones con dato (los pesos se reparten entre las disponibles)
     pesos = criterio["dimensiones"]
