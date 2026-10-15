@@ -129,8 +129,10 @@ def habilitacion(persona_id, tipo_tarea_id, fecha=None) -> dict:
     if not reqs:
         return {"estado": "sin_requisitos", "faltan": []}
     niveles = {}
-    for e in EvaluacionCompetencia.objects.filter(persona_id=persona_id, competencia__in=[r.competencia for r in reqs]
-                                                  ).order_by("fecha"):
+    # sólo evidencia vigente EN esa fecha: evaluada en o antes de la fecha y no vencida (la más reciente
+    # reemplaza a las anteriores)
+    for e in EvaluacionCompetencia.objects.filter(persona_id=persona_id, competencia__in=[r.competencia for r in reqs],
+                                                  fecha__lte=fecha).order_by("fecha", "id"):
         if e.vence is None or e.vence >= fecha:
             niveles[e.competencia_id] = e.nivel
     faltan, tutelada = [], False

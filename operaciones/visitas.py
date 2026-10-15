@@ -1,7 +1,9 @@
 """Operaciones explícitas sobre las visitas (intentos) de una orden.
 
 * crear_visita: registra lo que pasó en un cierre (quién, bajo qué supervisor, resultado, tiempos).
-* rectificar_visita: corrige una visita registrada dejando antes/después, motivo y autor.
+* rectificar_visita: corrige una visita registrada dejando antes/después, motivo y autor. Si cambia el
+  ejecutor, las participaciones se reconcilian en la misma operación: el ejecutor vigente es
+  Intento.tecnico y su participación; el anterior queda sólo en el historial (RectificacionVisita).
 """
 from django.db import transaction
 from django.db.models import Max, Q
@@ -40,14 +42,28 @@ def registrar_participantes(it: Intento, ayudantes=()):
         return
     ParticipacionVisita.objects.get_or_create(intento=it, persona_id=it.tecnico_id,
                                               defaults={"funcion": "ejecutor", "minutos": it.minutos_reales})
-    companeros = set(a.pk if hasattr(a, "pk") else a for a in ayudantes)
+    indicados = set(a.pk if hasattr(a, "pk") else a for a in ayudantes)
+    de_cuadrilla = set()
     for m in MiembroCuadrilla.objects.filter(persona_id=it.tecnico_id, desde__lte=it.fecha).filter(
             Q(hasta__isnull=True) | Q(hasta__gte=it.fecha)).select_related("cuadrilla"):
-        companeros |= set(m.cuadrilla.miembros_en(it.fecha).values_list("persona_id", flat=True))
-    companeros.discard(it.tecnico_id)
-    for pid in companeros:
-        ParticipacionVisita.objects.get_or_create(intento=it, persona_id=pid,
-                                                  defaults={"funcion": "ayudante", "minutos": it.minutos_reales})
+        de_cuadrilla |= set(m.cuadrilla.miembros_en(it.fecha).values_list("persona_id", flat=True))
+    for pid in (indicados | de_cuadrilla) - {it.tecnico_id}:
+        # los indicados en el cierre están confirmados; los compañeros de cuadrilla quedan a confirmar
+        ParticipacionVisita.objects.get_or_create(intento=it, persona_id=pid, defaults={
+            "funcion": "ayudante", "minutos": it.minutos_reales, "confirmada": pid in indicados})
+
+
+def _reconciliar_ejecutor(it: Intento, anterior_id):
+    """El ejecutor vigente es it.tecnico: su participación pasa a 'ejecutor'; la del anterior se quita
+    (la atribución anterior se conserva en la rectificación, no como participación vigente)."""
+    if anterior_id and anterior_id != it.tecnico_id:
+        ParticipacionVisita.objects.filter(intento=it, persona_id=anterior_id, funcion="ejecutor").delete()
+    if it.tecnico_id:
+        p, creada = ParticipacionVisita.objects.get_or_create(intento=it, persona_id=it.tecnico_id, defaults={
+            "funcion": "ejecutor", "minutos": it.minutos_reales})
+        if not creada and (p.funcion != "ejecutor" or not p.confirmada):
+            p.funcion, p.confirmada = "ejecutor", True
+            p.save(update_fields=["funcion", "confirmada"])
 
 
 def _mostrar(v):
@@ -63,6 +79,7 @@ def rectificar_visita(intento: Intento, cambios: dict, motivo: str, autor=None, 
     if not motivo:
         raise ValueError("Indicar el motivo de la rectificación.")
     registros = []
+    ejecutor_anterior = intento.tecnico_id
     for campo, nuevo in cambios.items():
         if campo not in RECTIFICABLES:
             raise ValueError(f"No se puede rectificar '{campo}'.")
@@ -80,4 +97,9 @@ def rectificar_visita(intento: Intento, cambios: dict, motivo: str, autor=None, 
             intento.motivo_no_resuelto = ""
         intento.save()
         RectificacionVisita.objects.bulk_create(registros)
+        if any(r.campo == "tecnico" for r in registros):
+            _reconciliar_ejecutor(intento, ejecutor_anterior)
+        if any(r.campo == "minutos_reales" for r in registros):
+            ParticipacionVisita.objects.filter(intento=intento, funcion="ejecutor").update(
+                minutos=intento.minutos_reales)
     return registros

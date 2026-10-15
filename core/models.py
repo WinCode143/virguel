@@ -143,12 +143,45 @@ class Parametros(models.Model):
 
     def save(self, *args, **kwargs):
         self.pk = 1
+        antes = Parametros.objects.filter(pk=1).values().first()
         super().save(*args, **kwargs)
+        if antes:
+            # cada cambio de una regla queda registrado (quién, cuándo, antes/después): procedencia y reproducción
+            usuario = getattr(self, "_usuario", "") or ""
+            ahora = Parametros.objects.filter(pk=1).values().first()  # valores tal como quedaron guardados
+            cambios = [CambioParametro(campo=f.name, antes=str(antes.get(f.attname))[:500],
+                                       despues=str(ahora.get(f.attname))[:500], usuario=usuario[:150])
+                       for f in self._meta.concrete_fields
+                       if f.name != "id" and antes.get(f.attname) != ahora.get(f.attname)]
+            CambioParametro.objects.bulk_create(cambios)
+
+    def valor_en(self, campo: str, fecha):
+        """Valor que tenía el parámetro al final de `fecha` (texto), según el registro de cambios."""
+        posterior = (CambioParametro.objects.filter(campo=campo, fecha__date__gt=fecha).order_by("fecha", "id").first())
+        return posterior.antes if posterior else str(getattr(self, self._meta.get_field(campo).attname))
 
     @classmethod
     def actual(cls) -> "Parametros":
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class CambioParametro(models.Model):
+    """Registro de cambios de los Parámetros del sistema (reglas de la empresa)."""
+
+    fecha = models.DateTimeField(default=timezone.now, db_index=True)
+    campo = models.CharField(max_length=60, db_index=True)
+    antes = models.CharField(max_length=500, blank=True)
+    despues = models.CharField(max_length=500, blank=True)
+    usuario = models.CharField(max_length=150, blank=True)
+
+    class Meta:
+        ordering = ["-fecha", "-id"]
+        verbose_name = "Cambio de parámetro"
+        verbose_name_plural = "Cambios de parámetros"
+
+    def __str__(self):
+        return f"{self.fecha:%d/%m/%Y} {self.campo}: {self.antes} → {self.despues}"
 
 
 class Zona(models.Model):
@@ -398,6 +431,25 @@ class Indicador(models.Model):
                     self.historial = (self.historial or []) + [
                         {"version": self.version, "fecha": timezone.localdate().isoformat(), "cambios": cambios}]
         super().save(*args, **kwargs)
+
+    def en(self, fecha) -> "Indicador":
+        """Copia del indicador con el criterio (meta, límite, peso, sentido, activo) vigente en `fecha`:
+        se deshacen los cambios del historial posteriores a esa fecha. Así una curva histórica no cambia
+        cuando hoy se cambia una meta (un cambio de criterio no parece un cambio de desempeño)."""
+        import copy
+        from decimal import Decimal as D
+        posteriores = [h for h in (self.historial or []) if h.get("fecha", "") > fecha.isoformat()]
+        if not posteriores:
+            return self
+        i = copy.copy(self)
+        conv = {"meta": D, "minimo": D, "peso": int, "mayor_es_mejor": lambda v: v == "True",
+                "activo": lambda v: v == "True"}
+        for h in sorted(posteriores, key=lambda h: h.get("version", 0), reverse=True):
+            for campo, (antes, _despues) in h.get("cambios", {}).items():
+                if campo in conv:
+                    setattr(i, campo, conv[campo](antes))
+            i.version = h.get("version", i.version) - 1
+        return i
 
     def estado(self, valor) -> str:
         """verde = cumple la meta · amarillo = no la cumple pero no pasó el límite · rojo = pasó el límite."""

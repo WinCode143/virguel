@@ -10,8 +10,6 @@ from decimal import Decimal
 
 from django.utils import timezone
 
-from core.models import Parametros
-
 from .models import MOTIVOS_NO_RESUELTO, Intento, NotaOrden
 
 NOMBRES_MOTIVO = dict(MOTIVOS_NO_RESUELTO)
@@ -19,8 +17,8 @@ NOMBRES_MOTIVO = dict(MOTIVOS_NO_RESUELTO)
 
 def preparar_visita(ot, dias=180) -> dict:
     from incidentes.models import Siniestro
-    from inventario.models import RecetaMaterial, ReservaMaterial
-    from inventario.services import _factor
+    from inventario.models import ReservaMaterial
+    from inventario.services import necesidad_orden
     from inventario.stock_tecnico import saldos
 
     hoy = timezone.localdate()
@@ -48,18 +46,14 @@ def preparar_visita(ot, dias=180) -> dict:
                        "Orden original"))
 
     # Materiales: receta del tipo (con su condición), lo reservado y lo que el técnico tiene
-    p = Parametros.actual()
     tengo = saldos(ot.tecnico) if ot.tecnico_id else {}
-    reservado = {r.material_id: r.cantidad for r in ReservaMaterial.objects.filter(orden=ot, estado="activa")}
+    reservado = {r.material_id: r.pendiente for r in ReservaMaterial.objects.filter(orden=ot, estado="activa")}
     materiales = []
-    for r in RecetaMaterial.objects.filter(tipo_tarea_id=ot.tipo_id).select_related("material"):
-        factor, estimado = _factor(r, ot.equipos_requeridos, ot.requiere_recambio, p)
-        necesito = (r.cantidad * Decimal(factor)).quantize(Decimal("0.01"))
-        if not necesito:
-            continue
-        t = tengo.get(r.material, Decimal("0"))
-        materiales.append({"material": r.material, "necesito": necesito, "estimado": estimado, "tengo": t,
-                           "reservado": reservado.get(r.material_id), "falta": max(Decimal("0"), necesito - t)})
+    for n in necesidad_orden(ot):
+        t = tengo.get(n["material"], Decimal("0"))
+        materiales.append({"material": n["material"], "necesito": n["cantidad"], "estimado": n["estimado"],
+                           "tengo": t, "reservado": reservado.get(n["material"].id),
+                           "falta": max(Decimal("0"), n["cantidad"] - t)})
     faltan = [m for m in materiales if m["falta"] > 0]
     if faltan:
         avisos.append(("critico" if any(not m["estimado"] for m in faltan) else "aviso",

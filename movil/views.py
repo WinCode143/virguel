@@ -353,7 +353,6 @@ def orden_cierre(request, pk):
 
     from django.core.files.base import ContentFile
 
-    from inventario.models import RecetaMaterial
     from inventario.stock_tecnico import consumir, saldos
     from operaciones.models import GastoOrden, NotaOrden
     p, ot = _orden_del_tecnico(request, pk)
@@ -363,6 +362,18 @@ def orden_cierre(request, pk):
     stock = saldos(p)
     if request.method == "POST" and request.POST.get("accion") != "empezar":
         f = CerrarOrdenForm(request.POST, request.FILES, orden=ot, stock=stock)
+        if f.is_valid():
+            # una serie instalada en otro cliente (o defectuosa) no se instala: se rechaza el cierre antes
+            # de aplicar nada, para que se regularice primero (retiro o rectificación)
+            from inventario.equipos import InstalacionIncompatible, validar_instalacion
+            d = f.cleaned_data
+            retiradas_ = {x.strip() for x in re.split(r"[,;\s]+", d["series_retiradas"] or "") if x.strip()}
+            try:
+                for x in re.split(r"[,;\s]+", d["series_instaladas"] or ""):
+                    if x.strip() and x.strip() not in retiradas_:
+                        validar_instalacion(x, ot.cliente)
+            except InstalacionIncompatible as e:
+                f.add_error(None, str(e))
         if f.is_valid():
             d = f.cleaned_data
             fin = momento_operacion(request)
@@ -414,10 +425,13 @@ def orden_cierre(request, pk):
                 if series:
                     avisos.append(f"Tenés {len(series)} equipo(s) retirado(s) para entregar en el depósito.")
                 from inventario.equipos import registrar_cierre
-                from inventario.models import ReservaMaterial
                 instaladas = [x.strip() for x in re.split(r"[,;\s]+", d["series_instaladas"] or "") if x.strip()]
                 avisos += registrar_cierre(visita, instaladas, series)
-                ReservaMaterial.objects.filter(orden=ot, estado="activa").update(estado="consumida")
+                if ot.estado == "completada":
+                    # el trabajo terminó: lo reservado y no entregado deja de estar comprometido
+                    from inventario.reservas import liberar
+                    liberar(ot, f"Orden completada (visita {visita.numero})")
+                # ausente / reprogramada / fallida: la orden sigue pendiente y conserva su reserva
                 for material, cantidad in f.materiales():
                     if not consumir(p, ot, material, cantidad, hoy, intento=visita):
                         avisos.append(f"{material.nombre}: usaste más de lo que figuraba a tu cargo. Avisale a tu supervisor.")
@@ -427,11 +441,13 @@ def orden_cierre(request, pk):
             return redirect("movil:inicio")
     else:
         inicial = {}
-        for k, r in enumerate(RecetaMaterial.objects.filter(tipo_tarea=ot.tipo).select_related("material"), 1):
-            if k > 6:
-                break
-            inicial[f"material_{k}"] = r.material_id
-            inicial[f"cantidad_{k}"] = entero_arriba(r.cantidad)
+        # Propuesta de consumo = necesidad de la orden con la condición de la receta (sin recambio, cero
+        # módems). Lo estimado (condición desconocida) no se precarga: lo informa el técnico.
+        from inventario.services import necesidad_orden
+        conocidas = [n for n in necesidad_orden(ot) if not n["estimado"]]
+        for k, n in enumerate(conocidas[:6], 1):
+            inicial[f"material_{k}"] = n["material"].id
+            inicial[f"cantidad_{k}"] = entero_arriba(n["cantidad"])
         if ot.inicio_trabajo:
             inicial["minutos_reales"] = max(1, int((timezone.now() - ot.inicio_trabajo).total_seconds() // 60))
         f = CerrarOrdenForm(orden=ot, stock=stock, initial=inicial)
@@ -487,15 +503,15 @@ def pedir_partes(request):
     else:
         inicial = {}
         if orden_lom:  # LOM: lo que lleva este tipo de trabajo, menos lo que ya tengo
-            from inventario.models import RecetaMaterial
+            from inventario.services import necesidad_orden
             from inventario.stock_tecnico import saldos
             tengo = saldos(p)
             k = 0
-            for r in RecetaMaterial.objects.filter(tipo_tarea=orden_lom.tipo).select_related("material"):
-                falta = r.cantidad - tengo.get(r.material, 0)
+            for n in necesidad_orden(orden_lom):
+                falta = n["cantidad"] - tengo.get(n["material"], 0)
                 if falta > 0 and k < 6:
                     k += 1
-                    inicial[f"material_{k}"] = r.material_id
+                    inicial[f"material_{k}"] = n["material"].id
                     inicial[f"cantidad_{k}"] = entero_arriba(falta)
             inicial["motivo"] = f"Para la llamada {orden_lom.numero} ({orden_lom.tipo})"
         elif request.GET.get("faltante"):
@@ -806,7 +822,9 @@ def nueva_accion(request):
 def tarea(request, pk):
     p = _persona(request)
     t = get_object_or_404(TareaSupervisor, pk=pk, supervisor=p)
-    if request.method == "POST":
+    if request.method == "POST" and t.verificacion in ("verificado", "rechazado"):
+        messages.error(request, "Ese objetivo ya fue verificado por gerencia: no se modifica desde la app.")
+    elif request.method == "POST":
         try:
             t.resultado = int(request.POST.get("resultado") or 0)
         except ValueError:
@@ -817,8 +835,7 @@ def tarea(request, pk):
             t.estado = "cumplida" if t.resultado >= t.meta else "parcial" if t.resultado else "no_cumplida"
         else:
             t.estado = request.POST.get("estado", t.estado)
-        if t.verificacion != "verificado":
-            t.verificacion = "reportado"  # lo declarado por el supervisor espera verificación de gerencia
+        t.verificacion = "reportado"  # lo declarado por el supervisor espera verificación de gerencia
         t.save()
         messages.success(request, "Objetivo reportado: queda a verificar por gerencia.")
     return redirect("movil:inicio")

@@ -34,17 +34,11 @@ def objetivos(request):
     yo = persona_de(request.user)
     if request.method == "POST" and request.POST.get("accion") in ("verificado", "rechazado"):
         t = get_object_or_404(TareaSupervisor, pk=request.POST.get("tarea"))
-        if yo and t.supervisor_id == yo.pk:
-            messages.error(request, "Nadie verifica su propio objetivo.")
-        elif t.verificacion == "sin_reporte":
-            messages.error(request, "El supervisor todavía no lo reportó.")
-        else:
-            t.verificacion, t.verificado_por, t.fecha_verificacion = request.POST["accion"], yo, timezone.now()
-            nota = request.POST.get("nota", "").strip()
-            if nota:
-                t.comentario = (t.comentario + "\n" if t.comentario else "") + f"Verificación: {nota}"
-            t.save()
+        try:
+            t.verificar(request.POST["accion"], request.user, yo, request.POST.get("nota", "").strip())
             messages.success(request, f"Objetivo {t.get_verificacion_display().lower()}.")
+        except ValueError as e:
+            messages.error(request, str(e))
         return redirect(request.get_full_path())
     form = ObjetivoForm(request.POST or None, initial={"fecha": timezone.localdate()})
     if request.method == "POST" and request.POST.get("accion") == "crear":

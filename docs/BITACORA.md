@@ -546,3 +546,25 @@ Ejecutar el plan `docs/PLAN_CORRECCIONES.md` hasta donde no haga falta informaci
 ### Decisiones
 - Lo que depende de reglas de la empresa corre con valores de prueba marcados como provisorios.
 - La IA queda para una segunda etapa, como borradores que el usuario confirma sobre las mismas reglas.
+
+## 2026-10-15 — Correcciones de la revisión de la actualización (H01–H11)
+
+### Hecho
+- La revisión externa reprodujo 15 contradicciones (U01–U15) en 11 causas. Se corrigieron todas:
+  inspección ligada a su visita, reservas que gobiernan entrega/cierre (parciales y reasignación
+  explícita), equipos por serie que ajustan los lotes y no se reinstalan en otro cliente, suministro
+  por fecha de cada necesidad, estimación que baja a cero, rectificación que reconcilia participantes,
+  envío directo atómico y huella con bytes, precarga del cierre según la receta, agenda con material
+  (excepción con motivo), pañol que no se desbalancea al editar y habilitación por fecha.
+- `tests/test_revision_1015.py`: U01–U15 + K01–K02 + prueba concurrente en PostgreSQL.
+
+### Decisiones
+- El documento de factibilidad se corrigió: declaraba más de lo comprobado.
+- Una unidad con serie que cambia de condición en el depósito ajusta los lotes (baja o reingreso),
+  para que previsión, reservas y entregas lean un único suministro.
+- Además se cerraron los demás puntos que la revisión marcó como parciales: agenda con ventanas
+  horarias, cuadrillas, tutor real y service programado; acciones indicada/ejecutada/eficaz;
+  verificación de objetivos trazable; confidencialidad de la encuesta; criterio histórico de los
+  indicadores; registro de cambios de Parámetros; pruebas de acceso por objeto.
+- `verificar_consistencia`: se probó migrando un respaldo de datos de la versión anterior (40c2ac9):
+  sin pérdida de registros, datos consistentes; el stock del pañol sin libro se concilia con un ajuste.

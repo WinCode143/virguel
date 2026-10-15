@@ -1,4 +1,4 @@
-{% extends "escritorio.html" %}
+{% extends "escritorio.html" %}{% load formato %}
 {% block titulo %}Asignar órdenes · Virguel{% endblock %}
 {% block encabezado %}<h1>Asignación automática de órdenes</h1><p class="sub">Reparte las órdenes pendientes según lo que rinde realmente cada técnico (promedio de 30 días) y los minutos útiles de su jornada (tiempo estándar + traslado), por zona, priorizando retrabajos y atrasadas. Respeta licencias, vehículo y competencias requeridas.{% if es_supervisor %} Sólo tu equipo.{% endif %}</p>{% endblock %}
 {% block contenido %}
@@ -11,13 +11,18 @@
 </div>
 {% if total_nuevas %}<form method="post" class="card" style="display:flex;gap:1rem;align-items:center;justify-content:space-between;flex-wrap:wrap">{% csrf_token %}
   <input type="hidden" name="fecha" value="{{ fecha|date:'Y-m-d' }}">
+  {% if motivo %}<input type="hidden" name="motivo_excepcion" value="{{ motivo }}">{% for e in excepciones %}<input type="hidden" name="excepcion" value="{{ e }}">{% endfor %}{% endif %}
   <span>Revisá la propuesta y confirmá. Las órdenes aparecerán en la app de cada técnico.</span>
   <button class="btn">Confirmar asignación de {{ total_nuevas }} órdenes</button></form>{% endif %}
 <div class="card"><div class="tabla-scroll"><table>
 <thead><tr><th>Técnico</th><th>Zona</th><th class="num">Capacidad</th><th class="num">Ya tenía</th><th class="num">Nuevas</th><th class="num">Libre</th><th class="num">Minutos libres</th><th>Órdenes propuestas</th></tr></thead>
 <tbody>{% for c in cupos %}<tr><td>{{ c.tecnico.apellido }}, {{ c.tecnico.nombre }}</td><td>{{ c.tecnico.zona|default:"—" }}</td>
 <td class="num">{{ c.capacidad }}</td><td class="num">{{ c.ya_asignadas }}</td><td class="num"><b>{{ c.nuevas|length }}</b></td><td class="num">{{ c.libre }}</td><td class="num">{{ c.minutos_libres }} / {{ c.minutos_jornada }}</td>
-<td style="font-size:.82rem">{% for o in c.nuevas %}{{ o.numero }} <span class="muted">{{ o.tipo.codigo }}{% if o.es_retrabajo %} · retrabajo{% endif %}{% if o.id in otra_zona %} · otra zona{% endif %}</span>{% if not forloop.last %}, {% endif %}{% endfor %}</td></tr>{% endfor %}</tbody></table></div></div>
-{% if sin_asignar %}<div class="card"><h2>Sin lugar ({{ sin_asignar|length }})</h2><table><tbody>{% for o in sin_asignar %}<tr><td>{{ o.numero }}</td><td class="muted">{{ o.tipo.codigo }} · {{ o.zona|default:"sin zona" }} · {{ o.fecha_programada|date:"d/m" }}</td><td>{{ o.causa }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+<td style="font-size:.82rem">{% for o in c.nuevas %}{{ o.numero }} <span class="muted">{% if o.hora_propuesta is not None %}~{{ o.hora_propuesta|hhmm }} · {% endif %}{{ o.tipo.codigo }}{% if o.ventana_desde or o.ventana_hasta %} · ventana {{ o.ventana_desde|time:"H:i"|default:"" }}–{{ o.ventana_hasta|time:"H:i"|default:"" }}{% endif %}{% if o.es_retrabajo %} · retrabajo{% endif %}{% if o.id in otra_zona %} · otra zona{% endif %}</span>{% if o.sin_material %} <span class="estado aviso" title="Asignada por excepción: material no confirmado">sin material confirmado</span>{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}</td></tr>{% endfor %}</tbody></table></div></div>
+{% if sin_asignar %}<div class="card"><h2>Sin lugar ({{ sin_asignar|length }})</h2>
+<form method="get"><input type="hidden" name="fecha" value="{{ fecha|date:'Y-m-d' }}">
+<table><tbody>{% for o in sin_asignar %}<tr><td>{% if o.falta_material %}<input type="checkbox" name="excepcion" value="{{ o.id }}" aria-label="Asignar igual">{% endif %}</td><td>{{ o.numero }}</td><td class="muted">{{ o.tipo.codigo }} · {{ o.zona|default:"sin zona" }} · {{ o.fecha_programada|date:"d/m" }}</td><td>{{ o.causa }}</td></tr>{% endfor %}</tbody></table>
+{% if sin_asignar|length %}<div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.8rem"><input name="motivo_excepcion" placeholder="Motivo para asignar sin material confirmado" style="min-width:18rem"><button class="btn sec">Proponer con excepción</button></div>
+<p class="muted" style="font-size:.82rem">Sólo para las marcadas (falta material). Quedan anotadas en la orden como excepción, no como material disponible.</p>{% endif %}</form></div>{% endif %}
 {% if bloqueados %}<div class="card"><h2>Técnicos no disponibles ({{ bloqueados|length }})</h2><table><tbody>{% for t, d in bloqueados %}<tr><td>{{ t.apellido }}, {{ t.nombre }}</td><td><span class="estado {% if d.0 == 'pendiente' %}aviso{% else %}critico{% endif %}">{% if d.0 == 'pendiente' %}Pendiente{% else %}No disponible{% endif %}</span></td><td>{{ d.1 }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
 {% endblock %}

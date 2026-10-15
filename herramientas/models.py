@@ -156,16 +156,31 @@ class Asignacion(models.Model):
         else:
             self.fecha_vencimiento = None
         nueva = self._state.adding
-        estado_anterior = None if nueva else (
-            Asignacion.objects.filter(pk=self.pk).values_list("estado", flat=True).first())
+        antes = None if nueva else Asignacion.objects.filter(pk=self.pk).values(
+            "estado", "cantidad", "persona_id", "elemento_id", "origen").first()
+        if antes and (antes["persona_id"] != self.persona_id or antes["elemento_id"] != self.elemento_id
+                      or antes["origen"] != self.origen):
+            # una entrega confirmada no cambia de persona, elemento ni origen: se devuelve y se entrega de nuevo
+            raise ValidationError("Una entrega registrada no cambia de persona, elemento ni origen: registrá la "
+                                  "devolución y una entrega nueva.")
         with transaction.atomic():
             super().save(*args, **kwargs)
-            # Custodia del pañol (libro de movimientos): entregar requiere existencias; lo devuelto vuelve.
-            if nueva and self.origen == self.Origen.PANOL:
+            # Custodia del pañol (libro de movimientos): cada cambio de lo que está en manos de la persona
+            # genera su movimiento, así depósito + custodia + bajas siempre reconcilian.
+            if self.origen != self.Origen.PANOL:
+                return
+            if nueva:
                 mover(self.elemento_id, MovimientoPanol.Tipo.ENTREGA, self.cantidad, asignacion=self,
                       fecha=self.fecha_entrega, motivo=f"Entrega a {self.persona}")
-            elif estado_anterior == self.Estado.EN_USO and self.estado == self.Estado.DEVUELTO:
-                mover(self.elemento_id, MovimientoPanol.Tipo.DEVOLUCION, self.cantidad, asignacion=self,
+                return
+            # fuera del pañol = en uso, perdido o dañado (lo perdido no vuelve: no hay devolución)
+            fuera = (self.Estado.EN_USO, self.Estado.PERDIDO, self.Estado.DANADO)
+            delta = (self.cantidad if self.estado in fuera else 0) - (antes["cantidad"] if antes["estado"] in fuera else 0)
+            if delta > 0:
+                mover(self.elemento_id, MovimientoPanol.Tipo.ENTREGA, delta, asignacion=self,
+                      motivo=f"Entrega (modificación) a {self.persona}")
+            elif delta < 0:
+                mover(self.elemento_id, MovimientoPanol.Tipo.DEVOLUCION, -delta, asignacion=self,
                       motivo=f"Devolución de {self.persona}")
 
     def clean(self):

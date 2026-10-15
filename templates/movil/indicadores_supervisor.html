@@ -15,7 +15,9 @@
 <tr><td>Nota de tu equipo (encuesta)</td><td class="num">{{ ev.nota_encuesta|num:1 }} / 5</td></tr>
 <tr><td>Informes de control por día</td><td class="num">{{ ev.informes_por_dia|num:1 }} <span class="muted">(obj. 4)</span></td></tr>
 <tr><td>Calidad de documentación</td><td class="num">{{ ev.calidad_documentacion|num }}/100</td></tr>
-<tr><td>Desvíos con acción</td><td class="num">{{ ev.desvios_con_accion }}/{{ ev.desvios }}</td></tr>
+<tr><td>Desvíos con acción indicada</td><td class="num">{{ ev.desvios_con_accion }}/{{ ev.desvios }}</td></tr>
+<tr><td>… con la acción ejecutada</td><td class="num">{{ ev.desvios_accion_ejecutada }}/{{ ev.desvios }}</td></tr>
+<tr><td>… y verificada eficaz <span class="muted">(no se repitió)</span></td><td class="num">{{ ev.desvios_accion_eficaz }}/{{ ev.desvios }}</td></tr>
 <tr><td>Días hasta la acción</td><td class="num">{{ ev.dias_respuesta_prom|num:1 }}</td></tr>
 <tr><td>Cumplimiento de objetivos</td><td class="num">{{ ev.cumplimiento_tareas|pct }}</td></tr>
 </tbody></table></div>

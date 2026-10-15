@@ -140,11 +140,23 @@ class UnidadEquipoAdmin(admin.ModelAdmin):
 
 @admin.register(ReservaMaterial)
 class ReservaMaterialAdmin(admin.ModelAdmin):
-    list_display = ["material", "cantidad", "orden", "necesaria_para", "estado", "responsable"]
+    list_display = ["material", "cantidad", "cantidad_entregada", "orden", "necesaria_para", "estado", "responsable",
+                    "nota"]
     list_filter = ["estado"]
-    list_editable = ["estado"]
     autocomplete_fields = ["material"]
     raw_id_fields = ["orden"]
+    actions = ["liberar"]
+
+    def get_readonly_fields(self, request, obj=None):
+        # una reserva existente sólo cambia por entrega, liberación o reasignación (inventario/reservas.py)
+        return ["material", "cantidad", "cantidad_entregada", "orden", "estado", "nota"] if obj else \
+            ["cantidad_entregada", "estado", "nota"]
+
+    @admin.action(description="Liberar lo pendiente de las órdenes seleccionadas")
+    def liberar(self, request, queryset):
+        from .reservas import liberar
+        for orden in {r.orden for r in queryset.filter(estado="activa")}:
+            liberar(orden, f"Liberada por {request.user.get_username()}")
 
     def save_model(self, request, obj, form, change):
         if change:

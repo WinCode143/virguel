@@ -88,9 +88,11 @@ def ingreso_del_mes(mes: date) -> Ingreso | None:
 
 @transaction.atomic
 def registrar(mes: date) -> Ingreso | None:
-    """Guarda una nueva versión de la estimación y actualiza el ingreso sólo si sigue estimado y sin cobros."""
+    """Guarda una nueva versión de la estimación (también si da cero) y actualiza el ingreso sólo si sigue
+    estimado y sin cobros. Una estimación que baja a cero deja el ingreso estimado en 0 (con su versión),
+    no conserva el importe anterior; si no había ingreso y da cero, no se crea uno."""
     c = calcular(mes)
-    if c["neto"] <= 0:
+    if c["neto"] <= 0 and ingreso_del_mes(mes) is None:
         return None
     version = (EstimacionLiquidacion.objects.filter(periodo=mes).aggregate(v=Max("version"))["v"] or 0) + 1
     detalle = [{**f, "precio": str(f["precio"]), "importe": str(f["importe"])} for f in c["filas"]]
@@ -99,7 +101,8 @@ def registrar(mes: date) -> Ingreso | None:
                                                supuestos=c["supuestos"])
     ingreso = ingreso_del_mes(mes)
     resumen = (f"Estimación v{version}: bruto {c['bruto']:.2f} − retención {c['retencion']:.2f}"
-               + (" (tarifas provisorias)" if c["provisoria"] else ""))
+               + (" (tarifas provisorias)" if c["provisoria"] else "")
+               + (" · sin órdenes cobrables" if c["neto"] <= 0 else ""))
     if ingreso is None:
         ingreso = Ingreso.objects.create(
             pagador=PAGADOR, periodo=mes, concepto=_concepto(mes), confirmacion=Ingreso.Confirmacion.ESTIMADO,
@@ -107,7 +110,7 @@ def registrar(mes: date) -> Ingreso | None:
             fecha_esperada_cobro=c["cobro"], observaciones=resumen[:200])
         est.aplicada = True
     elif ingreso.confirmacion == Ingreso.Confirmacion.ESTIMADO and not ingreso.cobros.exists():
-        ingreso.monto = ingreso.monto_estimado = c["neto"]
+        ingreso.monto = ingreso.monto_estimado = max(c["neto"], 0)
         ingreso.fecha_esperada_cobro = c["cobro"]
         ingreso.observaciones = resumen[:200]
         ingreso.save()

@@ -592,9 +592,16 @@ class Command(BaseCommand):
                ("KIT", "Kit de herramientas", "herramienta", None, True, 140000),
                ("EMPALM", "Empalmadora de fibra", "critico", None, False, 2400000),
                ("POWER", "Medidor de potencia óptica", "critico", None, False, 380000)]
-        self.elementos = [Elemento.objects.create(codigo=c, nombre=n, tipo=t, vida_util_dias=v, obligatorio_tecnicos=o,
-                                                  costo=Decimal(costo), stock=r.randint(1, 15))
-                          for c, n, t, v, o, costo in els]
+        from herramientas.models import MovimientoPanol
+        self.elementos = []
+        for c, n, t, v, o, costo in els:
+            el = Elemento.objects.create(codigo=c, nombre=n, tipo=t, vida_util_dias=v, obligatorio_tecnicos=o,
+                                         costo=Decimal(costo))
+            # el saldo inicial del pañol entra por su libro de movimientos (apertura), no por el campo
+            MovimientoPanol.objects.create(elemento=el, tipo="ajuste", cantidad=r.randint(1, 15),
+                                           motivo="Saldo inicial del pañol (apertura)", fecha=self.inicio)
+            el.refresh_from_db()
+            self.elementos.append(el)
         asigs = []
         for t in self.tecs:
             ok = PERFILES[t.perfil]["epp_ok"]
@@ -620,8 +627,10 @@ class Command(BaseCommand):
                                         fecha_entrega=self.hoy - timedelta(days=r.randint(30, 150))))
         Asignacion.objects.bulk_create(asigs)
         for el in self.elementos[:2]:
-            el.stock = 2
-            el.save()
+            el.refresh_from_db()
+            if el.stock != 2:
+                MovimientoPanol.objects.create(elemento=el, tipo="ajuste", cantidad=2 - el.stock,
+                                               motivo="Conteo físico (demo)", fecha=self.inicio)
 
     def capacitaciones(self):
         r = self.r
@@ -921,10 +930,16 @@ class Command(BaseCommand):
                         # lo reportado se verifica a los pocos días (determinístico: no altera la semilla)
                         verif = ("sin_reporte" if estado == "pendiente" else
                                  "verificado" if (self.hoy - fecha).days > 3 else "reportado")
-                        tareas.append(TareaSupervisor(supervisor=s, fecha=fecha, descripcion=desc, meta=meta,
-                                                      resultado=res, estado=estado, verificacion=verif,
-                                                      criterio_aceptacion="Informes con foto y ubicación" if meta else
-                                                      "Planilla de EPP firmada"))
+                        t_ = TareaSupervisor(supervisor=s, fecha=fecha, descripcion=desc, meta=meta,
+                                             resultado=res, estado=estado, verificacion=verif,
+                                             criterio_aceptacion="Informes con foto y ubicación" if meta else
+                                             "Planilla de EPP firmada")
+                        if verif == "verificado":
+                            t_.verificado_por_usuario = "gerencia"
+                            t_.fecha_verificacion = timezone.make_aware(
+                                timezone.datetime.combine(fecha + timedelta(days=2), timezone.datetime.min.time()))
+                            t_.verificado_sobre = t_.foto()
+                        tareas.append(t_)
                 for _ in range(poisson(r, pf["informes"])):
                     t = r.choice(equipo)
                     prob = PERFILES[t.perfil]["desvio"]

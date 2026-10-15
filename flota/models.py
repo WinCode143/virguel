@@ -127,6 +127,35 @@ class ServiceRealizado(models.Model):
         return f"{self.vehiculo.patente} {self.tipo} ({self.fecha})"
 
 
+class ServiceProgramado(models.Model):
+    """Turno de taller ya programado: el vehículo no está disponible esos días (la agenda lo bloquea)."""
+
+    class Estado(models.TextChoices):
+        PROGRAMADO = "programado", "Programado"
+        REALIZADO = "realizado", "Realizado"
+        CANCELADO = "cancelado", "Cancelado"
+
+    vehiculo = models.ForeignKey(Vehiculo, on_delete=models.CASCADE, related_name="services_programados")
+    tipo = models.ForeignKey(TipoService, null=True, blank=True, on_delete=models.SET_NULL)
+    desde = models.DateField()
+    hasta = models.DateField()
+    taller = models.CharField(max_length=100, blank=True)
+    estado = models.CharField(max_length=10, choices=Estado.choices, default=Estado.PROGRAMADO)
+
+    class Meta:
+        ordering = ["desde"]
+        verbose_name = "Service programado"
+        verbose_name_plural = "Services programados"
+
+    def __str__(self):
+        return f"{self.vehiculo.patente} {self.desde:%d/%m}–{self.hasta:%d/%m}"
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.hasta and self.desde and self.hasta < self.desde:
+            raise ValidationError("La fecha de fin no puede ser anterior al inicio.")
+
+
 def proximos_services(vehiculo: Vehiculo, hoy=None):
     """Para cada plan de mantenimiento APLICABLE al vehículo, cuándo toca el próximo (por km y/o fecha).
 

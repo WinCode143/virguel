@@ -44,17 +44,17 @@ def total_en_tecnicos() -> dict:
 
 
 @transaction.atomic
-def entregar(tecnico, material, cantidad, fecha: date | None = None, pedido=None, permitir_negativo=False):
-    """El depósito entrega partes al técnico: salen de los lotes (FIFO) y pasan a su stock."""
+def entregar(tecnico, material, cantidad, fecha: date | None = None, pedido=None, permitir_negativo=False,
+             orden=None, usar_reservado=False):
+    """El depósito entrega partes al técnico: salen de los lotes (FIFO) y pasan a su stock.
+    No entrega unidades reservadas para otra orden; lo entregado para la orden del pedido descuenta su
+    reserva en forma parcial (inventario/reservas.py)."""
     fecha = fecha or timezone.localdate()
+    orden_id = orden.pk if orden is not None else (pedido.orden_id if pedido is not None else None)
     salida = registrar_salida(Salida(material=material, cantidad=cantidad, fecha=fecha, tecnico=tecnico,
-                                     motivo=Salida.Motivo.ENTREGA, observaciones=f"Pedido {pedido.id}" if pedido else ""),
-                              permitir_negativo=permitir_negativo)
-    if pedido is not None and pedido.orden_id:
-        # lo reservado para esa orden ya salió del depósito: la reserva queda consumida (no se descuenta dos veces)
-        from .models import ReservaMaterial
-        ReservaMaterial.objects.filter(orden_id=pedido.orden_id, material=material, estado="activa").update(
-            estado="consumida")
+                                     orden_id=orden_id, motivo=Salida.Motivo.ENTREGA,
+                                     observaciones=f"Pedido {pedido.id}" if pedido else ""),
+                              permitir_negativo=permitir_negativo, usar_reservado=usar_reservado)
     return MovimientoStockTecnico.objects.create(tecnico=tecnico, material=material, fecha=fecha, tipo=T.ENTREGA,
                                                  cantidad=Decimal(cantidad), pedido=pedido, salida=salida)
 

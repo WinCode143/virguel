@@ -1,7 +1,5 @@
 from django.contrib import admin
 
-from django.utils import timezone
-
 from core.roles import persona_de
 
 from .models import (AccionCorrectiva, EncuestaSemanal, EncuestaSupervisor, InformeControl, ItemPlantilla,
@@ -49,7 +47,8 @@ class AccionInline(admin.TabularInline):
 class InformeAdmin(admin.ModelAdmin):
     list_display = ["fecha", "supervisor", "tecnico", "tipo", "motivo_seleccion", "puntaje", "desvio_detectado",
                     "calidad"]
-    list_filter = ["tipo", "motivo_seleccion", "desvio_detectado", "supervisor", "fecha"]
+    list_filter = ["visita_ambigua", "tipo", "motivo_seleccion", "desvio_detectado", "supervisor", "fecha"]
+    raw_id_fields = ["visita"]
     search_fields = ["tecnico__apellido", "supervisor__apellido", "descripcion"]
     date_hierarchy = "fecha"
     autocomplete_fields = ["supervisor", "tecnico", "orden"]
@@ -74,17 +73,18 @@ class TareaAdmin(admin.ModelAdmin):
                     "verificacion", "evidencia"]
     list_filter = ["verificacion", "estado", "supervisor", "fecha"]
     date_hierarchy = "fecha"
-    readonly_fields = ["verificado_por", "fecha_verificacion", "historial_meta"]
+    readonly_fields = ["verificado_por", "verificado_por_usuario", "fecha_verificacion", "verificado_sobre",
+                       "historial_meta"]
     actions = ["verificar", "rechazar"]
 
     def _verificar(self, request, queryset, estado):
         n = 0
         for t in queryset.exclude(verificacion="sin_reporte"):
-            if t.supervisor_id and persona_de(request.user) and persona_de(request.user).pk == t.supervisor_id:
+            try:
+                t.verificar(estado, request.user, persona_de(request.user))
+                n += 1
+            except ValueError:
                 continue  # nadie verifica su propio objetivo
-            t.verificacion, t.verificado_por, t.fecha_verificacion = estado, persona_de(request.user), timezone.now()
-            t.save()
-            n += 1
         self.message_user(request, f"{n} objetivo(s) marcados como {estado}. Los sin reporte no se tocan.")
 
     @admin.action(description="Verificar lo reportado (cuenta para el puntaje)")

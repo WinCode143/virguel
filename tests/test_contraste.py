@@ -71,11 +71,11 @@ class AccionPendienteTests(TestCase):
                                             desvio_detectado=True)
         a = AccionCorrectiva.objects.create(informe=inf, tecnico=t, tipo="charla", fecha=HOY - timedelta(days=1))
         e = evaluar_supervisores(HOY, 30)[0]
-        self.assertEqual((e.desvios_con_accion, e.desvios_corregidos), (1, 0))
+        self.assertEqual((e.desvios_con_accion, e.desvios_accion_ejecutada), (1, 0))
         self.assertEqual(e.score_desvios, 0)
         a.cumplida = True
         a.save()
-        self.assertEqual(evaluar_supervisores(HOY, 30)[0].desvios_corregidos, 1)
+        self.assertEqual(evaluar_supervisores(HOY, 30)[0].desvios_accion_ejecutada, 1)
 
 
 class EncuestaSuficienciaTests(TestCase):
