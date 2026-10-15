@@ -1,0 +1,24 @@
+{% extends "escritorio.html" %}{% load formato %}
+{% block titulo %}Supuestos y valores inventados · Virguel{% endblock %}
+{% block encabezado %}<h1>Supuestos y valores inventados</h1><p class="sub">Reglas y datos que el sistema usa y que la empresa tiene que confirmar. Lo marcado <span class="dato-inventado">INVENTADO</span> es un valor de prueba para que la demo funcione: reemplazarlo por el real{% if es_gerencia %} en <a href="{% url 'admin:core_parametros_changelist' %}">Parámetros</a>{% endif %}.</p>{% endblock %}
+{% block contenido %}
+<div class="grid g2">
+{% for t in temas %}<div class="card"><h2>{{ t.nombre }}{% if t.inventado %} <span class="dato-inventado">INVENTADO</span>{% endif %}</h2>
+<p class="muted" style="font-size:.85rem;margin-top:0">A definir por la empresa: {{ t.decide }}</p>
+{% if t.nota %}<p style="font-size:.85rem">{{ t.nota }}</p>{% endif %}
+{% if t.filas %}<table><tbody>{% for f in t.filas %}<tr><td>{{ f.nombre|capfirst }}</td><td class="num"><b>{{ f.valor }}</b></td>
+<td>{% if f.inventado %}<span class="dato-inventado" title="{{ f.nota }}">INVENTADO</span>{% else %}<span class="muted" style="font-size:.8rem">confirmado</span>{% endif %}</td></tr>
+{% if f.inventado and f.nota %}<tr><td colspan="3" class="muted" style="font-size:.78rem;padding-top:0">{{ f.nota }}</td></tr>{% endif %}{% endfor %}</tbody></table>{% endif %}
+{% if t.nombre == "Pesos de los índices (IPT / IGS)" %}<table><thead><tr><th>Indicador</th><th class="num">Peso</th><th class="num">Versión</th></tr></thead><tbody>
+{% for i in pesos %}{% if i.peso %}<tr><td>{{ i.get_rol_display }}: {{ i.nombre }}</td><td class="num">{{ i.peso }}</td><td class="num">v{{ i.version }}</td></tr>{% endif %}{% endfor %}</tbody></table>
+<p class="muted" style="font-size:.8rem"><a href="{% url 'tablero:calibrar' %}">Calibrar pesos</a> · <a href="{% url 'tablero:diccionario' %}">Diccionario de indicadores</a></p>{% endif %}
+</div>{% endfor %}
+</div>
+<div class="grid g2">
+<div class="card"><h2>Datos de referencia cargados</h2><table><thead><tr><th>Dato</th><th class="num">Registros</th><th></th></tr></thead><tbody>
+{% for nombre, n, prov in datos %}<tr><td>{{ nombre }}</td><td class="num">{{ n }}</td><td>{% if demo %}<span class="dato-inventado">INVENTADO</span>{% elif prov %}<span class="estado aviso">{{ prov }} provisoria{{ prov|pluralize }}</span>{% endif %}</td></tr>{% endfor %}</tbody></table>
+{% if demo %}<p class="muted" style="font-size:.8rem">Con datos de demostración, todos estos registros son inventados.</p>{% endif %}</div>
+<div class="card"><h2>Últimos cambios de reglas</h2><table><tbody>{% for c in cambios %}<tr><td style="font-size:.85rem">{{ c.fecha|date:"d/m/Y H:i" }}</td><td>{{ c.campo }}</td><td style="font-size:.85rem">{{ c.antes|truncatechars:20 }} → <b>{{ c.despues|truncatechars:20 }}</b></td><td class="muted" style="font-size:.8rem">{{ c.usuario|default:"sistema" }}</td></tr>
+{% empty %}<tr><td class="muted">Sin cambios registrados.</td></tr>{% endfor %}</tbody></table></div>
+</div>
+{% endblock %}

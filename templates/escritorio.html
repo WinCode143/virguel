@@ -44,7 +44,7 @@
         {% if es_supervisor %}{% nav 'personal:usuarios' 'Accesos de mi equipo' 'llave' %}{% endif %}
       </details>
 
-      <details class="nav-grupo" {% grupo_abierto 'tablero:prod_general' 'tablero:prod_tecnicos' 'tablero:prod_supervisores' 'tablero:prod_ficha' 'tablero:metas' 'tablero:diccionario' 'tablero:calibrar' %}>
+      <details class="nav-grupo" {% grupo_abierto 'tablero:prod_general' 'tablero:prod_tecnicos' 'tablero:prod_supervisores' 'tablero:prod_ficha' 'tablero:metas' 'tablero:diccionario' 'tablero:calibrar' 'tablero:supuestos' %}>
         <summary>Productividad {% icono 'abajo' %}</summary>
         {% if es_gerencia %}{% nav 'tablero:prod_general' 'Panel general' 'grafico' %}{% endif %}
         {% nav 'tablero:prod_tecnicos' 'Técnicos (IPT)' 'trofeo' %}
@@ -53,6 +53,7 @@
         {% nav 'tablero:metas' 'Metas y semáforos' 'ajustes' %}
         {% nav 'tablero:diccionario' 'Diccionario de indicadores' 'lista' %}
         {% if es_gerencia %}{% nav 'tablero:calibrar' 'Calibrar pesos' 'ajustes' %}{% endif %}
+        {% nav 'tablero:supuestos' 'Supuestos e inventados' 'alerta' %}
       </details>
 
       <details class="nav-grupo" {% grupo_abierto 'tablero:tecnicos' 'tablero:capacitacion' 'tablero:supervisores' 'tablero:encuestas' 'tablero:incidentes' 'tablero:incidente' 'tablero:objetivos' 'tablero:plantillas' 'tablero:plantilla' %}>
@@ -143,7 +144,7 @@
       </div>
     </header>
     <main class="contenido" id="contenido">
-      {% if datos_demo %}<p class="aviso-demo" role="note"><b>Datos de demostración.</b> Personas, órdenes, montos, tarifas, recetas, requisitos y plantillas son <b>inventados</b> para probar el sistema; la empresa debe reemplazarlos por los reales.</p>{% endif %}
+      {% if datos_demo %}<p class="aviso-demo" role="note"><b>Datos de demostración.</b> Personas, órdenes, montos, tarifas, recetas, requisitos y plantillas son <b>inventados</b> para probar el sistema; la empresa debe reemplazarlos por los reales. <a href="{% url 'tablero:supuestos' %}">Ver qué es inventado</a>.</p>{% endif %}
       <div class="page-head">{% block encabezado %}{% endblock %}</div>
       {% block contenido %}{% endblock %}
     </main>

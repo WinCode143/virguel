@@ -129,6 +129,15 @@ class Parametros(models.Model):
     dias_cobertura_stock_min = models.PositiveIntegerField(
         "Días mínimos de cobertura de stock", default=7,
         help_text="Si el stock alcanza para menos días que esto, se alerta faltante.")
+    comparar_productividad_por = models.CharField(
+        "Comparar órdenes por día con", max_length=10, default="zona",
+        choices=[("zona", "Técnicos de la misma zona (oportunidades parecidas)"), ("plantel", "Todo el plantel")],
+        help_text="Con 'zona', la referencia es la mediana de su zona (mínimo 3 técnicos con jornadas "
+                  "suficientes; si no, la del plantel). Así no se compara a quien trabaja en zonas lejanas o "
+                  "dispersas con quien trabaja en zonas densas.")
+    provisorios = models.JSONField(
+        "Valores inventados / a confirmar", default=dict, blank=True,
+        help_text="{campo o tema: nota}. Lo que figura acá se muestra marcado como INVENTADO en «Supuestos».")
     datos_demo = models.BooleanField(
         "Datos de demostración", default=False,
         help_text="Lo enciende el generador de demo: todas las pantallas avisan que los datos son inventados. "
@@ -556,6 +565,35 @@ class MetaEquipo(models.Model):
 
     def __str__(self):
         return f"{self.indicador.nombre} · equipo {self.supervisor.apellido}"
+
+
+class VersionMetaEquipo(models.Model):
+    """Historial de las metas propias de un equipo: qué meta/límite regía desde cuándo (vacío = usa la
+    general). Permite reconstruir el criterio de un equipo en una fecha pasada."""
+
+    supervisor = models.ForeignKey(Persona, on_delete=models.CASCADE, related_name="+")
+    indicador = models.ForeignKey(Indicador, on_delete=models.CASCADE, related_name="+")
+    vigente_desde = models.DateField(default=timezone.localdate, db_index=True)
+    meta = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    minimo = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    creada = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["supervisor", "indicador", "vigente_desde", "creada"]
+        verbose_name = "Versión de meta de equipo"
+        verbose_name_plural = "Versiones de metas de equipo"
+
+
+def _version_meta_equipo(sender, instance, **kwargs):
+    borrada = kwargs.get("signal_name") == "delete"
+    VersionMetaEquipo.objects.create(supervisor_id=instance.supervisor_id, indicador_id=instance.indicador_id,
+                                     meta=None if borrada else instance.meta,
+                                     minimo=None if borrada else instance.minimo)
+
+
+models.signals.post_save.connect(_version_meta_equipo, sender=MetaEquipo, dispatch_uid="version_meta_equipo")
+models.signals.post_delete.connect(lambda sender, instance, **kw: _version_meta_equipo(
+    sender, instance, signal_name="delete"), sender=MetaEquipo, dispatch_uid="version_meta_equipo_del", weak=False)
 
 
 class CambioMeta(models.Model):

@@ -1367,6 +1367,8 @@ class Command(BaseCommand):
                           ("descargo", 2, 7, "Descargo escrito del técnico involucrado")]
             if sin.estado == Siniestro.Estado.CERRADO:
                 pasos.append(("pago" if sin.costo_real else "otro", 20, 0, "Cierre del expediente"))
+            if sin.estado == Siniestro.Estado.CERRADO and sin.monto_recuperado:
+                pasos.append(("recupero", 25, 0, "Recupero (aseguradora / descuento acordado)"))
             for tipo, dia, plazo, texto in pasos:
                 fecha = sin.fecha + timedelta(days=dia)
                 if fecha > self.hoy:
@@ -1374,9 +1376,12 @@ class Command(BaseCommand):
                 vence = fecha + timedelta(days=plazo) if plazo else None
                 cumplida = sin.estado == Siniestro.Estado.CERRADO or (vence and vence < self.hoy - timedelta(days=3)
                                                                        and r.random() < .85)
+                monto = sin.costo_real if tipo == "pago" else sin.monto_recuperado if tipo == "recupero" else None
+                ref = {"pago": f"Factura B 0003-{sin.id:08d} (inventada)",
+                       "recupero": f"Recibo aseguradora {sin.id:06d} (inventado)"}.get(tipo, f"EXP-{sin.numero} (inventado)")
                 ActuacionIncidente.objects.create(siniestro=sin, fecha=fecha, tipo=tipo, descripcion=texto,
                                                   responsable=sin.supervisor, vence=vence, cumplida=bool(cumplida),
-                                                  referencia=f"EXP-{sin.numero} (inventado)")
+                                                  referencia=ref, monto=monto or None)
                 n_act += 1
 
         # 4. Controles de calidad de los últimos 30 días hechos con la plantilla (resultados inventados)
@@ -1398,5 +1403,47 @@ class Command(BaseCommand):
                 inf.plantilla = pl
                 inf.save(update_fields=["plantilla"])
                 n_ctrl += 1
+        # 5. Reglas de la empresa INVENTADAS (quedan listadas en «Supuestos e inventados»)
+        par = Parametros.actual()
+        par.encuesta_min_respuestas, par.encuesta_min_personas = 5, 3
+        par.claro_retencion, par.claro_dias_cobro, par.claro_paga_retrabajos = Decimal("3.5"), 45, False
+        par.tasa_descuento_mensual = Decimal("3.0")
+        par.reloj_antiguedad = "original"
+        par.comparar_productividad_por = "zona"
+        par.provisorios = {
+            "Pesos de los índices (IPT / IGS)": "Pesos INVENTADOS para la demo (calibración simulada): acordar con "
+                                                "la empresa con varios meses de datos reales.",
+            "comparar_productividad_por": "Inventado: se compara con la zona para no castigar zonas lejanas.",
+            "evidencia_min_jornadas": "Inventado.",
+            "encuesta_min_respuestas": "Inventado: 5 respuestas en el período.",
+            "encuesta_min_personas": "Inventado: de al menos 3 técnicos distintos.",
+            "claro_retencion": "Inventado: 3,5 % de retenciones y débitos.",
+            "claro_dias_cobro": "Inventado: Claro paga a 45 días del cierre del mes.",
+            "claro_paga_retrabajos": "Inventado: se supone que Claro no paga los retrabajos.",
+            "tasa_descuento_mensual": "Inventado: 3 % mensual para comparar contado vs. cuotas.",
+            "reloj_antiguedad": "Inventado: la alerta de 60 días cuenta desde el ingreso original del material.",
+            "dias_max_stock": "Inventado.",
+            "prob_recambio": "Inventado.",
+            "prob_decodificador_min": "Inventado.", "prob_decodificador_max": "Inventado.",
+            "minutos_traslado_promedio": "Inventado.",
+        }
+        par._usuario = "demo (valores inventados)"
+        par.save()
+        # una meta propia de equipo con historia (inventada): el supervisor la subió hace 20 días
+        from core.models import Indicador, MetaEquipo, VersionMetaEquipo
+        # pesos «calibrados» inventados: cada cambio queda como versión del criterio
+        for codigo, peso in [("eficiencia_jornada", 30), ("calidad_controles", 15), ("ot_por_dia", 3),
+                             ("objetivos", 15), ("clima_equipo", 12)]:
+            ind = Indicador.objects.filter(codigo=codigo).first()
+            if ind and ind.peso != peso:
+                ind.peso = peso
+                ind.save()
+        ef = Indicador.objects.get(codigo="eficiencia_jornada")
+        me = MetaEquipo.objects.create(supervisor=self.sups[0], indicador=ef, meta=Decimal("60"), minimo=Decimal("35"))
+        VersionMetaEquipo.objects.filter(supervisor=self.sups[0], indicador=ef).update(
+            vigente_desde=self.hoy - timedelta(days=60))
+        VersionMetaEquipo.objects.create(supervisor=self.sups[0], indicador=ef, vigente_desde=self.hoy - timedelta(days=20),
+                                         meta=Decimal("65"), minimo=Decimal("40"))
+        MetaEquipo.objects.filter(pk=me.pk).update(meta=Decimal("65"), minimo=Decimal("40"))
         self.stdout.write(f"  datos inventados: requisitos por tarea, {n_act} actuaciones de incidentes, "
                           f"{n_ctrl} controles con plantilla")
