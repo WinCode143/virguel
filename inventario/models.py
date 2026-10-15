@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Sum
 from django.utils import timezone
 
@@ -188,7 +188,11 @@ class ReservaMaterial(models.Model):
 
     material = models.ForeignKey(Material, on_delete=models.PROTECT, related_name="reservas")
     cantidad = models.DecimalField(max_digits=12, decimal_places=2)
+    cantidad_entregada = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0,
+        help_text="Parte de la reserva que ya salió del depósito para esta orden; el resto sigue comprometido.")
     orden = models.ForeignKey(OrdenTrabajo, on_delete=models.CASCADE, related_name="reservas")
+    nota = models.CharField(max_length=200, blank=True, help_text="Por qué se liberó o reasignó.")
     necesaria_para = models.DateField()
     estado = models.CharField(max_length=10, choices=Estado.choices, default=Estado.ACTIVA, db_index=True)
     creada = models.DateTimeField(default=timezone.now)
@@ -201,6 +205,10 @@ class ReservaMaterial(models.Model):
 
     def __str__(self):
         return f"{self.cantidad} {self.material.unidad} {self.material.nombre} → {self.orden.numero}"
+
+    @property
+    def pendiente(self):
+        return max(0, self.cantidad - self.cantidad_entregada) if self.estado == self.Estado.ACTIVA else 0
 
 
 class UnidadEquipo(models.Model):
@@ -234,6 +242,10 @@ class UnidadEquipo(models.Model):
     custodio = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL, related_name="equipos")
     cliente = models.ForeignKey("core.Cliente", null=True, blank=True, on_delete=models.SET_NULL, related_name="equipos")
     actualizado = models.DateTimeField(default=timezone.now)
+    en_stock = models.BooleanField(
+        "Cuenta en el stock del depósito", default=True,
+        help_text="La unidad está incluida en las cantidades de los lotes del depósito. Cambiar su condición "
+                  "en el depósito ajusta esas cantidades (inventario/equipos.py).")
 
     class Meta:
         ordering = ["material", "numero_serie"]
@@ -247,6 +259,15 @@ class UnidadEquipo(models.Model):
     def utilizable(self) -> bool:
         return self.ubicacion in (self.Ubicacion.DEPOSITO, self.Ubicacion.TECNICO) and self.condicion in (
             self.Condicion.NUEVO, self.Condicion.USADO_OK)
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and self.ubicacion != self.Ubicacion.DEPOSITO:
+            self.en_stock = False  # sólo lo que está en el depósito forma parte de sus lotes
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            # cualquier cambio de condición en el depósito (también desde el administrador) ajusta los lotes
+            from .equipos import _sincronizar_stock
+            _sincronizar_stock(self, getattr(self, "_motivo", "") or "cambio de condición")
 
 
 class MovimientoUnidad(models.Model):

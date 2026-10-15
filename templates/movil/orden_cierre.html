@@ -11,7 +11,7 @@
   <button type="button" data-panel="gastos">{% icono 'billetera' %}Gastos</button>
   <button type="button" data-panel="ack">{% icono 'firma' %}Conformidad</button>
 </nav>
-{% if form.errors %}<div class="card" style="border-color:var(--critico)"><span class="estado critico">Revisá los campos marcados</span></div>{% endif %}
+{% if form.errors %}<div class="card" style="border-color:var(--critico)"><span class="estado critico">Revisá los campos marcados</span>{% for e in form.non_field_errors %}<p style="margin:.5rem 0 0">{{ e }}</p>{% endfor %}</div>{% endif %}
 
 <section class="panel card" id="p-resultado">
   <h2>¿Cómo terminó la llamada?</h2>

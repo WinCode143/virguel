@@ -351,7 +351,7 @@ def _requisitos_por_tarea(equipo, hoy):
     from operaciones.models import TipoTarea
     ids = [p.id for p in equipo]
     nivel = {}
-    for pid, cid, n, vence in (EvaluacionCompetencia.objects.filter(persona_id__in=ids).order_by("fecha")
+    for pid, cid, n, vence in (EvaluacionCompetencia.objects.filter(persona_id__in=ids, fecha__lte=hoy).order_by("fecha")
                                .values_list("persona_id", "competencia_id", "nivel", "vence")):
         if vence is None or vence >= hoy:
             nivel[(pid, cid)] = n

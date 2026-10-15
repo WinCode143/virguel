@@ -12,6 +12,7 @@ from core.notificaciones import notificar
 from core.numeros import a_entero
 from core.roles import DEPOSITO, GERENCIA, SUPERVISOR, persona_de, requiere_rol, rol_de
 from inventario.models import Material, MovimientoStockTecnico, PedidoMaterial
+from inventario.reservas import ReservadoParaOtra
 from inventario.services import StockInsuficiente
 from inventario.stock_tecnico import devolver, entregar, partes_paradas
 
@@ -22,6 +23,25 @@ def _dec(v):
     return None if n is False else n
 
 
+def _entregar_pedido(request, ped, faltantes):
+    with transaction.atomic():
+        for it in ped.items.all():
+            cant = _dec(request.POST.get(f"cant_{it.id}", it.cantidad))
+            if cant is None or cant <= 0:
+                continue
+            try:
+                entregar(ped.tecnico, it.material, cant, pedido=ped)
+            except StockInsuficiente:
+                entregar(ped.tecnico, it.material, cant, pedido=ped, permitir_negativo=True)
+                faltantes.append(it.material.nombre)
+            it.cantidad_entregada = cant
+            it.save(update_fields=["cantidad_entregada"])
+        ped.estado, ped.entregado = PedidoMaterial.Estado.ENTREGADO, timezone.now()
+        if not ped.aprobado_por:
+            ped.aprobado_por = persona_de(request.user)
+        ped.save()
+
+
 @requiere_rol(GERENCIA, DEPOSITO)
 def pedidos(request):
     if request.method == "POST":
@@ -29,22 +49,11 @@ def pedidos(request):
         accion = request.POST.get("accion")
         if accion == "entregar" and ped.estado in ("aprobado", "pendiente"):
             faltantes = []
-            with transaction.atomic():
-                for it in ped.items.all():
-                    cant = _dec(request.POST.get(f"cant_{it.id}", it.cantidad))
-                    if cant is None or cant <= 0:
-                        continue
-                    try:
-                        entregar(ped.tecnico, it.material, cant, pedido=ped)
-                    except StockInsuficiente:
-                        entregar(ped.tecnico, it.material, cant, pedido=ped, permitir_negativo=True)
-                        faltantes.append(it.material.nombre)
-                    it.cantidad_entregada = cant
-                    it.save(update_fields=["cantidad_entregada"])
-                ped.estado, ped.entregado = PedidoMaterial.Estado.ENTREGADO, timezone.now()
-                if not ped.aprobado_por:
-                    ped.aprobado_por = persona_de(request.user)
-                ped.save()
+            try:
+                _entregar_pedido(request, ped, faltantes)
+            except ReservadoParaOtra as e:
+                messages.error(request, f"No se entregó el pedido {ped.id}: {e}")
+                return redirect("tablero:pedidos")
             notificar(ped.tecnico, "Tu pedido de partes está listo", "Pasá a retirarlo por el depósito.", "/app/stock/")
             messages.success(request, f"Pedido {ped.id} entregado a {ped.tecnico.nombre_completo}.")
             if faltantes:
@@ -83,7 +92,7 @@ def stock_tecnicos(request):
                     entregar(t, m, cant)
                     notificar(t, "Recibiste partes del depósito", f"{cant:g} {m.unidad} de {m.nombre}", "/app/stock/")
                     messages.success(request, f"Entregado a {t.nombre_completo}: {cant:g} {m.unidad} de {m.nombre}.")
-            except StockInsuficiente as e:
+            except (StockInsuficiente, ReservadoParaOtra) as e:
                 messages.error(request, str(e))
         return redirect("tablero:stock_tecnicos")
     filas = (MovimientoStockTecnico.objects.filter(tecnico__in=tecnicos).values(
@@ -137,7 +146,11 @@ def deudas(request):
                 if not cant:
                     messages.error(request, "La cantidad tiene que ser un número entero.")
                     return redirect("tablero:deudas")
-                entregar(t, m, cant, permitir_negativo=True)
+                try:
+                    entregar(t, m, cant, permitir_negativo=True)
+                except ReservadoParaOtra as e:
+                    messages.error(request, str(e))
+                    return redirect("tablero:deudas")
                 notificar(t, "Parte regularizada", f"Se registró la entrega de {cant:g} {m.unidad} de {m.nombre}.", "/app/stock/")
                 messages.success(request, f"Registrada la entrega a {t.nombre_completo}.")
             elif accion == "devolucion":

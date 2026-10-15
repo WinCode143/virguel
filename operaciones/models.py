@@ -274,6 +274,9 @@ class ParticipacionVisita(models.Model):
     persona = models.ForeignKey(Persona, on_delete=models.PROTECT, related_name="participaciones_visita")
     funcion = models.CharField(max_length=10, choices=Funcion.choices, default=Funcion.EJECUTOR)
     minutos = models.PositiveIntegerField(null=True, blank=True)
+    confirmada = models.BooleanField(
+        default=True, help_text="Falso = inferida sólo por pertenecer a la cuadrilla ese día (asistencia no "
+                                "confirmada): no cuenta como trabajo efectivo hasta confirmarla.")
 
     class Meta:
         unique_together = [("intento", "persona")]

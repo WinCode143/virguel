@@ -18,6 +18,10 @@ class AsignacionAdmin(admin.ModelAdmin):
     search_fields = ["persona__apellido", "elemento__nombre"]
     autocomplete_fields = ["persona", "elemento"]
 
+    def get_readonly_fields(self, request, obj=None):
+        # una entrega registrada no cambia de persona/elemento/origen; la cantidad sí, con su movimiento
+        return ["persona", "elemento", "origen"] if obj else []
+
 
 @admin.register(CompraElemento)
 class CompraElementoAdmin(admin.ModelAdmin):

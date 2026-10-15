@@ -10,9 +10,13 @@ Reglas:
     sobra capacidad, se completa con técnicos de otras zonas.
   * Técnicos con ausencia ya cargada para ese día no reciben órdenes.
 
-Agenda ejecutable (contraste B04, B05, B17):
-  * además del cupo de órdenes, cada técnico tiene minutos útiles en la jornada; cada orden ocupa
-    su tiempo estándar + traslado promedio. Una tarea que llena la jornada no admite otra;
+Agenda ejecutable (contraste B04, B05, B17, H09):
+  * cada técnico tiene minutos útiles en la jornada; cada orden ocupa su tiempo estándar + traslado
+    promedio. Una tarea que llena la jornada no admite otra. El cupo de órdenes por día (su rendimiento
+    histórico) se mantiene como tope adicional: rige el que se agote primero;
+  * material: la orden necesita lo conocido de su receta disponible en la fecha (su reserva, el stock
+    del técnico o el depósito sin comprometer + compras que llegan a tiempo); si falta, no se asigna y
+    se dice qué falta. El coordinador puede asignarla igual con motivo (excepción anotada en la orden);
   * disponibilidad unificada por fecha: licencia/novedad aprobada o jornada sin salir → no disponible;
     novedad pendiente de aprobar → pendiente (no se asigna automáticamente); vehículo asignado en
     taller o fuera de servicio → no disponible;
@@ -23,10 +27,11 @@ Agenda ejecutable (contraste B04, B05, B17):
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from decimal import Decimal
 
 from django.contrib import messages
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from django.shortcuts import redirect, render
 from django.utils import timezone
 
@@ -100,7 +105,61 @@ def capacidad_tecnicos(tecnicos, fecha: date):
     return res
 
 
-def proponer(fecha: date, tecnicos_qs):
+class Suministro:
+    """Material disponible para la fecha, para decidir si una orden es ejecutable (contraste B04/B05/H09).
+
+    Cubre una orden, en este orden: lo reservado para ella, el stock a cargo del técnico candidato y el
+    depósito sin comprometer más las compras que llegan ese día o antes. Sólo cuenta lo conocido de la
+    receta (lo estimado por condición desconocida no bloquea). Lo que toma una orden ya no está para otra."""
+
+    def __init__(self, fecha):
+        from inventario.models import CompraEnCamino, LoteIngreso, MovimientoStockTecnico
+        from inventario.reservas import comprometido_por_material, comprometido_por_orden
+        stock = dict(LoteIngreso.objects.values_list("material").annotate(t=Sum("cantidad_disponible")))
+        comp = comprometido_por_material()
+        self.pool = defaultdict(Decimal)
+        for mid, q in stock.items():
+            self.pool[mid] += max(Decimal("0"), (q or 0) - (comp.get(mid) or 0))
+        for mid, q in (CompraEnCamino.objects.filter(recibida=False, fecha_esperada__lte=fecha)
+                       .values_list("material_id").annotate(t=Sum("cantidad"))):
+            self.pool[mid] += q or 0
+        self.reservado = comprometido_por_orden()
+        self.tecnico = defaultdict(Decimal)
+        for tid, mid, q in (MovimientoStockTecnico.objects.values_list("tecnico_id", "material_id")
+                            .annotate(t=Sum("cantidad"))):
+            if q and q > 0:
+                self.tecnico[(tid, mid)] = q
+        self._cache = {}
+
+    def necesidad(self, o):
+        if o.pk not in self._cache:
+            from inventario.services import necesidad_orden
+            self._cache[o.pk] = [(n["material"], n["cantidad"]) for n in necesidad_orden(o) if not n["estimado"]]
+        return self._cache[o.pk]
+
+    def faltante(self, o, tecnico_id):
+        """[(material, cantidad que falta)] si se asignara a ese técnico (sin descontar nada)."""
+        res = []
+        for m, q in self.necesidad(o):
+            q -= min(q, self.reservado.get((o.pk, m.id), Decimal("0")))
+            q -= min(q, self.tecnico.get((tecnico_id, m.id), Decimal("0")))
+            q -= min(q, self.pool.get(m.id, Decimal("0")))
+            if q > 0:
+                res.append((m, q))
+        return res
+
+    def tomar(self, o, tecnico_id):
+        for m, q in self.necesidad(o):
+            q -= min(q, self.reservado.get((o.pk, m.id), Decimal("0")))
+            t = min(q, self.tecnico.get((tecnico_id, m.id), Decimal("0")))
+            self.tecnico[(tecnico_id, m.id)] -= t
+            q -= t
+            self.pool[m.id] -= min(q, self.pool.get(m.id, Decimal("0")))
+
+
+def proponer(fecha: date, tecnicos_qs, excepciones=()):
+    """excepciones: ids de órdenes que el coordinador decide asignar aunque falte material (con motivo):
+    no se presentan como disponibles, quedan marcadas `o.sin_material`."""
     from capacitacion.models import habilitacion
     p = Parametros.actual()
     todos = list(tecnicos_qs.select_related("zona"))
@@ -123,12 +182,18 @@ def proponer(fecha: date, tecnicos_qs):
     from herramientas.models import epp_faltante
     epp = {}
 
+    sumin = Suministro(fecha)
+    excepciones = set(excepciones)
+
     def puede(c, o):
         k = (c.tecnico.id, o.tipo_id)
         if k not in habil:
             habil[k] = habilitacion(c.tecnico.id, o.tipo_id, fecha)
             epp[k] = epp_faltante(c.tecnico.id, o.tipo_id, fecha)
         return habil[k]["estado"] in ("habilitado", "sin_requisitos") and not epp[k]
+
+    def con_material(c, o):
+        return o.pk in excepciones or not sumin.faltante(o, c.tecnico.id)
     por_zona = defaultdict(list)
     for c in cupos.values():
         por_zona[c.tecnico.zona_id].append(c)
@@ -140,11 +205,13 @@ def proponer(fecha: date, tecnicos_qs):
 
     def mejor(candidatos, o):
         minutos = minutos_orden(o, p)
-        libres = [c for c in candidatos if c.entra(minutos) and puede(c, o)]
+        libres = [c for c in candidatos if c.entra(minutos) and puede(c, o) and con_material(c, o)]
         # el que tiene más lugar relativo a su capacidad (reparte parejo)
         return max(libres, key=lambda c: (c.libre / c.capacidad, c.minutos_libres), default=None)
 
     def asignar(c, o):
+        o.sin_material = [(m, q) for m, q in sumin.faltante(o, c.tecnico.id)] if o.pk in excepciones else []
+        sumin.tomar(o, c.tecnico.id)
         c.nuevas.append(o)
         c.minutos_ocupados += minutos_orden(o, p)
 
@@ -166,7 +233,13 @@ def proponer(fecha: date, tecnicos_qs):
     for o in sin_lugar:
         if o.id in otra_zona:
             continue
-        if not any(puede(c, o) for c in cupos.values()):
+        aptos = [c for c in cupos.values() if puede(c, o)]
+        if aptos and all(sumin.faltante(o, c.tecnico.id) for c in aptos) and o.pk not in excepciones:
+            falta = min((sumin.faltante(o, c.tecnico.id) for c in aptos), key=len)
+            o.causa = ("falta material en la fecha: " + ", ".join(f"{m.nombre} ({q:g})" for m, q in falta)
+                       + " · reponer, reservar o reprogramar; o asignar con excepción")
+            o.falta_material = True
+        elif not aptos:
             faltas = sorted({x for (tid, tipo), v in epp.items() if tipo == o.tipo_id for x in v})
             o.causa = ("bloqueo de suministro: falta entregar " + ", ".join(faltas)) if faltas and all(
                 habil.get((c.tecnico.id, o.tipo_id), {}).get("estado") in ("habilitado", "sin_requisitos")
@@ -194,8 +267,17 @@ def vista(request):
         fecha = date.fromisoformat(request.POST.get("fecha") or request.GET.get("fecha", ""))
     except ValueError:
         fecha = timezone.localdate() + timedelta(days=1)
-    propuesta = proponer(fecha, _tecnicos(request))
+    # Excepción del coordinador: asignar aunque falte material, sólo con motivo (queda anotado en la orden)
+    motivo = (request.POST.get("motivo_excepcion") or request.GET.get("motivo_excepcion") or "").strip()
+    excepciones = set()
+    if motivo:
+        for v in request.POST.getlist("excepcion") or request.GET.getlist("excepcion"):
+            if v.isdigit():
+                excepciones.add(int(v))
+    propuesta = proponer(fecha, _tecnicos(request), excepciones)
     if request.method == "POST":
+        from operaciones.models import NotaOrden
+        yo = persona_de(request.user)
         with transaction.atomic():
             n = 0
             for c in propuesta["cupos"]:
@@ -203,6 +285,10 @@ def vista(request):
                     o.tecnico, o.estado, o.fecha_programada = c.tecnico, OrdenTrabajo.Estado.ASIGNADA, fecha
                     o._sin_notificar = True
                     o.save(update_fields=["tecnico", "estado", "fecha_programada"])
+                    if getattr(o, "sin_material", None):
+                        NotaOrden.objects.create(orden=o, autor=yo, texto=(
+                            "Asignada con EXCEPCIÓN: material no confirmado ("
+                            + ", ".join(f"{m.nombre} {q:g}" for m, q in o.sin_material) + f"). Motivo: {motivo}")[:1000])
                     n += 1
                 if c.nuevas:
                     notificar(c.tecnico, f"Tenés {len(c.nuevas)} orden{'es' if len(c.nuevas) > 1 else ''} nueva"
@@ -210,4 +296,5 @@ def vista(request):
         messages.success(request, f"{n} órdenes asignadas para el {fecha:%d/%m/%Y}.")
         return redirect(f"{request.path}?fecha={fecha.isoformat()}")
     total_nuevas = sum(len(c.nuevas) for c in propuesta["cupos"])
-    return render(request, "tablero/asignacion.html", {"fecha": fecha, "total_nuevas": total_nuevas, **propuesta})
+    return render(request, "tablero/asignacion.html", {"fecha": fecha, "total_nuevas": total_nuevas,
+                                                       "excepciones": excepciones, "motivo": motivo, **propuesta})

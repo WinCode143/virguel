@@ -18,9 +18,12 @@ class StockInsuficiente(Exception):
 
 
 @transaction.atomic
-def registrar_salida(salida: Salida, permitir_negativo=False) -> Salida:
+def registrar_salida(salida: Salida, permitir_negativo=False, usar_reservado=False) -> Salida:
     """Descuenta la cantidad de los lotes más antiguos primero (FIFO) y
-    calcula el costo real de la salida."""
+    calcula el costo real de la salida. No toma unidades reservadas para otra orden (ReservadoParaOtra),
+    y si la salida es para una orden con reserva, la descuenta de esa reserva."""
+    from .reservas import aplicar_entrega, validar_salida
+    validar_salida(salida.material, salida.cantidad, orden_id=salida.orden_id, usar_reservado=usar_reservado)
     restante = Decimal(salida.cantidad)
     costo = Decimal("0")
     tomados = []
@@ -44,6 +47,8 @@ def registrar_salida(salida: Salida, permitir_negativo=False) -> Salida:
     salida.save()
     ConsumoLote.objects.bulk_create(ConsumoLote(salida=salida, lote=lote, cantidad=q, costo_unitario=lote.costo_unitario)
                                     for lote, q in tomados)
+    if salida.orden_id:
+        aplicar_entrega(salida.orden_id, salida.material, salida.cantidad)
     return salida
 
 
@@ -143,6 +148,19 @@ def _factor(receta, orden_equipos, orden_recambio, p) -> tuple[Decimal, bool]:
     return Decimal(1), False
 
 
+def necesidad_orden(orden) -> list[dict]:
+    """Servicio común de necesidad por orden (preparación, pedido LOM y cierre): la receta del tipo de
+    trabajo con su condición aplicada. [{material, cantidad, estimado}], sin las filas que dan cero."""
+    p = Parametros.actual()
+    filas = []
+    for r in RecetaMaterial.objects.filter(tipo_tarea_id=orden.tipo_id).select_related("material"):
+        f, est = _factor(r, orden.equipos_requeridos, orden.requiere_recambio, p)
+        q = (r.cantidad * Decimal(f)).quantize(Decimal("0.01"))
+        if q > 0:
+            filas.append({"material": r.material, "cantidad": q, "estimado": est})
+    return filas
+
+
 def necesidades(desde: date, hasta: date) -> list[dict]:
     """Una fila por material y origen de la necesidad (sin contar dos veces):
 
@@ -152,16 +170,13 @@ def necesidades(desde: date, hasta: date) -> list[dict]:
     y si la cantidad es estimada (condición desconocida)."""
     from operaciones.models import OrdenTrabajo
 
-    from .models import ReservaMaterial
     p = Parametros.actual()
     limite_inmediato = desde + timedelta(days=p.dias_necesidad_inmediata)
     recetas = defaultdict(list)
     for r in RecetaMaterial.objects.select_related("material"):
         recetas[r.tipo_tarea_id].append(r)
-    reservado = defaultdict(Decimal)
-    for oid, mid, q in ReservaMaterial.objects.filter(estado="activa").values_list("orden_id", "material_id",
-                                                                                   "cantidad"):
-        reservado[(oid, mid)] += q
+    from .reservas import comprometido_por_orden
+    reservado = defaultdict(Decimal, comprometido_por_orden())
     filas = []
     ordenes_dia = defaultdict(int)
     for oid, tec, tipo, fecha, equipos, recambio in OrdenTrabajo.objects.filter(
@@ -208,13 +223,13 @@ def prevision_materiales(desde: date, hasta: date):
       * lo reservado para una orden ya está cubierto y no queda disponible para otra;
       * lo que cada técnico tiene a cargo cubre primero sus propias órdenes asignadas;
       * lo que le sobra queda "libre en técnicos" (disponible devolviéndolo o transfiriéndolo);
-      * depósito disponible + libre en técnicos + compras en camino cubren el resto; para la necesidad
-        inmediata sólo cuenta lo que llega a tiempo (una entrega posterior no la destraba).
+      * depósito disponible + libre en técnicos + compras en camino cubren el resto; la necesidad
+        inmediata se reconcilia fecha por fecha: sólo cuenta lo que llega ese día o antes (una entrega
+        posterior no la destraba y queda como "llega tarde"); el sobrante cubre el backlog del horizonte.
     Separa necesidad inmediata y backlog; con "abastecer backlog" apagado sólo sugiere lo inmediato.
     Es una sugerencia: requiere revisión antes de emitir una orden de compra."""
-    from .models import CompraEnCamino, MovimientoStockTecnico, ReservaMaterial
+    from .models import CompraEnCamino, MovimientoStockTecnico
     p = Parametros.actual()
-    limite_inmediato = desde + timedelta(days=p.dias_necesidad_inmediata)
     filas_nec = necesidades(desde, hasta)
     tiene = defaultdict(Decimal)
     for tec, mat_id, q in (MovimientoStockTecnico.objects.values_list("tecnico_id", "material_id")
@@ -224,14 +239,13 @@ def prevision_materiales(desde: date, hasta: date):
     # Lo recibido en custodia (equipos de Claro) se instala igual: es suministro utilizable aunque no sea
     # propiedad ni costo de la empresa.
     deposito = dict(LoteIngreso.objects.values_list("material").annotate(t=Sum("cantidad_disponible")))
-    reservas = dict(ReservaMaterial.objects.filter(estado="activa").values_list("material")
-                    .annotate(t=Sum("cantidad")))
-    camino, camino_inm = defaultdict(Decimal), defaultdict(Decimal)
+    from .reservas import comprometido_por_material
+    reservas = comprometido_por_material()
+    camino, llegadas = defaultdict(Decimal), defaultdict(list)
     for mid, q, f in CompraEnCamino.objects.filter(recibida=False, fecha_esperada__lte=hasta).values_list(
-            "material_id", "cantidad", "fecha_esperada"):
+            "material_id", "cantidad", "fecha_esperada").order_by("fecha_esperada"):
         camino[mid] += q
-        if f <= limite_inmediato:
-            camino_inm[mid] += q
+        llegadas[mid].append([f, q])
 
     por_material = defaultdict(list)
     for n in filas_nec:
@@ -245,6 +259,7 @@ def prevision_materiales(desde: date, hasta: date):
         disponible_tec = {k: v for k, v in tiene.items() if k[1] == material.id}
         propio = Decimal("0")
         resto_inm = resto_backlog = Decimal("0")
+        pendientes_inm = []
         for n in sorted(ns, key=lambda n: (not n["inmediata"], n["fecha"])):
             q = n["cantidad"]
             if n["tecnico_id"]:
@@ -256,15 +271,33 @@ def prevision_materiales(desde: date, hasta: date):
                     q -= cubre
             if n["inmediata"]:
                 resto_inm += q
+                if q > 0:
+                    pendientes_inm.append([n["fecha"], q])
             else:
                 resto_backlog += q
         libre = sum(disponible_tec.values(), Decimal("0"))
         dep = max(Decimal("0"), (deposito.get(material.id) or Decimal("0")) - (reservas.get(material.id) or 0))
-        # necesidad inmediata: sólo con lo que está o llega a tiempo
-        suministro_inm = dep + libre + camino_inm.get(material.id, Decimal("0"))
-        faltante_inm = max(Decimal("0"), resto_inm - suministro_inm)
-        sobrante = max(Decimal("0"), suministro_inm - resto_inm) + (camino.get(material.id, Decimal("0"))
-                                                                   - camino_inm.get(material.id, Decimal("0")))
+        # Necesidad inmediata, fecha por fecha: la cubre lo que ya está (depósito, libre en técnicos) o una
+        # compra que llega ESE día o antes. Una llegada posterior no destraba la visita (queda "llega tarde").
+        ya = dep + libre
+        arribos = [list(x) for x in llegadas.get(material.id, [])]
+        faltante_inm = llega_tarde = Decimal("0")
+        for fecha_nec, q in sorted(pendientes_inm):
+            toma = min(q, ya)
+            ya -= toma
+            q -= toma
+            for a in arribos:
+                if q <= 0:
+                    break
+                if a[0] <= fecha_nec and a[1] > 0:
+                    toma = min(q, a[1])
+                    a[1] -= toma
+                    q -= toma
+            if q > 0:
+                faltante_inm += q
+                llega_tarde += min(q, sum((a[1] for a in arribos if a[0] > fecha_nec), Decimal("0")))
+        # lo que sobra (incluidas las llegadas posteriores) cubre el backlog del horizonte
+        sobrante = ya + sum((a[1] for a in arribos), Decimal("0"))
         faltante_backlog = max(Decimal("0"), resto_backlog - sobrante)
         faltante = faltante_inm + (faltante_backlog if p.abastecer_backlog else Decimal("0"))
         filas.append({"material": material, "necesario": necesario, "inmediato": inmediato,
@@ -273,22 +306,12 @@ def prevision_materiales(desde: date, hasta: date):
                       "propio_tecnicos": propio, "deposito": dep, "reservado": reservas.get(material.id) or Decimal("0"),
                       "libre_tecnicos": libre, "en_camino": camino.get(material.id, Decimal("0")),
                       "faltante_inmediato": faltante_inm, "faltante_backlog": faltante_backlog,
+                      "llega_tarde": llega_tarde,
                       "faltante": faltante, "costo_compra": faltante * material.costo_unitario})
     return filas
 
 
-def reservar(orden, material, cantidad, responsable="") -> "ReservaMaterial":
-    """Reserva material del depósito para una orden. No se puede comprometer lo que ya está reservado."""
-    from django.core.exceptions import ValidationError
-
-    from .models import ReservaMaterial
-    with transaction.atomic():
-        Material.objects.select_for_update().filter(pk=material.pk).first()
-        stock = (LoteIngreso.objects.filter(material=material).aggregate(t=Sum("cantidad_disponible"))["t"]
-                 or Decimal("0"))
-        ya = (ReservaMaterial.objects.filter(material=material, estado="activa").aggregate(t=Sum("cantidad"))["t"]
-              or Decimal("0"))
-        if stock - ya < Decimal(cantidad):
-            raise ValidationError(f"No alcanza: disponible sin reservar {stock - ya} {material.unidad}.")
-        return ReservaMaterial.objects.create(material=material, cantidad=cantidad, orden=orden,
-                                              necesaria_para=orden.fecha_programada, responsable=responsable)
+def reservar(orden, material, cantidad, responsable=""):
+    """Compatibilidad: ver inventario/reservas.py."""
+    from .reservas import reservar as _reservar
+    return _reservar(orden, material, cantidad, responsable)

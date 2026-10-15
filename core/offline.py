@@ -6,6 +6,7 @@ Los formularios con [data-offline] mandan `_id_operacion` (un UUID por envío):
   consumos duplicados cuando la respuesta se perdió y el celular reintenta).
 * La operación y el registro de su aceptación se confirman en UNA transacción: si la vista falla
   o no acepta los datos, no queda ni el cambio ni la marca (no hay "guardado sin aceptación").
+  Vale igual para el envío inicial (directo, sin cabecera) y para el reintento sincronizado.
 * El mismo identificador con contenido distinto es un conflicto (409), no una repetición.
 * Dos envíos concurrentes del mismo identificador tienen un único efecto (clave única).
 * Cuando el envío viene de la sincronización automática (cabecera X-Virguel-Sync),
@@ -33,7 +34,8 @@ def _id(request):
 
 
 def _huella(request) -> str:
-    """Contenido del envío (sin el token CSRF, que cambia entre sesiones)."""
+    """Contenido del envío (sin el token CSRF, que cambia entre sesiones), incluidos los BYTES de cada
+    archivo: dos fotos distintas con igual nombre y tamaño no son la misma operación."""
     h = hashlib.sha256(request.path.encode())
     for k in sorted(request.POST):
         if k == "csrfmiddlewaretoken":
@@ -43,6 +45,11 @@ def _huella(request) -> str:
     for k in sorted(request.FILES):
         for f in request.FILES.getlist(k):
             h.update(f"{k}:{f.name}:{f.size}\n".encode())
+            pos = f.tell()
+            f.seek(0)
+            for trozo in f.chunks():
+                h.update(trozo)
+            f.seek(pos)  # la vista lee el archivo desde donde estaba
     return h.hexdigest()
 
 
@@ -89,11 +96,8 @@ class SincronizacionOfflineMiddleware:
             errores = _errores_en_mensajes(request) if aceptado else []
             if aceptado and not errores:
                 return JsonResponse({"ok": True}) if es_sync else resp
-            # No aceptado: no queda la marca; en la sincronización tampoco ningún cambio parcial.
-            if es_sync:
-                transaction.set_rollback(True)
-            else:
-                op.delete()
+            # No aceptado: ni la marca ni ningún cambio parcial, haya o no cabecera de sincronización.
+            transaction.set_rollback(True)
         if errores and es_sync:
             return JsonResponse({"ok": False, "mensaje": " ".join(errores)})
         if es_sync and resp.status_code == 200 and "text/html" in resp.get("Content-Type", ""):
