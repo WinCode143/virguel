@@ -568,3 +568,12 @@ Ejecutar el plan `docs/PLAN_CORRECCIONES.md` hasta donde no haga falta informaci
   indicadores; registro de cambios de Parámetros; pruebas de acceso por objeto.
 - `verificar_consistencia`: se probó migrando un respaldo de datos de la versión anterior (40c2ac9):
   sin pérdida de registros, datos consistentes; el stock del pañol sin libro se concilia con un ajuste.
+
+## 2026-10-16 — Valores inventados explícitos y video
+
+- Lo que dependía de la empresa quedó con valores INVENTADOS en la demo, listados en la pantalla
+  «Supuestos e inventados» (Parámetros.provisorios): pesos calibrados de prueba, comparación por zona,
+  umbrales de encuesta, reglas financieras, pagos/recuperos de incidentes y política de 60 días.
+- Comparación de órdenes por día con la mediana de la zona (oportunidades parecidas).
+- Historial de metas por equipo (VersionMetaEquipo).
+- scripts/video_demo.js + video_demo.sh: video de las principales funciones con subtítulos.

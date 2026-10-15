@@ -178,8 +178,11 @@ def valores_tecnicos(desde: date, hasta: date, tecnicos) -> dict:
         persona_id__in=ids, fecha__range=(desde, hasta)).values("persona_id").annotate(
         n=Count("id"), ok=Count("id", filter=Q(minutos_tarde=0)))}
     asistencia = {r.persona.id: r for r in resumen_asistencia(desde, hasta, tecnicos)}
-    from capacitacion.evaluacion import mediana_plantel
+    from capacitacion.evaluacion import mediana_plantel, medianas_por_zona
     med = mediana_plantel(desde, hasta)
+    # Comparación con oportunidades parecidas: la mediana de su zona (si hay grupo suficiente)
+    por_zona = medianas_por_zona(desde, hasta) if Parametros.actual().comparar_productividad_por == "zona" else {}
+    p_min = Parametros.actual().evidencia_min_jornadas
 
     for t in tecnicos:
         x = v[t.id]
@@ -189,7 +192,10 @@ def valores_tecnicos(desde: date, hasta: date, tecnicos) -> dict:
         x["cumplimiento_agenda"] = _pct(ok, tot)
         x["calidad_controles"] = float(controles[t.id]) * 20 if t.id in controles else None
         x["no_resueltas_evitables"] = _pct(evitables.get(t.id, 0), ejecutadas.get(t.id, 0))
-        x["ot_por_dia"] = _pct(n_comp[t.id] / dias_calle[t.id], med) if dias_calle[t.id] and med else None
+        ref = por_zona.get(t.zona_id) or med
+        # sin jornadas suficientes (pocas oportunidades) no se compara
+        x["ot_por_dia"] = (_pct(n_comp[t.id] / dias_calle[t.id], ref)
+                           if dias_calle[t.id] >= max(1, p_min) and ref else None)
         x["documentacion_cierre"] = _pct(doc[t.id], n_comp[t.id])
         x["cierre_en_sitio"] = _pct(en_sitio[t.id], con_gps[t.id]) if con_gps[t.id] >= 5 else None
         std = sum((costo_std_tipo[tipo] for _, tipo in ordenes_por_tec[t.id]), Decimal("0"))

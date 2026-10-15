@@ -245,6 +245,24 @@ def evaluar_tecnicos(hasta: date | None = None, dias: int | None = None, tecnico
     return sorted(evs.values(), key=lambda e: (e.riesgo is None, -(e.riesgo or 0)))
 
 
+def medianas_por_zona(desde: date, hasta: date, minimo_tecnicos: int = 3) -> dict:
+    """{zona_id: mediana de OT/día en calle} de las zonas con al menos `minimo_tecnicos` técnicos con
+    5+ jornadas (grupo comparable: distancias y densidad de clientes parecidas)."""
+    from collections import defaultdict as dd
+    dias = dict(Jornada.objects.filter(fecha__range=(desde, hasta), en_calle=True,
+                                       tecnico__activo=True, tecnico__rol=Persona.Rol.TECNICO)
+                .values_list("tecnico_id").annotate(n=Count("id")))
+    ots = dict(OrdenTrabajo.objects.filter(fecha_ejecucion__range=(desde, hasta),
+                                           estado=OrdenTrabajo.Estado.COMPLETADA, tecnico_id__in=dias)
+               .values_list("tecnico_id").annotate(n=Count("id")))
+    zona = dict(Persona.objects.filter(pk__in=dias).values_list("id", "zona_id"))
+    por_zona = dd(list)
+    for t, n in dias.items():
+        if n >= 5:
+            por_zona[zona.get(t)].append(ots.get(t, 0) / n)
+    return {z: median(v) for z, v in por_zona.items() if z is not None and len(v) >= minimo_tecnicos}
+
+
 def mediana_plantel(desde: date, hasta: date) -> float:
     """Productividad mediana (OT completadas por día en calle) de TODO el plantel
     activo. Es la referencia aunque se evalúe a una sola persona o a un equipo."""

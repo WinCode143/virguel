@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import asignacion, calidad, deposito, exportar, exportar_excel, importar, metas, productividad, views
+from . import asignacion, calidad, supuestos, deposito, exportar, exportar_excel, importar, metas, productividad, views
 
 app_name = "tablero"
 urlpatterns = [
@@ -19,6 +19,7 @@ urlpatterns = [
     path("productividad/", productividad.tecnicos, name="prod_tecnicos"),
     path("productividad/supervisores/", productividad.supervisores, name="prod_supervisores"),
     path("indicadores/", productividad.diccionario, name="diccionario"),
+    path("supuestos/", supuestos.supuestos, name="supuestos"),
     path("productividad/calibrar/", productividad.calibrar, name="calibrar"),
     path("productividad/<int:pk>/", productividad.ficha, name="prod_ficha"),
     path("supervisores/", views.supervisores, name="supervisores"),

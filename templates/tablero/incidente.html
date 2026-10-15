@@ -20,11 +20,11 @@
 </div>
 <div class="card"><h2>Expediente: actuaciones y plazos</h2>
 {% if datos_demo %}<p class="aviso-demo">Las actuaciones y referencias de esta demo son <b>inventadas</b>.</p>{% endif %}
-<div class="tabla-scroll"><table><thead><tr><th>Fecha</th><th>Actuación</th><th>Detalle</th><th>Responsable</th><th>Referencia</th><th>Plazo</th><th></th></tr></thead>
-<tbody>{% for a in actuaciones %}<tr><td>{{ a.fecha|date:"d/m/Y" }}</td><td>{{ a.get_tipo_display }}</td><td>{{ a.descripcion }}</td><td>{{ a.responsable.apellido|default:"—" }}</td><td style="font-size:.85rem">{{ a.referencia|default:"—" }}</td>
+<div class="tabla-scroll"><table><thead><tr><th>Fecha</th><th>Actuación</th><th>Detalle</th><th>Responsable</th><th>Referencia</th><th class="num">Monto</th><th>Plazo</th><th></th></tr></thead>
+<tbody>{% for a in actuaciones %}<tr><td>{{ a.fecha|date:"d/m/Y" }}</td><td>{{ a.get_tipo_display }}</td><td>{{ a.descripcion }}</td><td>{{ a.responsable.apellido|default:"—" }}</td><td style="font-size:.85rem">{{ a.referencia|default:"—" }}</td><td class="num">{% if a.monto %}{{ a.monto|pesos }}{% else %}—{% endif %}</td>
 <td>{% if a.vence %}{{ a.vence|date:"d/m/Y" }} {% if a.cumplida %}<span class="estado ok">cumplido</span>{% elif a.vencida %}<span class="estado critico">vencido</span>{% else %}<span class="estado aviso">pendiente</span>{% endif %}{% else %}—{% endif %}</td>
 <td>{% if a.vence and not a.cumplida %}<form method="post">{% csrf_token %}<input type="hidden" name="actuacion" value="{{ a.id }}"><button class="btn sec" name="accion" value="cumplida">Cumplido</button></form>{% endif %}</td></tr>
-{% empty %}<tr><td colspan="7" class="muted">Sin actuaciones registradas.</td></tr>{% endfor %}</tbody></table></div></div>
+{% empty %}<tr><td colspan="8" class="muted">Sin actuaciones registradas.</td></tr>{% endfor %}</tbody></table></div></div>
 <div class="card"><h2>Agregar actuación</h2><form method="post">{% csrf_token %}
 {% include "tablero/_form_campos.html" %}<button class="btn" style="margin-top:1rem">Agregar al expediente</button></form>
 <p class="muted" style="font-size:.82rem">Con un plazo cargado, el sistema avisa 3 días antes y cuando vence.</p></div>

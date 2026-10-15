@@ -57,6 +57,13 @@ class Command(BaseCommand):
         n = InformeControl.objects.filter(visita_ambigua=True).count()
         if n:
             avisos.append(f"{n} informe(s) de control anteriores con visita ambigua (revisar a mano)")
+        # Incidentes: lo recuperado declarado coincide con los recuperos documentados del expediente
+        from incidentes.models import ActuacionIncidente, Siniestro
+        rec = dict(ActuacionIncidente.objects.filter(tipo="recupero", monto__isnull=False).values_list("siniestro")
+                   .annotate(t=Sum("monto")))
+        for s in Siniestro.objects.filter(pk__in=rec):
+            if rec[s.pk] != s.monto_recuperado:
+                avisos.append(f"siniestro {s.numero}: recuperos documentados {rec[s.pk]} ≠ recuperado {s.monto_recuperado}")
         # Dinero: un ingreso no tiene saldo negativo (cobrado de más)
         for i in Ingreso.objects.all():
             if i.saldo < Decimal("0"):

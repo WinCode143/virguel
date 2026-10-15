@@ -151,6 +151,8 @@ class ActuacionIncidente(models.Model):
     responsable = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     referencia = models.CharField("Referencia / n.º de expediente o documento", max_length=120, blank=True)
     vence = models.DateField("Próximo plazo", null=True, blank=True)
+    monto = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True,
+                                help_text="Para pagos y recuperos: importe del comprobante (referencia).")
     cumplida = models.BooleanField("Plazo cumplido", default=False)
 
     class Meta:

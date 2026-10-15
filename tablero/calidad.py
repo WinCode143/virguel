@@ -133,7 +133,7 @@ def plantilla(request, pk):
 class ActuacionForm(forms.ModelForm):
     class Meta:
         model = ActuacionIncidente
-        fields = ["fecha", "tipo", "descripcion", "responsable", "referencia", "vence"]
+        fields = ["fecha", "tipo", "descripcion", "responsable", "referencia", "monto", "vence"]
         widgets = {"fecha": forms.DateInput(attrs={"type": "date"}), "vence": forms.DateInput(attrs={"type": "date"})}
 
     def __init__(self, *args, **kwargs):

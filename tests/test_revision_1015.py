@@ -691,3 +691,55 @@ class VerificarConsistenciaTests(TestCase):
         Elemento.objects.filter(pk=el.pk).update(stock=5)          # alguien tocó el campo a mano
         with self.assertRaises(SystemExit):
             call_command("verificar_consistencia", stdout=StringIO())
+
+
+class SupuestosYComparacionTests(TestCase):
+    """Valores inventados visibles como tales; comparación por zona; metas de equipo con historia."""
+
+    def test_supuestos_marca_inventados(self):
+        from core.models import Parametros
+        p = Parametros.actual()
+        p.provisorios = {"claro_retencion": "Inventado: 3,5 %"}
+        p.save()
+        g = User.objects.create_user("g", password="x")
+        g.groups.add(Group.objects.create(name="Gerencia"))
+        self.client.force_login(g)
+        r = self.client.get("/tablero/supuestos/")
+        self.assertContains(r, "INVENTADO")
+        self.assertContains(r, "Inventado: 3,5 %")
+
+    def test_meta_de_equipo_en_fecha(self):
+        from core.metas import indicadores_efectivos
+        from core.models import Indicador, MetaEquipo, VersionMetaEquipo
+        s = persona("S1", rol="supervisor")
+        ef = Indicador.objects.get(codigo="eficiencia_jornada")
+        m = MetaEquipo.objects.create(supervisor=s, indicador=ef, meta=60, minimo=35)
+        VersionMetaEquipo.objects.update(vigente_desde=HOY - timedelta(days=30))
+        m.meta = 65
+        m.save()  # nueva versión desde hoy
+        hace10 = {i.codigo: i for i in indicadores_efectivos("tecnico", s, al=HOY - timedelta(days=10))}
+        hoy = {i.codigo: i for i in indicadores_efectivos("tecnico", s, al=HOY)}
+        self.assertEqual((hace10["eficiencia_jornada"].meta, hoy["eficiencia_jornada"].meta), (60, 65))
+        m.delete()  # vuelve a la general, con su versión
+        hoy = {i.codigo: i for i in indicadores_efectivos("tecnico", s, al=HOY)}
+        self.assertEqual(hoy["eficiencia_jornada"].meta, ef.meta)
+
+    def test_comparacion_por_zona(self):
+        from capacitacion.evaluacion import medianas_por_zona
+        from core.models import Zona
+        from operaciones.models import Jornada, OrdenTrabajo, TipoTarea
+        lejos, cerca = Zona.objects.create(nombre="Lejos"), Zona.objects.create(nombre="Cerca")
+        tipo = TipoTarea.objects.create(codigo="I", nombre="I")
+        n = 0
+        for zona, por_dia in ((lejos, 2), (cerca, 6)):
+            for k in range(3):
+                t = persona(f"{zona.nombre}{k}", zona=zona)
+                for d in range(1, 6):
+                    f = HOY - timedelta(days=d)
+                    Jornada.objects.create(tecnico=t, fecha=f, en_calle=True)
+                    for _ in range(por_dia):
+                        n += 1
+                        OrdenTrabajo.objects.create(numero=str(n), tipo=tipo, tecnico=t, estado="completada",
+                                                    fecha_programada=f, fecha_ejecucion=f)
+        med = medianas_por_zona(HOY - timedelta(days=10), HOY)
+        self.assertEqual((med[lejos.id], med[cerca.id]), (2, 6))

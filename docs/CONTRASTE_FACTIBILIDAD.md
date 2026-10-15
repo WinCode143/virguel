@@ -153,10 +153,15 @@ que se indica · **Propuesta** = diseñado, no construido.
 | B38 Permisos | Pruebas de acceso por objeto en los flujos nuevos (incidente de otro equipo, objetivos, calibración, plantillas, rectificación). | `AccesoPorObjetoTests` |
 | Datos previos | `python manage.py verificar_consistencia` comprueba inventario, reservas, equipos, pañol, visitas y saldos; la migración concilia el stock del pañol que no tenía movimiento en el libro. Se probó migrando una copia de datos generada con la versión anterior (40c2ac9) y restaurando un respaldo. | `VerificarConsistenciaTests` |
 
-Siguen dependiendo de la empresa o de datos reales (no de programar): calibrar pesos y validar
-comparabilidad por oportunidades, umbrales de encuesta con el tamaño real de los equipos, reglas
-financieras y documentación real de pagos y recuperos de incidentes, y la política de antigüedad
-(qué reloj activa los 60 días). Las metas por equipo (MetaEquipo) todavía no se versionan.
+Lo que dependía de la empresa ahora tiene **valores inventados** cargados en la demo, marcados
+como tales en la pantalla *Productividad → Supuestos e inventados* (y con el aviso general de datos de
+demostración): pesos de los índices (calibración simulada, versionada), comparación de técnicos con
+los de su misma zona y evidencia mínima, umbrales de la encuesta (5 respuestas de 3 personas),
+reglas financieras (retención 3,5 %, cobro a 45 días, retrabajos no pagos, tasa 3 % mensual),
+pagos y recuperos de incidentes con su comprobante (inventado) y la política de antigüedad (la
+alerta de 60 días cuenta desde el ingreso original). Las metas propias de cada equipo ahora guardan
+historial (`VersionMetaEquipo`) y las curvas usan la meta vigente en cada fecha. Para pasar a datos
+reales: cargar los valores de la empresa en Parámetros y quitarlos de «valores inventados».
 
 ## Lo que necesita la empresa (sección 5.3)
 
