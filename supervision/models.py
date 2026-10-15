@@ -248,8 +248,15 @@ class TareaSupervisor(models.Model):
         ("sin_reporte", "Sin reporte"), ("reportado", "Reportado (a verificar)"),
         ("verificado", "Verificado"), ("rechazado", "Rechazado")])
     verificado_por = models.ForeignKey(Persona, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    verificado_por_usuario = models.CharField(
+        max_length=150, blank=True, help_text="Cuenta que verificó (aunque no tenga ficha de persona).")
     fecha_verificacion = models.DateTimeField(null=True, blank=True)
+    verificado_sobre = models.JSONField(
+        default=dict, blank=True, help_text="Lo que se verificó (meta, resultado, evidencia, criterio). Si cambia "
+                                            "después, la verificación deja de valer y vuelve a 'reportado'.")
     historial_meta = models.JSONField(default=list, blank=True, help_text="Cambios de la meta (fecha, antes, después).")
+
+    VERIFICABLE = ("meta", "resultado", "estado", "evidencia", "criterio_aceptacion")
 
     class Meta:
         ordering = ["-fecha"]
@@ -259,12 +266,38 @@ class TareaSupervisor(models.Model):
     def __str__(self):
         return f"{self.fecha} {self.supervisor.apellido}: {self.descripcion}"
 
+    def foto(self) -> dict:
+        return {c: getattr(self, c) for c in self.VERIFICABLE}
+
+    def verificar(self, estado: str, usuario, persona=None, nota: str = ""):
+        """Verificación por un tercero: guarda quién (persona o, si no tiene ficha, la cuenta), cuándo y SOBRE QUÉ."""
+        if persona is not None and persona.pk == self.supervisor_id:
+            raise ValueError("Nadie verifica su propio objetivo.")
+        if self.verificacion == "sin_reporte":
+            raise ValueError("El supervisor todavía no lo reportó.")
+        self.verificacion, self.verificado_por = estado, persona
+        self.verificado_por_usuario = getattr(usuario, "username", "") or ""
+        self.fecha_verificacion = timezone.now()
+        self.verificado_sobre = self.foto()
+        if nota:
+            self.comentario = (self.comentario + "\n" if self.comentario else "") + f"Verificación: {nota}"
+        self.save()
+
     def save(self, *args, **kwargs):
         if self.pk:
             anterior = TareaSupervisor.objects.filter(pk=self.pk).values_list("meta", flat=True).first()
             if anterior != self.meta:
                 self.historial_meta = (self.historial_meta or []) + [
                     {"fecha": timezone.now().isoformat(timespec="minutes"), "antes": anterior, "despues": self.meta}]
+        if self.verificacion in ("verificado", "rechazado") and self.verificado_sobre and \
+                self.verificado_sobre != self.foto():
+            # cambió lo que se había verificado: la verificación anterior queda en el historial y hay que
+            # volver a verificar (no se conserva un "verificado" sobre datos que ya no son esos)
+            self.historial_meta = (self.historial_meta or []) + [{
+                "fecha": timezone.now().isoformat(timespec="minutes"), "verificacion_anterior": self.verificacion,
+                "por": self.verificado_por_usuario, "sobre": self.verificado_sobre}]
+            self.verificacion, self.verificado_sobre = "reportado", {}
+            self.verificado_por, self.verificado_por_usuario, self.fecha_verificacion = None, "", None
         super().save(*args, **kwargs)
 
     @property

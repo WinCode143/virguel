@@ -399,8 +399,12 @@ def supervisores(request):
         {"nombre": "Trato y respeto", "datos": [r["t"] for r in sem], "serie": 1},
         {"nombre": "Claridad de indicaciones", "datos": [r["c"] for r in sem], "serie": 2},
     ], max=5)
-    comentarios = (EncuestaSupervisor.objects.filter(fecha__range=(hasta - timedelta(days=dias), hasta))
-                   .exclude(comentario="").select_related("supervisor").order_by("-fecha")[:15])
+    # Confidencialidad: sólo comentarios de supervisores con respuestas de suficientes personas en el período,
+    # y sin la fecha exacta ni la nota (que permitirían identificar a quien respondió en un equipo chico)
+    suficientes = {e.supervisor.id for e in evs if e.encuesta_suficiente}
+    comentarios = (EncuestaSupervisor.objects.filter(fecha__range=(hasta - timedelta(days=dias), hasta),
+                                                     supervisor_id__in=suficientes)
+                   .exclude(comentario="").select_related("supervisor").order_by("?")[:15])
     return render(request, "tablero/supervisores.html", {"evs": evs, "g": g, "g_sem": g_sem, "dias": dias,
                                                         "comentarios": comentarios})
 
@@ -631,7 +635,9 @@ def encuestas(request):
     except ValueError:
         fecha = hoy
     qs = (EncuestaSupervisor.objects.filter(fecha=fecha, tecnico__in=_equipo(request))
-          .select_related("tecnico", "supervisor").order_by("respondida", "tecnico__apellido"))
+          .select_related("tecnico", "supervisor").order_by("tecnico__apellido"))
+    # El supervisor evaluado no ve quién respondió (lo podría identificar por eliminación): sólo gerencia.
+    ve_respuestas = rol_de(request.user) == GERENCIA
     filas = []
     for e in qs:
         url = request.build_absolute_uri(reverse("encuesta", args=[e.token]))
@@ -640,7 +646,8 @@ def encuestas(request):
         filas.append({"e": e, "url": url, "wa": link_whatsapp(e.tecnico.telefono, texto)})
     respondidas = sum(1 for f in filas if f["e"].respondida)
     return render(request, "tablero/encuestas.html", {"filas": filas, "fecha": fecha, "respondidas": respondidas,
-                                                       "pendientes": len(filas) - respondidas})
+                                                       "pendientes": len(filas) - respondidas,
+                                                       "ve_respuestas": ve_respuestas})
 
 
 # ---------------------------------------------------------------- alertas

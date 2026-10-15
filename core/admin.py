@@ -1,6 +1,7 @@
 from django.contrib import admin
 
-from .models import Alerta, AsignacionSupervisor, Cliente, Indicador, Notificacion, Parametros, Persona, Zona
+from .models import (Alerta, AsignacionSupervisor, CambioParametro, Cliente, Indicador, Notificacion, Parametros,
+                     Persona, Zona)
 
 admin.site.site_header = "Virguel · Carga de datos"
 admin.site.site_title = "Virguel ERP"
@@ -31,6 +32,10 @@ class ParametrosAdmin(admin.ModelAdmin):
         ("Decodificadores", {"fields": ["prob_decodificador_min", "prob_decodificador_max"]}),
         ("Evaluación", {"fields": ["dias_ventana_evaluacion"]}),
     ]
+
+    def save_model(self, request, obj, form, change):
+        obj._usuario = request.user.get_username()  # queda en el registro de cambios
+        super().save_model(request, obj, form, change)
 
     def has_add_permission(self, request):
         return not Parametros.objects.exists()
@@ -104,6 +109,23 @@ class IndicadorAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False  # los indicadores tienen un cálculo programado; aquí sólo se ajustan
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(CambioParametro)
+class CambioParametroAdmin(admin.ModelAdmin):
+    """Procedencia de las reglas: quién cambió qué parámetro y cuándo (sólo lectura)."""
+    list_display = ["fecha", "campo", "antes", "despues", "usuario"]
+    list_filter = ["campo"]
+    date_hierarchy = "fecha"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
     def has_delete_permission(self, request, obj=None):
         return False

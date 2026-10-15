@@ -822,7 +822,9 @@ def nueva_accion(request):
 def tarea(request, pk):
     p = _persona(request)
     t = get_object_or_404(TareaSupervisor, pk=pk, supervisor=p)
-    if request.method == "POST":
+    if request.method == "POST" and t.verificacion in ("verificado", "rechazado"):
+        messages.error(request, "Ese objetivo ya fue verificado por gerencia: no se modifica desde la app.")
+    elif request.method == "POST":
         try:
             t.resultado = int(request.POST.get("resultado") or 0)
         except ValueError:
@@ -833,8 +835,7 @@ def tarea(request, pk):
             t.estado = "cumplida" if t.resultado >= t.meta else "parcial" if t.resultado else "no_cumplida"
         else:
             t.estado = request.POST.get("estado", t.estado)
-        if t.verificacion != "verificado":
-            t.verificacion = "reportado"  # lo declarado por el supervisor espera verificación de gerencia
+        t.verificacion = "reportado"  # lo declarado por el supervisor espera verificación de gerencia
         t.save()
         messages.success(request, "Objetivo reportado: queda a verificar por gerencia.")
     return redirect("movil:inicio")

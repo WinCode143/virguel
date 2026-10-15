@@ -73,3 +73,12 @@ def cant(v):
         return "—"
     f = float(v)
     return _miles(f, 0) if f == int(f) else _miles(f, 2).rstrip("0").rstrip(",")
+
+
+@register.filter
+def hhmm(minutos):
+    """Minutos del día → "HH:MM" (540 → "09:00")."""
+    if minutos in (None, ""):
+        return ""
+    m = int(minutos)
+    return f"{m // 60:02d}:{m % 60:02d}"

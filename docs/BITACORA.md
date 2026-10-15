@@ -562,3 +562,9 @@ Ejecutar el plan `docs/PLAN_CORRECCIONES.md` hasta donde no haga falta informaci
 - El documento de factibilidad se corrigió: declaraba más de lo comprobado.
 - Una unidad con serie que cambia de condición en el depósito ajusta los lotes (baja o reingreso),
   para que previsión, reservas y entregas lean un único suministro.
+- Además se cerraron los demás puntos que la revisión marcó como parciales: agenda con ventanas
+  horarias, cuadrillas, tutor real y service programado; acciones indicada/ejecutada/eficaz;
+  verificación de objetivos trazable; confidencialidad de la encuesta; criterio histórico de los
+  indicadores; registro de cambios de Parámetros; pruebas de acceso por objeto.
+- `verificar_consistencia`: se probó migrando un respaldo de datos de la versión anterior (40c2ac9):
+  sin pérdida de registros, datos consistentes; el stock del pañol sin libro se concilia con un ajuste.

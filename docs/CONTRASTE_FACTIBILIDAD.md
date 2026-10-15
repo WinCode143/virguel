@@ -138,11 +138,25 @@ que se indica · **Propuesta** = diseñado, no construido.
 | H10 Editar una herramienta asignada creaba custodia sin salida | U14 | Cambiar la cantidad de una entrega genera su movimiento (entrega o devolución) o se rechaza si no hay existencias; persona, elemento y origen no se editan. | `PanolTests` (revisión) |
 | H11 Una evaluación futura habilitaba antes de su fecha | U15 | La habilitación usa sólo evaluaciones con fecha igual o anterior a la consultada y no vencidas. | `HabilitacionPorFechaTests` |
 
-Pendientes que la revisión señaló y siguen abiertos: ventanas horarias y coordinación completa de
-los recursos de una cuadrilla en la agenda; disponibilidad real del tutor para la ejecución tutelada
-(hoy la tutela no se asigna automáticamente); reproducción histórica por versión de todos los
-indicadores; indisponibilidad futura por service programado; validar umbrales de encuesta y reglas
-financieras con datos reales.
+### Otros puntos que la revisión marcó como parciales o con reservas
+
+| Criterio | Corrección | Prueba |
+|---|---|---|
+| B04/B05 Agenda | Ventanas horarias acordadas con el cliente (la agenda de cada técnico se arma en orden desde su horario de entrada; una orden con ventana sólo entra si se llega a tiempo). Cuadrillas: el ayudante sale con su responsable y no recibe órdenes propias; si el responsable no sale, la cuadrilla tampoco. | `AgendaCompletaTests` |
+| B17 Tutela | La ejecución tutelada sólo se asigna con un tutor real ese día: compañero de cuadrilla disponible y habilitado. | `AgendaCompletaTests` |
+| B30 Flota | Service programado (`ServiceProgramado`): el vehículo y su técnico quedan sin disponibilidad esos días. | `AgendaCompletaTests` |
+| B22 Acciones | Se separan desvíos con acción **indicada**, **ejecutada** y **eficaz verificada**; ya no se llama "corregido" a tener una acción cumplida. | `DesviosYObjetivosTests` |
+| B23 Objetivos | Se guarda quién verificó aunque la cuenta de gerencia no tenga ficha de persona, y **sobre qué datos**; si cambian después, la verificación deja de valer (queda en el historial). Lo verificado no se reescribe desde la app. | `DesviosYObjetivosTests` |
+| B24 Encuesta | El supervisor evaluado ya no ve quién respondió; los comentarios se muestran sin fecha ni nota, en orden aleatorio y sólo con respuestas de suficientes personas. | `ConfidencialidadEncuestaTests` |
+| B35 Indicadores | Las curvas históricas usan el criterio (meta, límite, peso) **vigente en cada fecha** (`Indicador.en`): cambiar hoy una meta no reescribe el pasado. | `ReproducibilidadTests` |
+| B39 Reglas | Cada cambio de Parámetros queda registrado (quién, cuándo, antes/después) y se puede consultar el valor vigente en una fecha. | `ReproducibilidadTests` |
+| B38 Permisos | Pruebas de acceso por objeto en los flujos nuevos (incidente de otro equipo, objetivos, calibración, plantillas, rectificación). | `AccesoPorObjetoTests` |
+| Datos previos | `python manage.py verificar_consistencia` comprueba inventario, reservas, equipos, pañol, visitas y saldos; la migración concilia el stock del pañol que no tenía movimiento en el libro. Se probó migrando una copia de datos generada con la versión anterior (40c2ac9) y restaurando un respaldo. | `VerificarConsistenciaTests` |
+
+Siguen dependiendo de la empresa o de datos reales (no de programar): calibrar pesos y validar
+comparabilidad por oportunidades, umbrales de encuesta con el tamaño real de los equipos, reglas
+financieras y documentación real de pagos y recuperos de incidentes, y la política de antigüedad
+(qué reloj activa los 60 días). Las metas por equipo (MetaEquipo) todavía no se versionan.
 
 ## Lo que necesita la empresa (sección 5.3)
 

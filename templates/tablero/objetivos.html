@@ -13,7 +13,7 @@
   <td class="num">{% if t.meta %}{{ t.resultado|default:"—" }} / {{ t.meta }}{% else %}{{ t.get_estado_display }}{% endif %}</td>
   <td style="font-size:.85rem">{{ t.evidencia|default:"—" }}</td>
   <td><span class="estado {% if t.verificacion == 'verificado' %}ok{% elif t.verificacion == 'rechazado' %}critico{% elif t.verificacion == 'reportado' %}aviso{% else %}info{% endif %}">{{ t.get_verificacion_display }}</span>
-    {% if t.verificado_por %}<br><span class="muted" style="font-size:.78rem">{{ t.verificado_por.apellido }} · {{ t.fecha_verificacion|date:"d/m" }}</span>{% endif %}</td>
+    {% if t.fecha_verificacion %}<br><span class="muted" style="font-size:.78rem">{% if t.verificado_por %}{{ t.verificado_por.apellido }}{% else %}{{ t.verificado_por_usuario }}{% endif %} · {{ t.fecha_verificacion|date:"d/m" }}</span>{% endif %}</td>
   <td>{% if t.verificacion == 'reportado' %}<form method="post" style="display:flex;gap:.3rem;flex-wrap:wrap">{% csrf_token %}<input type="hidden" name="tarea" value="{{ t.id }}">
     <input name="nota" placeholder="Nota (opcional)" style="max-width:9rem">
     <button class="btn" name="accion" value="verificado">Verificar</button><button class="btn sec" name="accion" value="rechazado">Rechazar</button></form>{% endif %}</td>

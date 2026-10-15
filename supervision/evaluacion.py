@@ -18,6 +18,7 @@ from core.models import Persona
 from incidentes.models import Siniestro
 from operaciones.models import Jornada
 
+from .efectividad import EFECTIVA, clasificar
 from .models import EncuestaSemanal, EncuestaSupervisor, InformeControl, TareaSupervisor
 
 INFORMES_OBJETIVO_DIA = 4  # controles por día hábil esperados de un supervisor
@@ -32,8 +33,9 @@ class EvaluacionSupervisor:
     informes_por_dia: float = 0.0
     calidad_documentacion: float = 0.0
     desvios: int = 0
-    desvios_con_accion: int = 0          # con acción indicada
-    desvios_corregidos: int = 0          # con acción CUMPLIDA (ejecutada)
+    desvios_con_accion: int = 0          # con acción INDICADA
+    desvios_accion_ejecutada: int = 0    # con acción CUMPLIDA (ejecutada); no dice si funcionó
+    desvios_accion_eficaz: int = 0       # con acción cumplida y VERIFICADA eficaz (supervision/efectividad.py)
     dias_respuesta_prom: float | None = None
     encuestas_enviadas: int = 0
     encuestas_respondidas: int = 0
@@ -112,8 +114,11 @@ def evaluar_supervisores(hasta: date | None = None, dias: int = 30):
                 e.desvios_con_accion += 1
             cumplidas = [a for a in acciones if a.cumplida]
             if cumplidas:
-                # sólo una acción EJECUTADA cuenta como corrección (una indicada pendiente no)
-                e.desvios_corregidos += 1
+                # una acción EJECUTADA cuenta como gestión del desvío (una indicada pendiente no); la eficacia
+                # se mide aparte, con los controles posteriores
+                e.desvios_accion_ejecutada += 1
+                if any(clasificar(a, hasta) == EFECTIVA for a in cumplidas):
+                    e.desvios_accion_eficaz += 1
                 respuesta[inf.supervisor_id].append(min(((a.fecha_cumplida or a.fecha) - inf.fecha).days
                                                         for a in cumplidas))
 
@@ -180,9 +185,10 @@ def evaluar_supervisores(hasta: date | None = None, dias: int = 30):
             e.score_control = 0.6 * cantidad + 0.4 * e.calidad_documentacion
         else:
             e.sin_datos.append("su equipo no tuvo jornadas")
-        # Desvíos: corregidos = con acción CUMPLIDA; sin desvíos detectados no hay qué evaluar
+        # Gestión de desvíos = con acción EJECUTADA (no "corregidos": la eficacia se informa aparte como
+        # desvios_accion_eficaz); sin desvíos detectados no hay qué evaluar
         if e.desvios:
-            cobertura = e.desvios_corregidos / e.desvios * 100
+            cobertura = e.desvios_accion_ejecutada / e.desvios * 100
             rapidez = 0 if e.dias_respuesta_prom is None else max(0, 100 - max(0, e.dias_respuesta_prom - 1) * 25)
             e.score_desvios = 0.7 * cobertura + 0.3 * rapidez
         else:

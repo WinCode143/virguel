@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from .models import LecturaOdometro, ServiceRealizado, TipoService, Vehiculo
+from .models import LecturaOdometro, ServiceProgramado, ServiceRealizado, TipoService, Vehiculo
+
+
+@admin.register(ServiceProgramado)
+class ServiceProgramadoAdmin(admin.ModelAdmin):
+    list_display = ["vehiculo", "tipo", "desde", "hasta", "taller", "estado"]
+    list_filter = ["estado"]
+    autocomplete_fields = ["vehiculo"]
 
 
 class ServiceInline(admin.TabularInline):

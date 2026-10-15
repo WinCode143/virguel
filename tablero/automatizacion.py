@@ -114,10 +114,10 @@ def alertas_personas(hoy):
                 s.alerta(f"trato-{e.supervisor.id}",
                          f"{e.supervisor.nombre_completo}: nota de trato {e.nota_encuesta:.1f}/5 en encuestas", "",
                          C if e.nota_encuesta < 2.5 else A, url)
-            if e.desvios and e.desvios_corregidos / e.desvios < 0.6:
+            if e.desvios and e.desvios_accion_ejecutada / e.desvios < 0.6:
                 s.alerta(f"desvios-{e.supervisor.id}",
-                         f"{e.supervisor.nombre_completo}: {e.desvios - e.desvios_corregidos} desvíos sin corrección "
-                         f"ejecutada ({e.desvios_con_accion - e.desvios_corregidos} con acción pendiente)", "", A, url)
+                         f"{e.supervisor.nombre_completo}: {e.desvios - e.desvios_accion_ejecutada} desvíos sin corrección "
+                         f"ejecutada ({e.desvios_con_accion - e.desvios_accion_ejecutada} con acción pendiente)", "", A, url)
             if e.dias_habiles and e.informes_por_dia < 1:
                 s.alerta(f"informes-{e.supervisor.id}",
                          f"{e.supervisor.nombre_completo}: sólo {e.informes_por_dia:.1f} informes de control por día", "",

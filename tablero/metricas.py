@@ -231,7 +231,7 @@ def tableros_tecnicos(desde=None, hasta=None, tecnicos=None, dias=30) -> list[Ta
 
     def inds(t):
         if t.supervisor_id not in por_equipo:
-            por_equipo[t.supervisor_id] = indicadores_efectivos("tecnico", t.supervisor_id and t.supervisor)
+            por_equipo[t.supervisor_id] = indicadores_efectivos("tecnico", t.supervisor_id and t.supervisor, al=hasta)
         return por_equipo[t.supervisor_id]
     valores = valores_tecnicos(desde, hasta, tecnicos)
     res = [Tablero(t, [Medicion(i, valores[t.id].get(i.codigo)) for i in inds(t)]) for t in tecnicos]
@@ -326,7 +326,7 @@ def tableros_supervisores(desde=None, hasta=None, dias=30, supervisores=None) ->
         manuales = {}
         _agregar_manuales(manuales, "supervisor", [s], hasta)
         x.update(manuales.get(s.id, {}))
-        res.append(Tablero(s, [Medicion(i, x.get(i.codigo)) for i in indicadores_efectivos("supervisor", s)]))
+        res.append(Tablero(s, [Medicion(i, x.get(i.codigo)) for i in indicadores_efectivos("supervisor", s, al=hasta)]))
     return sorted(res, key=lambda tb: -(tb.indice or -1))
 
 

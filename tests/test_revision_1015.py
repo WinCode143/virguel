@@ -489,3 +489,205 @@ class HabilitacionPorFechaTests(TestCase):
         EvaluacionCompetencia.objects.create(persona=t, competencia=c, nivel=3, fecha=HOY + timedelta(days=7))
         self.assertEqual(habilitacion(t.id, tipo.id, HOY)["estado"], "bloqueado")
         self.assertEqual(habilitacion(t.id, tipo.id, HOY + timedelta(days=7))["estado"], "habilitado")
+
+
+class DesviosYObjetivosTests(TestCase):
+    """B22: indicada ≠ ejecutada ≠ eficaz. B23: quién verificó (aun sin ficha) y sobre qué."""
+
+    def test_b22_ejecutada_no_es_eficaz(self):
+        from operaciones.models import Jornada
+        from supervision.evaluacion import evaluar_supervisores
+        from supervision.models import AccionCorrectiva, InformeControl
+        s = persona("S1", rol="supervisor")
+        t = persona("T1", supervisor=s)
+        Jornada.objects.create(tecnico=t, fecha=HOY - timedelta(days=2), en_calle=True)
+        inf = InformeControl.objects.create(supervisor=s, tecnico=t, fecha=HOY - timedelta(days=2), puntaje=2,
+                                            desvio_detectado=True)
+        AccionCorrectiva.objects.create(informe=inf, tecnico=t, tipo="charla", fecha=HOY - timedelta(days=1),
+                                        cumplida=True, fecha_cumplida=HOY - timedelta(days=1))
+        e = evaluar_supervisores(HOY, 30)[0]
+        self.assertEqual((e.desvios_con_accion, e.desvios_accion_ejecutada, e.desvios_accion_eficaz), (1, 1, 0))
+
+    def test_b23_verificador_sin_ficha_y_cambio_posterior(self):
+        from supervision.models import TareaSupervisor
+        s = persona("S1", rol="supervisor", usuario=User.objects.create_user("s", password="x"))
+        g = User.objects.create_user("g", password="x")  # gerencia sin ficha de persona
+        g.groups.add(Group.objects.create(name="Gerencia"))
+        t = TareaSupervisor.objects.create(supervisor=s, fecha=HOY, descripcion="Corregir 3 desvíos", meta=3,
+                                           resultado=3, estado="cumplida", verificacion="reportado",
+                                           evidencia="informes 1-3")
+        self.client.force_login(g)
+        self.client.post("/tablero/objetivos/", {"tarea": t.pk, "accion": "verificado"})
+        t.refresh_from_db()
+        self.assertEqual((t.verificacion, t.verificado_por_usuario, t.verificado_sobre["resultado"]),
+                         ("verificado", "g", 3))
+        # el supervisor no puede reescribir lo verificado desde la app
+        self.client.force_login(s.usuario)
+        self.client.post(f"/app/tarea/{t.pk}/", {"resultado": 8, "evidencia": "otra cosa"})
+        t.refresh_from_db()
+        self.assertEqual((t.verificacion, t.resultado), ("verificado", 3))
+        # si gerencia cambia la meta después, la verificación deja de valer (queda en el historial)
+        t.meta = 5
+        t.save()
+        t.refresh_from_db()
+        self.assertEqual((t.verificacion, t.cumplimiento), ("reportado", None))
+        self.assertTrue(any("verificacion_anterior" in h for h in t.historial_meta))
+
+
+class AgendaCompletaTests(TestCase):
+    """B04/B05/B17/B30: ventanas horarias, cuadrillas, tutor real y service programado."""
+
+    def setUp(self):
+        from core.models import Zona
+        from operaciones.models import OrdenTrabajo, TipoTarea
+        self.z = Zona.objects.create(nombre="N")
+        self.t = persona("T1", zona=self.z)  # entra 8:00 (por defecto)
+        self.tipo = TipoTarea.objects.create(codigo="C", nombre="Corta", minutos_estandar=60)
+        self.OT = OrdenTrabajo
+
+    def proponer(self):
+        from core.models import Persona
+        from tablero.asignacion import proponer
+        return proponer(HOY, Persona.objects.filter(rol="tecnico"))
+
+    def test_ventana_horaria(self):
+        from datetime import time
+        from core.models import Parametros
+        p = Parametros.actual()
+        p.minutos_traslado_promedio = 0
+        p.save()
+        # ventana de la mañana que no se alcanza si la agenda ya está llena
+        self.OT.objects.create(numero="tarde", tipo=self.tipo, zona=self.z, fecha_programada=HOY,
+                               ventana_desde=time(14, 0), ventana_hasta=time(16, 0))
+        self.OT.objects.create(numero="temprano", tipo=self.tipo, zona=self.z, fecha_programada=HOY,
+                               ventana_desde=time(8, 0), ventana_hasta=time(9, 0))
+        r = self.proponer()
+        horas = {o.numero: o.hora_propuesta for o in r["cupos"][0].nuevas}
+        self.assertEqual(horas, {"temprano": 8 * 60, "tarde": 14 * 60})  # la de las 14 espera su ventana
+        imposible = self.OT.objects.create(numero="x", tipo=self.tipo, zona=self.z, fecha_programada=HOY,
+                                           ventana_desde=time(6, 0), ventana_hasta=time(7, 0))
+        r = self.proponer()
+        self.assertIn("ventana", next(o.causa for o in r["sin_asignar"] if o.pk == imposible.pk))
+
+    def test_service_programado_bloquea(self):
+        from flota.models import ServiceProgramado, Vehiculo
+        v = Vehiculo.objects.create(patente="AA1", marca="X", modelo="Y", anio=2020, asignado_a=self.t)
+        ServiceProgramado.objects.create(vehiculo=v, desde=HOY, hasta=HOY + timedelta(days=1))
+        r = self.proponer()
+        self.assertIn("service programado", r["bloqueados"][0][1][1])
+
+    def test_cuadrilla_y_tutor(self):
+        from capacitacion.models import Competencia, EvaluacionCompetencia, RequisitoCompetencia
+        from operaciones.models import Cuadrilla, MiembroCuadrilla
+        ayud = persona("T2", zona=self.z)
+        cu = Cuadrilla.objects.create(nombre="C1")
+        MiembroCuadrilla.objects.create(cuadrilla=cu, persona=self.t, funcion="responsable", desde=HOY - timedelta(days=9))
+        MiembroCuadrilla.objects.create(cuadrilla=cu, persona=ayud, funcion="ayudante", desde=HOY - timedelta(days=9))
+        self.OT.objects.create(numero="1", tipo=self.tipo, zona=self.z, fecha_programada=HOY)
+        r = self.proponer()
+        self.assertEqual([c.tecnico for c in r["cupos"]], [self.t])  # el ayudante no recibe órdenes propias
+        # tutelada: el responsable necesita tutor; su compañero lo es sólo si está habilitado
+        comp = Competencia.objects.create(nombre="FTTH")
+        RequisitoCompetencia.objects.create(tipo_tarea=self.tipo, competencia=comp, nivel_minimo=3,
+                                            permite_tutelada=True)
+        EvaluacionCompetencia.objects.create(persona=self.t, competencia=comp, nivel=1, fecha=HOY - timedelta(days=5))
+        self.assertEqual(self.proponer()["cupos"][0].nuevas, [])  # sin tutor real
+        EvaluacionCompetencia.objects.create(persona=ayud, competencia=comp, nivel=4, fecha=HOY - timedelta(days=5))
+        self.assertEqual([o.numero for o in self.proponer()["cupos"][0].nuevas], ["1"])
+
+
+class AccesoPorObjetoTests(TestCase):
+    """B38: cada rol accede sólo a las acciones y objetos que le corresponden en los flujos nuevos."""
+
+    def setUp(self):
+        from incidentes.models import Siniestro
+        from supervision.models import PlantillaInspeccion, TareaSupervisor
+        self.s1 = persona("S1", rol="supervisor", usuario=User.objects.create_user("s1", password="x"))
+        self.s2 = persona("S2", rol="supervisor", usuario=User.objects.create_user("s2", password="x"))
+        self.t1 = persona("T1", supervisor=self.s1, usuario=User.objects.create_user("t1", password="x"))
+        self.t2 = persona("T2", supervisor=self.s2)
+        self.sin2 = Siniestro.objects.create(numero="S-2", tipo="otro", descripcion="x", tecnico=self.t2)
+        self.pl = PlantillaInspeccion.objects.create(nombre="P")
+        self.tarea2 = TareaSupervisor.objects.create(supervisor=self.s2, fecha=HOY, descripcion="x")
+
+    def test_supervisor(self):
+        c = self.client
+        c.force_login(self.s1.usuario)
+        self.assertEqual(c.get(f"/tablero/incidentes/{self.sin2.pk}/").status_code, 404)  # incidente de otro equipo
+        self.assertEqual(c.get("/tablero/objetivos/").status_code, 403)                  # verifica gerencia
+        self.assertEqual(c.get("/tablero/productividad/calibrar/").status_code, 403)
+        self.assertEqual(c.get("/app/tarea/%d/" % self.tarea2.pk).status_code in (404, 405), True)
+        c.post(f"/tablero/plantillas/{self.pl.pk}/", {"accion": "agregar", "orden": 1, "punto": "p",
+                                                     "criterio": "c", "defecto": "d"})
+        self.assertEqual(self.pl.items.count(), 0)                                       # no edita plantillas
+        self.assertEqual(c.get("/tablero/visitas/1/rectificar/").status_code, 403)
+
+    def test_tecnico(self):
+        self.client.force_login(self.t1.usuario)
+        for url in ("/tablero/objetivos/", "/tablero/plantillas/", f"/tablero/incidentes/{self.sin2.pk}/",
+                    "/tablero/indicadores/", "/tablero/asignacion/"):
+            self.assertEqual(self.client.get(url).status_code, 403, url)
+
+
+class ConfidencialidadEncuestaTests(TestCase):
+    """B24: el supervisor evaluado no ve quién respondió."""
+
+    def test_supervisor_no_ve_quien_respondio(self):
+        from supervision.models import EncuestaSupervisor
+        s = persona("S1", rol="supervisor", usuario=User.objects.create_user("s", password="x"))
+        t = persona("T1", supervisor=s)
+        from django.utils import timezone
+        EncuestaSupervisor.objects.create(supervisor=s, tecnico=t, fecha=HOY, respondida=timezone.now(), trato=2)
+        self.client.force_login(s.usuario)
+        r = self.client.get(f"/tablero/encuestas/?fecha={HOY.isoformat()}")
+        self.assertNotContains(r, "Respondida")
+        g = User.objects.create_user("g", password="x")
+        g.groups.add(Group.objects.create(name="Gerencia"))
+        self.client.force_login(g)
+        self.assertContains(self.client.get(f"/tablero/encuestas/?fecha={HOY.isoformat()}"), "Respondida")
+
+
+class ReproducibilidadTests(TestCase):
+    """B35/B39: un cambio de meta no reescribe el pasado; los parámetros tienen historial."""
+
+    def test_indicador_en_fecha(self):
+        from core.metas import indicadores_efectivos
+        from core.models import Indicador
+        i = Indicador.objects.get(codigo="eficiencia_jornada")
+        meta_vieja = i.meta
+        i.historial = [{"version": 2, "fecha": HOY.isoformat(), "cambios": {"meta": [str(meta_vieja), "90"]}}]
+        i.meta, i.version = 90, 2
+        Indicador.objects.filter(pk=i.pk).update(meta=90, version=2, historial=i.historial)
+        ayer = HOY - timedelta(days=1)
+        en_ayer = {x.codigo: x for x in indicadores_efectivos("tecnico", al=ayer)}["eficiencia_jornada"]
+        hoy = {x.codigo: x for x in indicadores_efectivos("tecnico", al=HOY)}["eficiencia_jornada"]
+        self.assertEqual((en_ayer.meta, en_ayer.version, hoy.meta), (meta_vieja, 1, 90))
+
+    def test_historial_de_parametros(self):
+        from core.models import CambioParametro, Parametros
+        Parametros.actual()
+        p = Parametros.objects.get()
+        antes = p.claro_retencion
+        p.claro_retencion = 7
+        p._usuario = "gerencia"
+        p.save()
+        c = CambioParametro.objects.get(campo="claro_retencion")
+        self.assertEqual((c.antes, c.despues, c.usuario), (str(antes), "7.00", "gerencia"))
+        self.assertEqual(p.valor_en("claro_retencion", HOY - timedelta(days=1)), str(antes))
+
+
+class VerificarConsistenciaTests(TestCase):
+    """Después de migrar o restaurar: el comando detecta contradicciones entre registros."""
+
+    def test_detecta_panol_desbalanceado(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from herramientas.models import Elemento, MovimientoPanol
+        el = Elemento.objects.create(codigo="E", nombre="E", tipo="herramienta", costo=1)
+        MovimientoPanol.objects.create(elemento=el, tipo="ajuste", cantidad=3, motivo="inicial")
+        call_command("verificar_consistencia", stdout=StringIO())  # consistente: no sale con error
+        Elemento.objects.filter(pk=el.pk).update(stock=5)          # alguien tocó el campo a mano
+        with self.assertRaises(SystemExit):
+            call_command("verificar_consistencia", stdout=StringIO())

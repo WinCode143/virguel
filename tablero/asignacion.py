@@ -22,6 +22,12 @@ Agenda ejecutable (contraste B04, B05, B17, H09):
     taller o fuera de servicio → no disponible;
   * competencias: si el tipo de tarea exige una competencia que el técnico no tiene habilitada,
     no se le asigna (o queda como "requiere tutela" si la tarea lo admite);
+  * ventanas horarias: la agenda de cada técnico se arma en orden desde su horario de entrada; una
+    orden con ventana sólo entra si se puede llegar antes de que cierre (las esperas cuentan);
+  * cuadrillas: el ayudante sale con su responsable y no recibe órdenes propias; si el responsable no
+    sale, la cuadrilla no sale. Una ejecución tutelada sólo se asigna si hay un tutor real: un
+    compañero de cuadrilla disponible y habilitado para esa tarea;
+  * un service programado deja el vehículo (y a su técnico) sin disponibilidad esos días;
   * cada orden que no se pudo asignar indica la causa.
 """
 from collections import defaultdict
@@ -31,7 +37,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.db import transaction
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, F, Q, Sum
 from django.shortcuts import redirect, render
 from django.utils import timezone
 
@@ -49,6 +55,8 @@ class Cupo:
     nuevas: list = field(default_factory=list)
     minutos_jornada: int = 480
     minutos_ocupados: int = 0
+    inicio: int = 8 * 60          # minuto del día en que empieza la jornada (su horario de entrada)
+    cursor: int = 0               # minutos desde el inicio hasta donde ya está ocupada la agenda (con esperas)
 
     @property
     def libre(self):
@@ -58,8 +66,23 @@ class Cupo:
     def minutos_libres(self):
         return self.minutos_jornada - self.minutos_ocupados
 
-    def entra(self, minutos: int) -> bool:
-        return self.libre > 0 and minutos <= self.minutos_libres
+    def comienzo(self, minutos: int, orden=None):
+        """Minuto (desde el inicio de la jornada) en que podría empezar la orden, o None si no entra:
+        respeta la ventana horaria acordada con el cliente y el fin de la jornada."""
+        if self.libre <= 0 or minutos > self.minutos_libres:
+            return None
+        empieza = max(self.cursor, self.minutos_ocupados)
+        if orden is not None and orden.ventana_desde:
+            empieza = max(empieza, orden.ventana_desde.hour * 60 + orden.ventana_desde.minute - self.inicio)
+        if orden is not None and orden.ventana_hasta and \
+                self.inicio + empieza > orden.ventana_hasta.hour * 60 + orden.ventana_hasta.minute:
+            return None  # llegaría después de la ventana acordada
+        if empieza + minutos > self.minutos_jornada:
+            return None
+        return empieza
+
+    def entra(self, minutos: int, orden=None) -> bool:
+        return self.comienzo(minutos, orden) is not None
 
 
 def minutos_orden(orden, p=None) -> int:
@@ -80,10 +103,42 @@ def disponibilidad(tecnicos, fecha: date) -> dict:
             res[n.persona_id] = ("no_disponible", n.get_tipo_display().lower())
         elif res[n.persona_id][0] == "disponible":
             res[n.persona_id] = ("pendiente", f"{n.get_tipo_display().lower()} pendiente de aprobar")
-    from flota.models import Vehiculo
+    from flota.models import ServiceProgramado, Vehiculo
     for v in Vehiculo.objects.filter(asignado_a__in=tecnicos).exclude(estado=Vehiculo.Estado.OPERATIVO):
         if res[v.asignado_a_id][0] == "disponible":
             res[v.asignado_a_id] = ("no_disponible", f"vehículo {v.patente} {v.get_estado_display().lower()}")
+    for s in ServiceProgramado.objects.filter(vehiculo__asignado_a__in=tecnicos, estado="programado",
+                                              desde__lte=fecha, hasta__gte=fecha).select_related("vehiculo"):
+        if res[s.vehiculo.asignado_a_id][0] == "disponible":
+            res[s.vehiculo.asignado_a_id] = ("no_disponible", f"vehículo {s.vehiculo.patente} con service programado "
+                                                              f"({s.desde:%d/%m}–{s.hasta:%d/%m})")
+    # Cuadrillas: el ayudante sale con su responsable (mismo vehículo y agenda). No recibe órdenes propias
+    # y, si el responsable no está disponible, el ayudante tampoco puede salir solo.
+    from operaciones.models import MiembroCuadrilla
+    miembros = list(MiembroCuadrilla.objects.filter(desde__lte=fecha).filter(
+        Q(hasta__isnull=True) | Q(hasta__gte=fecha)).values_list("cuadrilla_id", "persona_id", "funcion"))
+    responsables = {c: pid for c, pid, f in miembros if f == "responsable"}
+    for c, pid, f in miembros:
+        if f != "responsable" and pid in res and res[pid][0] == "disponible":
+            jefe = responsables.get(c)
+            if jefe and jefe in res and res[jefe][0] != "disponible":
+                res[pid] = ("no_disponible", f"su cuadrilla no sale ({res[jefe][1]})")
+            else:
+                res[pid] = ("cuadrilla", "trabaja como ayudante de su cuadrilla")
+    return res
+
+
+def tutores_disponibles(fecha, disp: dict) -> dict:
+    """{persona_id: [compañeros de cuadrilla disponibles ese día]} para la ejecución tutelada."""
+    from operaciones.models import MiembroCuadrilla
+    por_cuadrilla = defaultdict(list)
+    for c, pid in MiembroCuadrilla.objects.filter(desde__lte=fecha).filter(
+            Q(hasta__isnull=True) | Q(hasta__gte=fecha)).values_list("cuadrilla_id", "persona_id"):
+        por_cuadrilla[c].append(pid)
+    res = defaultdict(list)
+    for pids in por_cuadrilla.values():
+        for pid in pids:
+            res[pid] = [x for x in pids if x != pid and disp.get(x, ("", ""))[0] in ("disponible", "cuadrilla")]
     return res
 
 
@@ -164,7 +219,8 @@ def proponer(fecha: date, tecnicos_qs, excepciones=()):
     p = Parametros.actual()
     todos = list(tecnicos_qs.select_related("zona"))
     disp = disponibilidad(todos, fecha)
-    bloqueados = [(t, disp[t.id]) for t in todos if disp[t.id][0] != "disponible"]
+    bloqueados = [(t, disp[t.id]) for t in todos if disp[t.id][0] not in ("disponible", "cuadrilla")]
+    tutores = tutores_disponibles(fecha, disp)
     tecnicos = [t for t in todos if disp[t.id][0] == "disponible"]
     cap = capacidad_tecnicos(tecnicos, fecha)
     ya = dict(OrdenTrabajo.objects.filter(tecnico__in=tecnicos, fecha_programada=fecha,
@@ -175,7 +231,8 @@ def proponer(fecha: date, tecnicos_qs, excepciones=()):
                                          estado__in=["asignada", "pendiente"]).select_related("tipo"):
         minutos_ya[o.tecnico_id] += minutos_orden(o, p)
     jornada = int((float(p.horas_jornada) - 1) * 60)  # la jornada incluye el almuerzo
-    cupos = {t.id: Cupo(t, cap[t.id], ya.get(t.id, 0), minutos_jornada=jornada, minutos_ocupados=minutos_ya[t.id])
+    cupos = {t.id: Cupo(t, cap[t.id], ya.get(t.id, 0), minutos_jornada=jornada, minutos_ocupados=minutos_ya[t.id],
+                        inicio=(t.hora_entrada.hour * 60 + t.hora_entrada.minute) if t.hora_entrada else 8 * 60)
              for t in tecnicos}
     habil = {}
 
@@ -190,7 +247,16 @@ def proponer(fecha: date, tecnicos_qs, excepciones=()):
         if k not in habil:
             habil[k] = habilitacion(c.tecnico.id, o.tipo_id, fecha)
             epp[k] = epp_faltante(c.tecnico.id, o.tipo_id, fecha)
-        return habil[k]["estado"] in ("habilitado", "sin_requisitos") and not epp[k]
+        if epp[k]:
+            return False
+        if habil[k]["estado"] in ("habilitado", "sin_requisitos"):
+            return True
+        if habil[k]["estado"] == "tutelada":
+            # tutelada sólo con un tutor REAL ese día: compañero de cuadrilla disponible y habilitado
+            for tid in tutores.get(c.tecnico.id, []):
+                if habilitacion(tid, o.tipo_id, fecha)["estado"] in ("habilitado", "sin_requisitos"):
+                    return True
+        return False
 
     def con_material(c, o):
         return o.pk in excepciones or not sumin.faltante(o, c.tecnico.id)
@@ -201,19 +267,24 @@ def proponer(fecha: date, tecnicos_qs, excepciones=()):
     pendientes = list(OrdenTrabajo.objects.filter(
         Q(tecnico__isnull=True) | Q(tecnico__activo=False), fecha_programada__lte=fecha,
         estado__in=["pendiente", "reprogramada"]).select_related("tipo", "zona", "cliente")
-        .order_by("-es_retrabajo", "fecha_programada", "id"))
+        # dentro de la misma prioridad, primero las ventanas que cierran antes
+        .order_by("-es_retrabajo", "fecha_programada", F("ventana_hasta").asc(nulls_last=True), "id"))
 
     def mejor(candidatos, o):
         minutos = minutos_orden(o, p)
-        libres = [c for c in candidatos if c.entra(minutos) and puede(c, o) and con_material(c, o)]
+        libres = [c for c in candidatos if c.entra(minutos, o) and puede(c, o) and con_material(c, o)]
         # el que tiene más lugar relativo a su capacidad (reparte parejo)
         return max(libres, key=lambda c: (c.libre / c.capacidad, c.minutos_libres), default=None)
 
     def asignar(c, o):
         o.sin_material = [(m, q) for m, q in sumin.faltante(o, c.tecnico.id)] if o.pk in excepciones else []
         sumin.tomar(o, c.tecnico.id)
+        minutos = minutos_orden(o, p)
+        empieza = c.comienzo(minutos, o)
+        o.hora_propuesta = (c.inicio + empieza) if empieza is not None else None
         c.nuevas.append(o)
-        c.minutos_ocupados += minutos_orden(o, p)
+        c.minutos_ocupados += minutos
+        c.cursor = (empieza or 0) + minutos
 
     sin_lugar = []
     for o in pendientes:
@@ -246,6 +317,8 @@ def proponer(fecha: date, tecnicos_qs, excepciones=()):
                 for c in cupos.values()) else "ningún técnico disponible tiene la competencia o el EPP requerido"
         elif not any(minutos_orden(o, p) <= c.minutos_jornada for c in cupos.values()):
             o.causa = "la tarea no entra en una jornada"
+        elif (o.ventana_desde or o.ventana_hasta) and not any(c.entra(minutos_orden(o, p), o) for c in aptos):
+            o.causa = (f"no hay técnico libre en la ventana acordada ({o.ventana_desde or ''}–{o.ventana_hasta or ''})")
         else:
             o.causa = "sin capacidad (cupo o minutos) en la fecha"
         sin_asignar.append(o)

@@ -134,6 +134,9 @@ class OrdenTrabajo(models.Model):
         ("cliente_ausente", "Cliente ausente"), ("falta_material", "Faltó material"),
         ("problema_red", "Problema de red / externo"), ("direccion", "Dirección errónea"),
         ("clima", "Clima"), ("rechazo", "Cliente rechazó el trabajo"), ("otro", "Otro")])
+    ventana_desde = models.TimeField("Ventana horaria: desde", null=True, blank=True,
+                                     help_text="Horario acordado con el cliente (si lo hay).")
+    ventana_hasta = models.TimeField("Ventana horaria: hasta", null=True, blank=True)
     minutos_viaje = models.PositiveIntegerField("Tiempo de viaje (min)", null=True, blank=True)
     minutos_retorno = models.PositiveIntegerField("Tiempo de retorno (min)", null=True, blank=True)
     inicio_trabajo = models.DateTimeField(null=True, blank=True)

@@ -4,9 +4,13 @@ import copy
 from .models import Indicador, MetaEquipo
 
 
-def indicadores_efectivos(rol: str, supervisor=None) -> list[Indicador]:
-    """Indicadores activos del rol con meta/límite ajustados al equipo del supervisor indicado."""
-    lista = list(Indicador.objects.filter(rol=rol, activo=True))
+def indicadores_efectivos(rol: str, supervisor=None, al=None) -> list[Indicador]:
+    """Indicadores activos del rol con meta/límite ajustados al equipo del supervisor indicado.
+    Con `al` (fecha), el criterio general es el vigente en esa fecha (Indicador.en)."""
+    if al is None:
+        lista = list(Indicador.objects.filter(rol=rol, activo=True))
+    else:
+        lista = [i for i in (x.en(al) for x in Indicador.objects.filter(rol=rol)) if i.activo]
     if supervisor is None:
         return lista
     propias = {m.indicador_id: m for m in MetaEquipo.objects.filter(supervisor=supervisor, indicador__rol=rol)}
